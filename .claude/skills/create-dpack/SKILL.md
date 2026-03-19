@@ -132,10 +132,14 @@ Hardcoded (always set): `read`, `glob`, `grep`, `list` = allow; `question` = den
 
 When `modal_integration=True`, generates:
 - `docker/modal_app/__init__.py` + `example.py` with hash-based cache busting
-- `deploy_modal.sh` pre-run hook
+- `deploy_modal.sh` pre-run hook (respects `DLAB_RUN_MODAL_TOOL_LOCALLY` env var — skips deploy when set to `1`)
 - `opencode/tools/run-on-modal.ts` (if tools skeleton enabled) — uses `modal.Function.from_name("{name}-compute", "run_compute")`
 - `modal` added to env file
 - `MODAL_TOKEN_ID` + `MODAL_TOKEN_SECRET` in `.env.example`
+
+The generated `deploy_modal.sh` hook checks `DLAB_RUN_MODAL_TOOL_LOCALLY` (default: `1` = local). Set to `0` in the `.env` file to enable Modal cloud execution. The hook also checks for Modal tokens and skips deployment if they're missing. decision-packs can rename this variable to something domain-specific (e.g., the MMM dpack uses `DLAB_FIT_MODEL_LOCALLY`).
+
+**Note:** All environment variables starting with `DLAB_` are automatically forwarded from the host to the Docker container by the dlab CLI. decision-packs can define their own `DLAB_*` variables for configuration without any framework changes.
 
 ### .env.example
 

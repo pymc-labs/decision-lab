@@ -398,12 +398,14 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     env_file: str | None = getattr(args, "env_file", None)
 
-    # Forward DLAB_* env vars from host to container
-    extra_env: dict[str, str] = {}
-    dlab_fit_locally: str | None = os.environ.get("DLAB_FIT_MODEL_LOCALLY")
-    if dlab_fit_locally is not None:
-        extra_env["DLAB_FIT_MODEL_LOCALLY"] = dlab_fit_locally
-        console.print(f"{I}[dim]DLAB_FIT_MODEL_LOCALLY={dlab_fit_locally}[/dim]")
+    # Forward all DLAB_* env vars from host to container
+    extra_env: dict[str, str] = {
+        key: value
+        for key, value in os.environ.items()
+        if key.startswith("DLAB_")
+    }
+    for key, value in extra_env.items():
+        console.print(f"{I}[dim]{key}={value}[/dim]")
 
     try:
         start_container(image_name, work_dir, container_name, env_file=env_file, extra_env=extra_env)

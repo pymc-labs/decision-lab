@@ -60,6 +60,8 @@ Optional flags:
 - `--continue-dir` - Resume from a previous session's work directory
 - `--rebuild` - Force rebuild Docker image
 
+Environment variables starting with `DLAB_` are automatically forwarded from the host to the Docker container. decision-packs can use these for configuration (e.g., `DLAB_FIT_MODEL_LOCALLY=1` in the MMM decision-pack).
+
 ### Subcommands
 
 ```bash

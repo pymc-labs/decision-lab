@@ -416,6 +416,20 @@ class TestSkeletonTools:
         generate_dpack(tmp_path, {"name": "no-tools"})
         assert not (tmp_path / "no-tools" / "opencode" / "tools").exists()
 
+    def test_run_on_modal_tool_has_nothrow(self, tmp_path: Path) -> None:
+        """run-on-modal.ts should use .nothrow() to capture stderr."""
+        config: dict[str, Any] = {
+            "name": "modal-nothrow",
+            "modal_integration": True,
+            "skeletons": {"tools": True},
+        }
+        generate_dpack(tmp_path, config)
+        tool_file: Path = tmp_path / "modal-nothrow" / "opencode" / "tools" / "run-on-modal.ts"
+        assert tool_file.is_file()
+        content: str = tool_file.read_text()
+        assert ".nothrow()" in content
+        assert "exitCode" in content
+
 
 class TestSkeletonSkills:
     """Tests for skills skeleton."""
@@ -722,6 +736,19 @@ class TestModalIntegration:
         assert "pre-run: deploy_modal.sh" in content
         # Should NOT have commented-out hooks
         assert "# hooks:" not in content
+
+    def test_deploy_modal_sh_has_local_check(self, tmp_path: Path) -> None:
+        """deploy_modal.sh should check DLAB_RUN_MODAL_TOOL_LOCALLY."""
+        generate_dpack(tmp_path, {"name": "modal-env", "modal_integration": True})
+        content: str = (tmp_path / "modal-env" / "deploy_modal.sh").read_text()
+        assert "DLAB_RUN_MODAL_TOOL_LOCALLY" in content
+
+    def test_deploy_modal_sh_has_token_check(self, tmp_path: Path) -> None:
+        """deploy_modal.sh should check for Modal tokens."""
+        generate_dpack(tmp_path, {"name": "modal-tok", "modal_integration": True})
+        content: str = (tmp_path / "modal-tok" / "deploy_modal.sh").read_text()
+        assert "MODAL_TOKEN_ID" in content
+        assert "MODAL_TOKEN_SECRET" in content
 
     def test_no_modal_by_default(self, tmp_path: Path) -> None:
         """Should not create modal_app dir or deploy script by default."""

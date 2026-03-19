@@ -57,7 +57,7 @@ If yes (default), the user must pass `--data` when running. If the agent only ne
 
 - **Decision Hub integration** (default: on) — lets the agent search and install skills from hub.decision.ai at runtime. Usually leave this on unless they have a reason to disable it.
 - **Python library** — creates a `{name}_lib/` package in `docker/`. Ask only if they mention needing custom Python modules.
-- **Modal integration** — for serverless cloud compute (MCMC sampling, heavy ML). Ask only if they mention cloud execution, Modal, or heavy compute.
+- **Modal integration** — for serverless cloud compute (MCMC sampling, heavy ML). Ask only if they mention cloud execution, Modal, or heavy compute. Local execution is the default (`DLAB_RUN_MODAL_TOOL_LOCALLY=1`); Modal is opt-in via `.env` (`DLAB_RUN_MODAL_TOOL_LOCALLY=0` + Modal tokens).
 - **Parallel agents** — running multiple agent instances simultaneously. Ask if they mention comparing approaches, ensemble methods, or divide-and-conquer.
 
 ### 6. Permissions — usually skip

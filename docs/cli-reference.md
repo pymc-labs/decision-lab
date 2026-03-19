@@ -39,6 +39,15 @@ dlab --dpack PATH --data PATH [PATH ...] --prompt TEXT [options]
 | `--rebuild` | Force rebuild Docker image even if cached |
 | `--env-file PATH` | Path to environment file (auto-detected from decision-pack `.env` if not specified) |
 
+### Environment Variable Forwarding
+
+All environment variables starting with `DLAB_` are automatically forwarded from the host to the Docker container. This lets decision-packs define their own configuration variables without framework changes.
+
+```bash
+# Example: MMM decision-pack uses this to control local vs Modal fitting
+DLAB_FIT_MODEL_LOCALLY=1 dlab --dpack mmm --data ./data --prompt "..."
+```
+
 ### Continue Mode
 
 Resume an interrupted session:

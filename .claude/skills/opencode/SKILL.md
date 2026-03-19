@@ -280,9 +280,14 @@ export default tool({
     model: tool.schema.string().describe("Model type: linear, hierarchical"),
   },
   async execute({ dataFile, model }) {
-    // Shell out to Python
-    const result = await Bun.$`python /workspace/scripts/analyze.py ${dataFile} --model ${model}`
-    return result.text()
+    // Shell out to Python — use .nothrow() so errors return stderr instead of throwing
+    const result = await Bun.$`python /workspace/scripts/analyze.py ${dataFile} --model ${model}`.nothrow()
+    const stdout = result.stdout.toString()
+    const stderr = result.stderr.toString()
+    if (result.exitCode !== 0) {
+      return `ERROR (exit code ${result.exitCode}):\n${stderr}\n\nStdout:\n${stdout}`
+    }
+    return stdout
   },
 })
 ```

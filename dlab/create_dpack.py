@@ -773,6 +773,18 @@ def _build_deploy_modal_sh(package_manager: str, env_name: str) -> str:
         "# Pre-run hook: deploy Modal app for cloud compute",
         "set -e",
         "",
+        "# Default to local execution — skip Modal deploy",
+        'if [ "${DLAB_RUN_MODAL_TOOL_LOCALLY:-1}" = "1" ]; then',
+        '    echo "Local mode (DLAB_RUN_MODAL_TOOL_LOCALLY=1). Skipping Modal deployment."',
+        "    exit 0",
+        "fi",
+        "",
+        "# Check Modal credentials",
+        'if [ -z "$MODAL_TOKEN_ID" ] || [ -z "$MODAL_TOKEN_SECRET" ]; then',
+        '    echo "Warning: Modal tokens not set. Skipping Modal deployment."',
+        "    exit 0",
+        "fi",
+        "",
     ]
     if package_manager == "conda":
         lines.extend([
@@ -904,8 +916,12 @@ data = json.loads('${args.data.replace(/'/g, "\\'")}')
 result = f.remote(data)
 print(json.dumps(result))
 `.trim()
-    const result = await Bun.$`python -c "${pyCode}" 2>&1`
-    return result.text().trim()
+    const result = await Bun.$`python -c "${pyCode}" 2>&1`.nothrow()
+    const output = result.text().trim()
+    if (result.exitCode !== 0) {
+      return `ERROR (exit code ${result.exitCode}):\\n${output}`
+    }
+    return output
   },
 })
 """
