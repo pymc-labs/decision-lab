@@ -67,7 +67,21 @@ my-dpack/
     parallel_agents/    # Fan-out configs
 ```
 
-See the [poem decision-pack](decision-packs/poem/) for a fully annotated example showing how all the pieces connect.
+See the [poem decision-pack](decision-packs/poem/) for a fully annotated example showing how all the pieces connect. Here's what happens when you run it:
+
+```bash
+dlab --dpack decision-packs/poem --env-file .env --prompt "Write me a poem about the ocean"
+```
+
+1. dlab builds the Docker image from [`docker/Dockerfile`](decision-packs/poem/docker/Dockerfile) (cached after first run)
+2. The pre-run hook [`say_hi.sh`](decision-packs/poem/say_hi.sh) runs inside the container
+3. The orchestrator ([`literary-agent.md`](decision-packs/poem/opencode/agents/literary-agent.md)) starts and calls POPO the terrible poet ([`popo-poet.md`](decision-packs/poem/opencode/agents/popo-poet.md)) via the `task` tool
+4. The orchestrator reads POPO's poem, decides it's bad, and spawns 3 parallel poet instances ([`poet.md`](decision-packs/poem/opencode/agents/poet.md)) with different styles via the `parallel-agents` tool
+5. Each instance writes `summary.md`. A consolidator (auto-generated from [`poet.yaml`](decision-packs/poem/opencode/parallel_agents/poet.yaml)) compares them
+6. The orchestrator picks the best poem and writes `final_poem.md`
+7. The post-run hook [`print_result.sh`](decision-packs/poem/print_result.sh) prints it to the terminal
+
+The session directory ends up with parallel instance outputs, logs, and the final poem — all browsable with `dlab connect` or `dlab timeline`.
 
 ## Features
 
