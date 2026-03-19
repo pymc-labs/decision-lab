@@ -39,7 +39,8 @@ timeout_minutes: 5
 #   "retry"     — retry the failed instance (up to max_retries times)
 failure_behavior: continue
 
-# Default model for instances. Can be overridden per-instance with instance_models.
+# LLM model for all instances. To use a different model per instance, remove
+# this and use instance_models instead (see below).
 default_model: "google/gemini-2.0-flash"
 
 # Maximum number of instances the orchestrator can spawn in one call.
