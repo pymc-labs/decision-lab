@@ -493,16 +493,14 @@ def _build_dockerfile(config: dict[str, Any]) -> str:
     python_lib_name: str = config.get("python_lib_name", "")
     modal_integration: bool = config.get("modal_integration", False)
     base_image: str = config.get("base_image", PACKAGE_MANAGER_BASE_IMAGES.get(pkg_mgr, "python:3.11-slim"))
-    env_name: str = config.get("docker_image_name", f"dlab-{config.get('name', 'dpack')}")
 
     lines: list[str] = [f"FROM {base_image}", "", "WORKDIR /workspace", ""]
 
     if pkg_mgr == "conda":
         lines.extend([
             "COPY environment.yml /tmp/environment.yml",
-            f"RUN conda env create -f /tmp/environment.yml -n {env_name} && \\",
+            "RUN conda env update -n base -f /tmp/environment.yml && \\",
             "    conda clean -afy",
-            f'SHELL ["conda", "run", "-n", "{env_name}", "/bin/bash", "-c"]',
             "",
         ])
     elif pkg_mgr == "uv":
@@ -544,10 +542,7 @@ def _build_dockerfile(config: dict[str, Any]) -> str:
     if python_lib or modal_integration:
         lines.append("")
 
-    if pkg_mgr == "conda":
-        lines.append(f'CMD ["conda", "run", "-n", "{env_name}", "/bin/bash"]')
-    else:
-        lines.append('CMD ["/bin/bash"]')
+    lines.append('CMD ["/bin/bash"]')
     lines.append("")
 
     return "\n".join(lines)
@@ -580,7 +575,7 @@ def _build_env_file(config: dict[str, Any]) -> tuple[str, str]:
             pip_lines: str = "\n".join(f"    - {p}" for p in pip_pkgs)
             pip_section = f"  - pip:\n{pip_lines}\n"
         content: str = (
-            f"name: {docker_image_name}\n"
+            "# Installed into base conda env (no named env needed)\n"
             "channels:\n"
             "  - conda-forge\n"
             "dependencies:\n"
@@ -753,15 +748,8 @@ summarizer_prompt: |
 summarizer_model: "anthropic/claude-sonnet-4"
 """
 
-def _build_deploy_modal_sh(package_manager: str, env_name: str) -> str:
+def _build_deploy_modal_sh() -> str:
     """Build the deploy_modal.sh hook script.
-
-    Parameters
-    ----------
-    package_manager : str
-        Package manager used by the decision-pack (pip, conda, uv, pixi).
-    env_name : str
-        Conda environment name (only used when package_manager is conda).
 
     Returns
     -------
@@ -786,14 +774,6 @@ def _build_deploy_modal_sh(package_manager: str, env_name: str) -> str:
         "fi",
         "",
     ]
-    if package_manager == "conda":
-        lines.extend([
-            "# Activate the conda environment where modal is installed.",
-            "# docker exec does not activate conda envs automatically.",
-            'eval "$(conda shell.bash hook 2> /dev/null)"',
-            f"conda activate {env_name}",
-            "",
-        ])
     lines.extend([
         'MODAL_APP="/opt/modal_app/example.py"',
         "",
@@ -1059,9 +1039,8 @@ def generate_dpack(
             (modal_dir / "example.py").write_text(
                 _build_modal_example(name, config["package_manager"])
             )
-            env_name: str = config.get("docker_image_name", f"dlab-{name}")
             (dpack_dir / "deploy_modal.sh").write_text(
-                _build_deploy_modal_sh(config["package_manager"], env_name)
+                _build_deploy_modal_sh()
             )
 
         _progress("Writing opencode config...")

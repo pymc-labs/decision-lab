@@ -14,12 +14,6 @@ if [ -z "$MODAL_TOKEN_ID" ] || [ -z "$MODAL_TOKEN_SECRET" ]; then
     exit 0
 fi
 
-# Activate the conda environment where modal is installed.
-# docker exec does not activate conda envs automatically — the container's
-# SHELL directive and CMD are overridden by dlab's "tail -f /dev/null" keepalive.
-eval "$(conda shell.bash hook 2> /dev/null)"
-conda activate dlab-modal-example
-
 MODAL_APP="/opt/modal_app/example.py"
 
 if [ -f "$MODAL_APP" ]; then

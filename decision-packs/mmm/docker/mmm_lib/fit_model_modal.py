@@ -1,13 +1,13 @@
-"""MMM model fitting with Modal cloud or local fallback.
+"""MMM model fitting with Modal cloud, with optional local fallback.
 
-By default, models are fit locally (DLAB_FIT_MODEL_LOCALLY=1). Set DLAB_FIT_MODEL_LOCALLY=0
-and provide Modal credentials to use serverless cloud fitting instead.
+By default, models are fit on Modal cloud. Set DLAB_FIT_MODEL_LOCALLY=1
+to fit locally instead (slower, no Modal credentials needed).
 
 When using Modal, only MCMC sampling is done remotely; posterior predictive
 sampling is done locally to avoid transferring large fitted models.
 
 Environment variables:
-    DLAB_FIT_MODEL_LOCALLY: "1" (default) for local fitting, "0" for Modal cloud
+    DLAB_FIT_MODEL_LOCALLY: "1" for local fitting, "0" or unset for Modal cloud
     MODAL_TOKEN_ID: Required for Modal cloud fitting
     MODAL_TOKEN_SECRET: Required for Modal cloud fitting
 """
@@ -27,12 +27,11 @@ MODAL_APP_PATH = "/opt/modal_app/mmm_sampler.py"
 
 def _should_fit_locally() -> bool:
     """Check whether to fit locally based on env vars."""
-    use_local = os.environ.get("DLAB_FIT_MODEL_LOCALLY", "1") != "0"
-    modal_tokens_missing = (
-        not os.environ.get("MODAL_TOKEN_ID")
-        or not os.environ.get("MODAL_TOKEN_SECRET")
-    )
-    return use_local or modal_tokens_missing
+    if os.environ.get("DLAB_FIT_MODEL_LOCALLY", "0") == "1":
+        return True
+    if not os.environ.get("MODAL_TOKEN_ID") or not os.environ.get("MODAL_TOKEN_SECRET"):
+        return True
+    return False
 
 
 def ensure_modal_deployed() -> None:

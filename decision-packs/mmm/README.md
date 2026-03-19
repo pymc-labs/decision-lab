@@ -33,26 +33,22 @@ Create a `.env` file:
 ANTHROPIC_API_KEY=sk-ant-...
 # or OPENAI_API_KEY=sk-...
 
-# Fitting backend: local (default) or Modal cloud
-# DLAB_FIT_MODEL_LOCALLY=1 fits on the Docker container (slower, no cloud setup)
-# DLAB_FIT_MODEL_LOCALLY=0 fits on Modal (faster, requires tokens below)
-DLAB_FIT_MODEL_LOCALLY=1
-
-# Only needed if DLAB_FIT_MODEL_LOCALLY=0
+# Required for MCMC fitting (Modal cloud)
 MODAL_TOKEN_ID=ak-...
 MODAL_TOKEN_SECRET=as-...
 ```
 
-### Local vs Modal fitting
+Get Modal tokens at https://modal.com/settings/tokens.
 
-By default, models are fit locally inside the Docker container. This works out of the box but is slower (1-2 it/s with PyTensor, 3-8 it/s with numpyro).
+### Local fitting (optional)
 
-To use Modal cloud fitting (5-10 it/s, serverless):
-1. Get tokens at https://modal.com/settings/tokens
-2. Set `DLAB_FIT_MODEL_LOCALLY=0` in your `.env`
-3. Add `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET`
+Models are fit on Modal by default. To fit locally instead (slower, no Modal credentials needed), set `DLAB_FIT_MODEL_LOCALLY=1` in your `.env` or pass it as an env var:
 
-If `DLAB_FIT_MODEL_LOCALLY=0` but Modal tokens are missing, fitting falls back to local automatically.
+```bash
+DLAB_FIT_MODEL_LOCALLY=1 dlab --dpack decision-packs/mmm --data ./data --prompt "..."
+```
+
+Local fitting runs at 1-2 it/s (PyTensor) or 3-8 it/s (numpyro). Modal runs at 5-10 it/s.
 
 ## Data requirements
 

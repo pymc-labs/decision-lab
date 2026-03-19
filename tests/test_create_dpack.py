@@ -501,18 +501,16 @@ class TestDockerfilePerPackageManager:
         assert 'CMD ["/bin/bash"]' in content
 
     def test_conda_dockerfile(self, tmp_path: Path) -> None:
-        """conda should generate a miniconda Dockerfile with conda env create."""
+        """conda should generate a miniconda Dockerfile installing into base env."""
         config: dict[str, Any] = {"name": "conda-test", "package_manager": "conda"}
         generate_dpack(tmp_path, config)
 
         content: str = (tmp_path / "conda-test" / "docker" / "Dockerfile").read_text()
         assert "FROM continuumio/miniconda3:latest" in content
         assert "COPY environment.yml" in content
-        assert "conda env create" in content
+        assert "conda env update -n base" in content
         assert "conda clean -afy" in content
-        # Env name should use docker_image_name (dlab-{name})
-        assert "dlab-conda-test" in content
-        assert 'CMD ["conda", "run", "-n", "dlab-conda-test", "/bin/bash"]' in content
+        assert 'CMD ["/bin/bash"]' in content
 
     def test_uv_dockerfile(self, tmp_path: Path) -> None:
         """uv should generate a Dockerfile with uv binary copied."""
@@ -568,7 +566,7 @@ class TestEnvironmentFiles:
         assert req.is_file()
 
     def test_conda_creates_environment_yml(self, tmp_path: Path) -> None:
-        """conda should create environment.yml with docker_image_name."""
+        """conda should create environment.yml for base env (no name field)."""
         config: dict[str, Any] = {"name": "env-conda", "package_manager": "conda"}
         generate_dpack(tmp_path, config)
 
@@ -577,7 +575,7 @@ class TestEnvironmentFiles:
         content: str = env.read_text()
         assert "conda-forge" in content
         assert "python=3.11" in content
-        assert "name: dlab-env-conda" in content
+        assert "name:" not in content
 
     def test_pixi_creates_pixi_toml(self, tmp_path: Path) -> None:
         """pixi should create pixi.toml."""
