@@ -84,7 +84,15 @@ dlab install DPACK_PATH                       # Create shortcut command
 
 ## Docs
 
-Full documentation at [`docs/`](docs/index.md).
+| Guide | What it covers |
+|-------|---------------|
+| [CLI Reference](docs/cli-reference.md) | All commands, flags, env var forwarding |
+| [decision-packs](docs/decision-packs.md) | Config format, hooks, permissions, Modal integration |
+| [Parallel Agents](docs/parallel-agents.md) | Fan-out architecture, YAML config, consolidator |
+| [Docker](docs/docker.md) | Image building, container lifecycle, volume mounts |
+| [Sessions](docs/sessions.md) | Work directories, state management, resuming runs |
+| [Log Processing](docs/log-processing.md) | NDJSON log format, event types, TUI/timeline parsing |
+| [Installation](docs/installation.md) | Setup, prerequisites, development install |
 
 ## Built by PyMC Labs
 
