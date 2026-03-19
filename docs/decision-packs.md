@@ -229,6 +229,24 @@ dlab install ./my-dpack
 # Now run: my-dpack --data ./data --prompt "..."
 ```
 
+## Environment Variable Forwarding
+
+All environment variables starting with `DLAB_` are automatically forwarded from the host to the Docker container. decision-packs can use these for runtime configuration without framework changes.
+
+For example, the MMM decision-pack uses `DLAB_FIT_MODEL_LOCALLY=1` to switch between Modal cloud fitting and local fitting. The generated modal deploy hook uses `DLAB_RUN_MODAL_TOOL_LOCALLY`.
+
+To use from the command line:
+
+```bash
+DLAB_FIT_MODEL_LOCALLY=1 dlab --dpack mmm --data ./data --prompt "..."
+```
+
+Or add to your `.env` file:
+
+```bash
+DLAB_FIT_MODEL_LOCALLY=1
+```
+
 ## Best Practices
 
 1. **Keep images focused**: Include only what's needed for the use case
@@ -236,3 +254,4 @@ dlab install ./my-dpack
 3. **Use hooks for setup**: Deploy services before the agent needs them
 4. **Set requires_data / requires_prompt**: Use `requires_data: false` or `requires_prompt: false` for decision-packs that don't need them
 5. **Use .env.example**: Document required environment variables
+6. **Use `DLAB_*` env vars**: For decision-pack-specific configuration that users can toggle at runtime
