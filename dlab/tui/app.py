@@ -591,6 +591,9 @@ class ConnectApp(App):
         focused = self.focused
         if isinstance(focused, LogView):
             focused.toggle_selected()
+        elif isinstance(focused, AgentSelector):
+            log_view = self.query_one("#log-view", LogView)
+            log_view.toggle_selected()
         elif isinstance(focused, ArtifactList):
             # Trigger file selection via ListView's built-in selection
             pass

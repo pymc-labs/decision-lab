@@ -404,6 +404,8 @@ class LogView(VerticalScroll, can_focus=True):
         for widget in self._widgets:
             widget.is_collapsed = False
         self.refresh(layout=True)
+        if 0 <= self.selected_index < len(self._widgets):
+            self._widgets[self.selected_index].scroll_visible()
 
     def collapse_all(self) -> None:
         """Collapse all collapsible events."""
@@ -411,6 +413,8 @@ class LogView(VerticalScroll, can_focus=True):
         for widget in self._widgets:
             widget.is_collapsed = True
         self.refresh(layout=True)
+        if 0 <= self.selected_index < len(self._widgets):
+            self._widgets[self.selected_index].scroll_visible()
 
     def highlight_search(self, query: str) -> list[int]:
         """

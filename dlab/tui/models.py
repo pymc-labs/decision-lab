@@ -178,7 +178,7 @@ class LogEvent:
         # Handle None timestamp (for additional_output events)
         if timestamp is None:
             timestamp = 0  # Will be displayed specially
-            dt = datetime.now()  # Placeholder
+            dt = datetime.min  # Sentinel — no real timestamp, won't affect duration
         else:
             dt = datetime.fromtimestamp(timestamp / 1000)
         event_type = raw.get("type", "unknown")
@@ -356,10 +356,12 @@ class AgentState:
         self.events.append(event)
         self.total_cost += event.cost
 
-        if self.start_time is None or event.dt < self.start_time:
-            self.start_time = event.dt
-        if self.end_time is None or event.dt > self.end_time:
-            self.end_time = event.dt
+        # Only update timing from events with real timestamps (not raw text / additional_output)
+        if event.timestamp > 0:
+            if self.start_time is None or event.dt < self.start_time:
+                self.start_time = event.dt
+            if self.end_time is None or event.dt > self.end_time:
+                self.end_time = event.dt
 
         return True
 
