@@ -51,9 +51,14 @@ with open("model_to_fit.pkl", "wb") as f:
       cmdParts.push(`--output ${args.output_path}`)
     }
 
-    const result = await Bun.$`sh -c ${cmdParts.join(' ')}`
+    const result = await Bun.$`sh -c ${cmdParts.join(' ')}`.nothrow()
+    const stdout = result.stdout.toString()
+    const stderr = result.stderr.toString()
 
-    // Return the human-readable output directly
-    return result.text().trim()
+    if (result.exitCode !== 0) {
+      return `ERROR (exit code ${result.exitCode}):\n${stderr}\n\nStdout:\n${stdout}`
+    }
+
+    return stdout.trim()
   },
 })

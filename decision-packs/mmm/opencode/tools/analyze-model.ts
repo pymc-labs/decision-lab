@@ -44,18 +44,25 @@ Budget optimization is skipped by default (orchestrator runs it separately).`,
       cmdParts.push("--no-roas")
     }
 
-    const result = await Bun.$`sh -c ${cmdParts.join(' ')}`
-    const output = result.text()
+    const result = await Bun.$`sh -c ${cmdParts.join(' ')}`.nothrow()
+    const stdout = result.stdout.toString()
+    const stderr = result.stderr.toString()
 
     // Save stdout to disk
-    writeFileSync(join(outputDir, "analysis_output.txt"), output)
+    if (stdout) {
+      writeFileSync(join(outputDir, "analysis_output.txt"), stdout)
+    }
+
+    if (result.exitCode !== 0) {
+      return `ERROR (exit code ${result.exitCode}):\n${stderr}\n\nStdout:\n${stdout}`
+    }
 
     // Append the analysis_summary.json contents to stdout if available
     try {
       const summary = readFileSync(join(outputDir, "analysis_summary.json"), "utf-8")
-      return `${output}\n\n=== analysis_summary.json ===\n${summary}`
+      return `${stdout}\n\n=== analysis_summary.json ===\n${summary}`
     } catch {
-      return output
+      return stdout
     }
   },
 })

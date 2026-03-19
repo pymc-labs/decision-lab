@@ -31,7 +31,14 @@ IMPORTANT: The model bundle must have build_model() already called, same as fit-
 
   async execute(args) {
     const cmd = `python -m mmm_lib.fit_model_modal --model-bundle ${args.model_bundle_path} --estimate-only`
-    const result = await Bun.$`sh -c ${cmd}`
-    return result.text().trim()
+    const result = await Bun.$`sh -c ${cmd}`.nothrow()
+    const stdout = result.stdout.toString().trim()
+    const stderr = result.stderr.toString()
+
+    if (result.exitCode !== 0) {
+      return `ERROR (exit code ${result.exitCode}):\n${stderr}\n\nStdout:\n${stdout}`
+    }
+
+    return stdout
   },
 })

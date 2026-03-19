@@ -11,7 +11,14 @@ export default tool({
     const result = await Bun.$`python -c "
 from mmm_lib import load_csv_or_parquet_from_file_and_inspect
 load_csv_or_parquet_from_file_and_inspect('${path}')
-"`
-    return result.text()
+"`.nothrow()
+    const stdout = result.stdout.toString()
+    const stderr = result.stderr.toString()
+
+    if (result.exitCode !== 0) {
+      return `ERROR (exit code ${result.exitCode}):\n${stderr}\n\nStdout:\n${stdout}`
+    }
+
+    return stdout
   },
 })

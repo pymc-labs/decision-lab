@@ -45,16 +45,21 @@ This is Phase 2 of the 3-phase workflow:
       cmdParts.push(`--seed ${args.seed}`)
     }
 
-    const result = await Bun.$`sh -c ${cmdParts.join(' ')}`
+    const result = await Bun.$`sh -c ${cmdParts.join(' ')}`.nothrow()
+    const stdout = result.stdout.toString().trim()
+    const stderr = result.stderr.toString()
+
+    if (result.exitCode !== 0) {
+      return { error: `Exit code ${result.exitCode}`, stderr, stdout }
+    }
 
     // Parse JSON output from the CLI
-    const output = result.text().trim()
     try {
-      const diagnostics = JSON.parse(output)
+      const diagnostics = JSON.parse(stdout)
       return diagnostics
     } catch {
       // If JSON parsing fails, return raw output
-      return { raw_output: output }
+      return { raw_output: stdout }
     }
   },
 })

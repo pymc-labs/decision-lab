@@ -36,12 +36,19 @@ without needing to open any files. The same output is also saved to disk.`,
       cmdParts.push("--no-roas")
     }
 
-    const result = await Bun.$`sh -c ${cmdParts.join(' ')}`
-    const output = result.text()
+    const result = await Bun.$`sh -c ${cmdParts.join(' ')}`.nothrow()
+    const stdout = result.stdout.toString()
+    const stderr = result.stderr.toString()
 
     // Save stdout to disk
-    writeFileSync(join(outputDir, "budget_output.txt"), output)
+    if (stdout) {
+      writeFileSync(join(outputDir, "budget_output.txt"), stdout)
+    }
 
-    return output
+    if (result.exitCode !== 0) {
+      return `ERROR (exit code ${result.exitCode}):\n${stderr}\n\nStdout:\n${stdout}`
+    }
+
+    return stdout
   },
 })
