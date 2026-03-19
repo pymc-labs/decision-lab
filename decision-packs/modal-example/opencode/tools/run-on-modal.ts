@@ -21,7 +21,11 @@ data = json.loads('${args.data.replace(/'/g, "\'")}')
 result = f.remote(data)
 print(json.dumps(result))
 `.trim()
-    const result = await Bun.$`python -c "${pyCode}" 2>&1`
-    return result.text().trim()
+    const result = await Bun.$`python -c "${pyCode}" 2>&1`.nothrow()
+    const output = result.text().trim()
+    if (result.exitCode !== 0) {
+      return `ERROR (exit code ${result.exitCode}):\n${output}`
+    }
+    return output
   },
 })
