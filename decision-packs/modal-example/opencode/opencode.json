@@ -1,0 +1,21 @@
+{
+  "default_agent": "orchestrator",
+  "permission": {
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "question": "deny",
+    "webfetch": "deny",
+    "websearch": "deny",
+    "bash": "allow",
+    "edit": "allow",
+    "external_directory": "deny",
+    "task": "deny",
+    "skill": "deny",
+    "codesearch": "allow",
+    "lsp": "deny",
+    "todoread": "allow",
+    "todowrite": "allow"
+  }
+}

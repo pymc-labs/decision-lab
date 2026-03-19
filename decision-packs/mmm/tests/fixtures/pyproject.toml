@@ -1,0 +1,41 @@
+# Environment specification for test fixtures
+# Generated from decision-packs/mmm/docker/Dockerfile
+#
+# The .pkl files in this directory were created with these package versions.
+# To load them correctly, use an environment matching these dependencies.
+
+[project]
+name = "mmm-test-fixtures"
+version = "0.1.0"
+description = "Environment specification for MMM test fixtures"
+requires-python = "==3.11.*"
+
+dependencies = [
+    # From conda (conda-forge channel)
+    "pandas==3.0.0",
+    "scipy==1.17.0",
+    "polars==1.37.1",
+    "fastparquet==2025.12.0",
+    "matplotlib==3.10.8",
+    "seaborn==0.13.2",
+    "scikit-learn==1.8.0",
+    "statsmodels==0.14.6",
+    "arviz==0.23.1",
+    "pymc==5.26.1",
+    "pytensor==2.35.1",
+    "pyyaml==6.0.3",
+
+    # From pip
+    "numpy==2.3.5",
+    "pyarrow==23.0.0",
+    "pymc-marketing==0.18.0",
+    "cloudpickle==3.1.2",
+    "jax==0.4.35",
+    "jaxlib==0.4.35",
+    "numpyro==0.16.1",
+    "xarray==2025.12.0",
+    "h5py==3.15.1",
+]
+
+[project.optional-dependencies]
+modal = ["modal"]

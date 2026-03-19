@@ -1,0 +1,40 @@
+# Conda environment matching decision-packs/mmm/docker/Dockerfile
+# Usage: conda env create -f environment.yaml
+name: mmm-docker
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Core Python
+  - python=3.11.14
+  # Data processing
+  - pandas=3.0.0
+  - scipy=1.17.0
+  - polars=1.37.1
+  - fastparquet=2025.12.0
+  # Visualization
+  - matplotlib=3.10.8
+  - seaborn=0.13.2
+  # ML/Stats
+  - scikit-learn=1.8.0
+  - statsmodels=0.14.6
+  # Bayesian
+  - arviz=0.23.1
+  - pymc=5.26.1
+  - pytensor=2.35.1
+  # Utils
+  - pyyaml=6.0.3
+  # Pip packages (must be via pip for Coiled package sync compatibility)
+  - pip
+  - pip:
+    - numpy==2.3.5
+    - pyarrow==23.0.0
+    - pymc-marketing==0.18.0
+    - cloudpickle==3.1.2
+    - jax==0.4.35
+    - jaxlib==0.4.35
+    - numpyro==0.16.1
+    # Additional packages for local testing (not in Docker)
+    - coiled
+    - python-dotenv
+    - pytest

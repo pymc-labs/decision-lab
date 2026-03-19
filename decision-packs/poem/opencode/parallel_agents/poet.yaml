@@ -1,0 +1,23 @@
+name: poet
+description: "Spawn multiple poets with different styles"
+timeout_minutes: 5
+failure_behavior: continue
+
+default_model: "google/gemini-2.0-flash"
+max_instances: 5
+
+subagent_suffix_prompt: |
+  Write your poem to summary.md in your working directory.
+  Include a brief note about the style you used.
+
+summarizer_prompt: |
+  You are a poetry critic with READ-ONLY access.
+
+  Read the following poem files:
+  {summary_paths}
+
+  Create a brief comparison of all poems.
+  Note the strengths of each approach.
+  Do NOT pick a winner - present observations only.
+
+summarizer_model: "google/gemini-2.0-flash"

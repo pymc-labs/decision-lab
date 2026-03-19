@@ -1,0 +1,9 @@
+name: poem
+description: Simple test decision-pack for parallel agents - poetry generation
+docker_image_name: dlab-poem
+default_model: google/gemini-2.0-flash
+requires_data: false
+
+hooks:
+  pre-run: say_hi.sh
+  post-run: print_result.sh

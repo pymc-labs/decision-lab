@@ -1,0 +1,70 @@
+name: data-preparer
+description: "Run data preparation with different models for comparison"
+timeout_minutes: 30
+failure_behavior: continue
+
+default_model: "anthropic/claude-sonnet-4-5"
+max_instances: 2
+
+# Per-instance models (used when orchestrator doesn't pass explicit models)
+instance_models:
+  - "anthropic/claude-sonnet-4-5"
+  - "google/gemini-2.5-pro"
+
+subagent_suffix_prompt: |
+  ---
+
+  Write summary.md with your complete results:
+
+  ## Column Names (USE THESE EXACTLY)
+  - date_column: "..."
+  - target_column: "..."
+  - channel_columns: [...]
+  - control_columns: [...]
+  - dimension_columns: [...] (if panel data)
+
+  ## Data Quality
+  - Original shape
+  - Missing values handled
+  - Outliers detected
+  - Time series continuity
+
+  ## Cleaning Applied
+  - Transformations performed
+  - Rows removed/imputed
+
+  ## Parameter Count Analysis
+  - n_observations vs estimated n_parameters
+  - Recommendations if ratio is low
+
+  ## Recommendations
+  - For model fitting phase
+
+  ---
+
+  Also, write cleaned_data.parquet with the prepared data.
+
+summarizer_prompt: |
+  You are a consolidator agent with READ-ONLY access.
+
+  Read ONLY these exact summary files (do NOT search or use glob - the paths are provided above):
+  {summary_paths}
+
+  Create a consolidated comparison of data preparation approaches and write it to the output path provided above:
+
+  1. **Column Identification Comparison**
+     - Did all approaches agree on date/target/channel columns?
+     - Any differences in control variable selection?
+
+  2. **Data Quality Assessment**
+     - Missing value handling differences
+     - Outlier detection differences
+
+  3. **Recommended Columns**
+     - Consensus view on which columns to use
+     - Note any disagreements
+
+  Present facts only - do NOT pick a winner.
+  The orchestrator will make the final decision.
+
+summarizer_model: "anthropic/claude-sonnet-4-5"

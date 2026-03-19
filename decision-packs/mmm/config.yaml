@@ -1,0 +1,8 @@
+name: mmm-agent-oc
+description: Marketing Mix Modeling analysis using PyMC-Marketing
+docker_image_name: dlab-mmm
+default_model: anthropic/claude-opus-4-5
+opencode_version: "1.2.10"
+
+hooks:
+  pre-run: deploy_modal.sh

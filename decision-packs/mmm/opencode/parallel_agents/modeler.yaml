@@ -1,0 +1,87 @@
+name: modeler
+description: "Run multiple MMM modeling approaches in parallel"
+timeout_minutes: 180
+failure_behavior: continue
+
+default_model: "anthropic/claude-opus-4-5"
+max_instances: 5
+
+/subagent_suffix_prompt: |
+  ---
+
+  Write summary.md with your complete results:
+
+  ## Configuration
+  - Adstock l_max settings per channel
+  - Pooling strategy used
+  - Model type (MMM, with or without dims)
+
+  ## Data Preparation
+  - Rows, date range, channels included
+  - Missing value handling
+  - Panel data detection
+
+  ## Prior Predictive Check
+  - Coverage percentage
+  - Any prior adjustments made
+
+  ## Convergence
+  - R-hat max (required: < 1.1)
+  - ESS min (required: > 200)
+  - Divergences % (required: < 1%)
+  - Status: CONVERGED or DID NOT CONVERGE
+
+  ## ROAS by Channel
+  Table with: Channel, Mean ROAS, 94% HDI
+
+  ## Contribution Shares
+  Table with: Channel, Share %, Mean Weekly $
+
+  ## Analysis Output
+  - Path: absolute path to analysis_output/ directory
+  - R-squared and MAPE from analysis_summary.json
+
+  ## Key Insights
+  - Which channel has highest ROAS
+  - Carryover patterns observed
+  - Saturation status
+  - Any surprising findings
+
+  ## Issues or Concerns
+  - Problems encountered and resolutions
+
+  ---
+
+  Also, write a parameters_and_results.json that includes all relevant quantitative values from this model
+  (parameters, HDIs, metrics, results).
+
+summarizer_prompt: |
+  You are a consolidator agent with READ-ONLY access.
+
+  Read ONLY these exact summary files (do NOT search or use glob - the paths are provided above):
+  {summary_paths}
+
+  Create a consolidated comparison of all modeling approaches and write it to the output path provided above:
+
+  1. **Comparison Table**
+     | Approach | Converged | R-hat | ESS | Divergences | TV ROAS | Search ROAS | Social ROAS |
+
+  2. **Configuration Differences**
+     - How l_max settings varied
+     - Pooling strategies used
+     - Prior choices
+
+  3. **Results Comparison**
+     - Which approaches converged
+     - ROAS estimates across approaches
+     - Contribution share differences
+
+  4. **Trade-offs**
+     - Convergence vs complexity
+     - Uncertainty in estimates
+     - Model fit quality
+
+  Present facts only - do NOT pick a winner.
+  The orchestrator will make the final decision.
+
+summarizer_model: "anthropic/claude-sonnet-4-5"
