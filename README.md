@@ -18,9 +18,7 @@ decision-lab (`dlab`) is the framework we built to make agents behave like that.
 
 **Skills.** decision-packs include domain-specific skills: mandatory diagnostics, preferred model structures, informative priors. These constrain the agent to methodologically sound paths.
 
-**Parallel subagents.** decision-lab lets the coding agent fan out multiple subagents with different approaches to the same problem (different priors, different data prep, different model structures) and consolidates their results. Structured exploration instead of a single random walk. Supports running compute-heavy tasks in the cloud on [modal](https://modal.com).
-
-<!--**Uncertainty awareness.** Bayesian models give the agent a principled way to know when inference isn't supported. The agent reports uncertainty and recommends experiments instead of guessing.-->
+**Parallel subagents.** decision-lab lets the coding agent fan out multiple subagents with different approaches to the same problem (different priors, different data prep, different model structures) and consolidates their results. Structured exploration instead of a single random walk. Supports running compute-heavy tasks in the cloud on [Modal](https://modal.com).
 
 **Frozen environments.** Every session runs in a pinned Docker image. Library APIs change constantly and LLMs are trained on old versions. decision-packs lock the environment so the agent codes against the right API.
 
@@ -38,7 +36,7 @@ pip install dlab-cli
 # Run a decision-pack on your data
 dlab --dpack dpacks/mmm --data ./marketing-spend.csv --prompt "Build a marketing mix model" --workdir ./analysis
 
-# Monitor it work live
+# Watch it work
 dlab connect ./analysis
 ```
 
@@ -69,12 +67,83 @@ my-dpack/
     parallel_agents/    # Fan-out configs
 ```
 
-Install validated decision-packs from [Decision Hub](https://hub.decision.ai), or create your own with `dlab create-dpack`.
+See the [poem decision-pack](decision-packs/poem/) for a fully annotated example showing how all the pieces connect.
 
-## CLI
+## Features
+
+### Run sessions
 
 ```bash
-dlab --dpack PATH --data PATH --prompt TEXT --env .env  # Run a session
+dlab --dpack PATH --data PATH --prompt TEXT --env-file .env
+```
+
+Builds the Docker image (cached between runs), starts the container, runs pre-run hooks, launches the agent, runs post-run hooks, fixes file ownership, and stops the container. Sessions are auto-numbered (`analysis-001`, `analysis-002`, ...) and can be resumed with `--continue-dir`.
+
+### Live monitoring
+
+```bash
+dlab connect ./analysis-001
+```
+
+A Textual TUI that shows live log events, agent status, cost tracking, and artifacts as the session runs. Browse between the orchestrator, parallel instances, and consolidator. Works with both running and completed sessions.
+
+<!-- ![dlab connect TUI screenshot](docs/assets/connect-tui.png) -->
+
+### Execution timeline
+
+```bash
+dlab timeline ./analysis-001
+```
+
+Displays a Gantt chart of the session with timing, cost breakdown per agent, and idle periods. Shows the orchestrator, all parallel instances, and consolidators on a single timeline.
+
+<!-- ![dlab timeline Gantt chart](docs/assets/timeline-gantt.png) -->
+
+### Creation wizards
+
+```bash
+dlab create-dpack              # Interactive wizard to scaffold a new decision-pack
+dlab create-parallel-agent     # Wizard to add parallel agent configs to an existing decision-pack
+```
+
+The decision-pack wizard walks through 8 screens: name, container setup (package manager + base image), features (Decision Hub, Modal, Python library), model selection, permissions, directory skeletons, skill search, and review. Supports conda, pip, uv, and pixi.
+
+<!-- ![dlab create-dpack wizard](docs/assets/create-dpack-wizard.png) -->
+
+### Install as shortcut
+
+```bash
+dlab install ./my-dpack
+# Now run directly:
+my-dpack --data ./data --prompt "..."
+```
+
+Creates a wrapper script in `~/.local/bin/` so you can run a decision-pack by name instead of passing `--dpack` every time.
+
+### Decision Hub integration
+
+decision-packs work with [Decision Hub](https://hub.decision.ai), a registry of validated skills for data science and AI. Agents can search and install skills from the hub at runtime, giving them access to domain knowledge they weren't originally packaged with.
+
+```bash
+# Install the Decision Hub CLI as a skill in your decision-pack
+dhub install pymc-labs/dhub-cli --agent opencode
+```
+
+The hub has 2,200+ skills from 38 organizations with automated evals that verify skills actually improve agent performance.
+
+### Environment variable forwarding
+
+All environment variables starting with `DLAB_` are automatically forwarded from the host to the Docker container. decision-packs use these for runtime configuration:
+
+```bash
+# MMM decision-pack: fit models locally instead of on Modal
+DLAB_FIT_MODEL_LOCALLY=1 dlab --dpack mmm --data ./data --prompt "..."
+```
+
+## CLI reference
+
+```bash
+dlab --dpack PATH --data PATH --prompt TEXT   # Run a session
 dlab connect WORK_DIR                         # Live TUI monitor
 dlab timeline [WORK_DIR]                      # Execution Gantt chart
 dlab create-dpack [OUTPUT_DIR]                # Interactive wizard
