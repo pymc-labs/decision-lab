@@ -1,4 +1,18 @@
 ---
+# ============================================================================
+# Single subagent — called via the "task" tool (not parallel-agents)
+# ============================================================================
+# This agent is called by literary-agent using the "task" tool, which runs
+# a single subagent instance (not parallelized). The "task" tool is a built-in
+# opencode tool, different from the "parallel-agents" custom tool.
+#
+# The difference:
+#   - "task" tool: runs ONE subagent, returns its output inline
+#   - "parallel-agents" tool: runs N subagents in parallel directories,
+#     each writes summary.md, consolidator compares them
+#
+# This agent has no parallel agent YAML config — it doesn't need one because
+# it's never parallelized.
 description: A really dumb poet that writes terrible poems
 mode: subagent
 tools:
