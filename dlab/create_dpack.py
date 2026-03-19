@@ -517,8 +517,10 @@ def _build_dockerfile(config: dict[str, Any]) -> str:
             "    rm -rf /var/lib/apt/lists/*",
             'ENV PATH="/root/.pixi/bin:$PATH"',
             "",
-            "COPY pixi.toml /workspace/pixi.toml",
-            "RUN pixi install",
+            "# Install pixi packages to /opt/pixi (not /workspace, which gets volume-mounted)",
+            "COPY pixi.toml /opt/pixi/pixi.toml",
+            "RUN cd /opt/pixi && pixi install",
+            'ENV PATH="/opt/pixi/.pixi/envs/default/bin:$PATH"',
             "",
         ])
     else:  # pip
@@ -592,11 +594,18 @@ def _build_env_file(config: dict[str, Any]) -> tuple[str, str]:
         if pip_pkgs:
             pypi_lines: str = "\n".join(f'{p} = "*"' for p in pip_pkgs)
             pypi_section = f"\n[pypi-dependencies]\n{pypi_lines}\n"
+        import platform
+        machine: str = platform.machine()
+        if machine == "aarch64" or machine == "arm64":
+            pixi_platform: str = "linux-aarch64"
+        else:
+            pixi_platform = "linux-64"
+
         content = (
             "[project]\n"
             f'name = "{docker_image_name}"\n'
             'channels = ["conda-forge"]\n'
-            'platforms = ["linux-64"]\n'
+            f'platforms = ["{pixi_platform}"]\n'
             "\n"
             "[dependencies]\n"
             'python = "3.11.*"\n'
