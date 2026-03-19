@@ -37,6 +37,10 @@ requires_data: false
 # Post-run hooks run after the agent finishes (even if it failed).
 # A non-zero exit prints a warning but doesn't change the session exit code.
 #
+# You can specify a single script or a list:
+#   pre-run: setup.sh                    # single script
+#   pre-run: [deploy.sh, validate.sh]    # multiple scripts, run in order
+#
 # See: say_hi.sh, print_result.sh (in this directory)
 hooks:
   pre-run: say_hi.sh
@@ -46,10 +50,8 @@ hooks:
 #
 # requires_prompt: true          # If false, --prompt becomes optional
 # opencode_version: "1.2.10"    # Pin opencode version (default: latest)
-# cli_name: poem                 # Override command name for `dlab install`
-#
-# For Modal integration, add:
-#   hooks:
-#     pre-run: deploy_modal.sh
-# The deploy hook checks DLAB_FIT_MODEL_LOCALLY / DLAB_RUN_MODAL_TOOL_LOCALLY
-# env vars (all DLAB_* vars are forwarded from host to container automatically).
+# cli_name: poem                 # Override command name for `dlab install`.
+#                                # `dlab install <dpack-path>` creates a wrapper
+#                                # script in ~/.local/bin/ so you can run
+#                                # `poem --data ... --prompt ...` directly
+#                                # instead of `dlab --dpack <path> ...`.
