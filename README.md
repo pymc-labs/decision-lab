@@ -34,10 +34,10 @@ pip install dlab-cli
 
 ```bash
 # Run a decision-pack on your data
-dlab --dpack dpacks/mmm --data ./marketing-spend.csv --prompt "Build a marketing mix model" --workdir ./analysis
+dlab --dpack decision-packs/mmm --data ./marketing-spend.csv --env-file .env --prompt "Build a marketing mix model"
 
 # Watch it work
-dlab connect ./analysis
+dlab connect ./dlab-analysis-001
 ```
 
 Or build your own decision-pack. Ask Claude to scaffold one for you:
