@@ -514,3 +514,18 @@ class TestCLIIntegration:
         )
         assert result.returncode == 2
         assert "Unknown argument: --zzzzzzz" in result.stderr
+
+    def test_one_bad_flag_only_reports_that_flag(self) -> None:
+        """A single misspelled flag should not cause all other flags to be reported as unknown."""
+        result = subprocess.run(
+            [sys.executable, "-m", "dlab.cli",
+             "--dpack", "foo", "--data", "bar", "--prompt", "hello", "--workdir", "out"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 2
+        assert "Did you mean --work-dir?" in result.stderr
+        # The valid flags should NOT appear as unknown
+        assert "Unknown argument: --dpack" not in result.stderr
+        assert "Unknown argument: --data" not in result.stderr
+        assert "Unknown argument: --prompt" not in result.stderr

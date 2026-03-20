@@ -718,7 +718,14 @@ def _suggest_corrections(unknown_args: list[str], parser: argparse.ArgumentParse
             valid_subcommands = list(action.choices.keys())
             break
 
-    for arg in unknown_args:
+    # Skip values that follow unknown flags (e.g., "out" after "--workdir out").
+    # These aren't separate errors — they're the value of the preceding unknown flag.
+    skip_next: bool = False
+    for i, arg in enumerate(unknown_args):
+        if skip_next:
+            skip_next = False
+            continue
+
         if arg.startswith("--"):
             matches: list[str] = difflib.get_close_matches(
                 arg, valid_flags, n=1, cutoff=0.6,
@@ -727,6 +734,9 @@ def _suggest_corrections(unknown_args: list[str], parser: argparse.ArgumentParse
                 print(f"Unknown argument: {arg}. Did you mean {matches[0]}?", file=sys.stderr)
             else:
                 print(f"Unknown argument: {arg}", file=sys.stderr)
+            # If next arg doesn't start with '-', it's likely this flag's value
+            if i + 1 < len(unknown_args) and not unknown_args[i + 1].startswith("-"):
+                skip_next = True
         elif not arg.startswith("-") and valid_subcommands:
             matches = difflib.get_close_matches(
                 arg, valid_subcommands, n=1, cutoff=0.6,
@@ -771,9 +781,35 @@ def main() -> None:
     try:
         args, unknown = parser.parse_known_args()
     except _BadSubcommand as e:
-        # Argparse caught a bad subcommand — collect unknown flags too
-        unknown = [a for a in sys.argv[1:] if a != e.value]
-        _suggest_corrections(unknown + [e.value], parser)
+        # Argparse caught a bad subcommand. This often happens when an unknown
+        # flag's value (e.g., "out" from "--workdir out") gets interpreted as a
+        # positional subcommand argument. Re-parse with subcommands disabled so
+        # valid flags are recognized and only truly unknown flags remain.
+        parser_no_sub: argparse.ArgumentParser = create_parser()
+        # Remove subparsers action so positionals don't trigger subcommand matching
+        parser_no_sub._subparsers._actions[:] = [
+            a for a in parser_no_sub._subparsers._actions
+            if not hasattr(a, "choices")
+        ]
+        _, unknown = parser_no_sub.parse_known_args()
+        # The bad subcommand value was likely a flag's argument — don't report
+        # it separately unless it looks like it was meant as a subcommand
+        if e.value not in unknown:
+            matches = difflib.get_close_matches(
+                e.value,
+                [c for a in parser._subparsers._actions
+                 if hasattr(a, "choices") and a.choices
+                 for c in a.choices.keys()],
+                n=1, cutoff=0.6,
+            )
+            if matches:
+                unknown.append(e.value)
+        if unknown:
+            _suggest_corrections(unknown, parser)
+        else:
+            # Nothing unknown after re-parse — the "bad subcommand" was just
+            # a value trailing an unknown flag. Report the original error.
+            original_error(f"argument command: invalid choice: '{e.value}'")
 
     if unknown:
         _suggest_corrections(unknown, parser)
