@@ -34,10 +34,11 @@ pip install dlab-cli
 
 ```bash
 # Run a decision-pack on your data
-dlab --dpack decision-packs/mmm --data ./marketing-spend.csv --env-file .env --prompt "Build a marketing mix model"
+dlab --dpack decision-packs/mmm --data ./marketing-spend.csv --env-file .env \
+  --work-dir ./mmm-run --prompt "Build a marketing mix model"
 
 # Watch it work
-dlab connect ./dlab-analysis-001
+dlab connect ./mmm-run
 ```
 
 Or build your own decision-pack. Ask Claude to scaffold one for you:
@@ -91,12 +92,12 @@ The session directory ends up with parallel instance outputs, logs, and the fina
 dlab --dpack PATH --data PATH --prompt TEXT --env-file .env
 ```
 
-Builds the Docker image (cached between runs), starts the container, runs pre-run hooks, launches the agent, runs post-run hooks, fixes file ownership, and stops the container. Sessions are auto-numbered (`analysis-001`, `analysis-002`, ...) and can be resumed with `--continue-dir`.
+Builds the Docker image (cached between runs), starts the container, runs pre-run hooks, launches the agent, runs post-run hooks, fixes file ownership, and stops the container. Without `--work-dir`, sessions are auto-numbered by dpack name (`dlab-mmm-workdir-001`, `dlab-mmm-workdir-002`, ...) and can be resumed with `--continue-dir`.
 
 ### Live monitoring
 
 ```bash
-dlab connect ./analysis-001
+dlab connect ./mmm-run
 ```
 
 A Textual TUI that shows live log events, agent status, cost tracking, and artifacts as the session runs. Browse between the orchestrator, parallel instances, and consolidator. Works with both running and completed sessions.
@@ -106,7 +107,7 @@ A Textual TUI that shows live log events, agent status, cost tracking, and artif
 ### Execution timeline
 
 ```bash
-dlab timeline ./analysis-001
+dlab timeline ./mmm-run
 ```
 
 Displays a Gantt chart of the session with timing, cost breakdown per agent, and idle periods. Shows the orchestrator, all parallel instances, and consolidators on a single timeline.

@@ -12,11 +12,15 @@ from typing import Any
 from dlab.parallel_tool import PARALLEL_AGENTS_SOURCE
 
 
-SESSION_DIR_PREFIX: str = "dlab-analysis-"
 STATE_FILE: str = ".state.json"
 
 
-def get_next_sequence_number(base_dir: str) -> int:
+def _session_dir_prefix(dpack_name: str) -> str:
+    """Build session directory prefix from decision-pack name."""
+    return f"dlab-{dpack_name}-workdir-"
+
+
+def get_next_sequence_number(base_dir: str, dpack_name: str = "analysis") -> int:
     """
     Find the next available sequence number for session directories.
 
@@ -24,6 +28,8 @@ def get_next_sequence_number(base_dir: str) -> int:
     ----------
     base_dir : str
         Directory to search for existing session directories.
+    dpack_name : str
+        decision-pack name used as directory prefix.
 
     Returns
     -------
@@ -34,7 +40,8 @@ def get_next_sequence_number(base_dir: str) -> int:
     if not base_path.exists():
         return 1
 
-    pattern: re.Pattern[str] = re.compile(rf"^{re.escape(SESSION_DIR_PREFIX)}(\d+)$")
+    prefix: str = _session_dir_prefix(dpack_name)
+    pattern: re.Pattern[str] = re.compile(rf"^{re.escape(prefix)}(\d+)$")
     max_seq: int = 0
 
     for item in base_path.iterdir():
@@ -278,8 +285,10 @@ def create_session(
         base_dir = "."
 
     if work_dir is None:
-        seq: int = get_next_sequence_number(base_dir)
-        work_dir = str(Path(base_dir) / f"{SESSION_DIR_PREFIX}{seq:03d}")
+        dpack_name: str = config.get("name", "analysis")
+        prefix: str = _session_dir_prefix(dpack_name)
+        seq: int = get_next_sequence_number(base_dir, dpack_name)
+        work_dir = str(Path(base_dir) / f"{prefix}{seq:03d}")
 
     work_path: Path = Path(work_dir).resolve()
     if work_path.exists():

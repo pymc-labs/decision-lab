@@ -42,7 +42,7 @@ dlab --dpack <dpack> --data <data-dir> --env-file .env --work-dir <work-dir> --p
 dlab --dpack <dpack> --data file1.csv file2.csv --prompt "Compare these"
 
 # Resume interrupted session
-dlab --dpack <dpack> --continue-dir ./analysis-001 --prompt "Continue"
+dlab --dpack <dpack> --continue-dir ./dlab-mmm-workdir-001 --prompt "Continue"
 
 # Prompt from file
 dlab --dpack <dpack> --data <data-dir> --prompt-file prompt.txt
@@ -124,7 +124,7 @@ dlab timeline [work-dir]
 - Communication via `docker exec`
 - Session state in JSON files for resumption
 - Containers automatically stopped on completion, error, or interrupt (SIGINT/SIGTERM)
-- Work directories are auto-numbered: `analysis-001`, `analysis-002`, etc.
+- Work directories are auto-numbered: `dlab-{dpack}-workdir-001`, `dlab-{dpack}-workdir-002`, etc.
 
 ## Modules (in `dlab/`)
 

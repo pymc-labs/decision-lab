@@ -28,31 +28,40 @@ class TestGetNextSequenceNumber:
 
     def test_empty_directory(self, tmp_path: Path) -> None:
         """Empty directory should return 1."""
-        seq: int = get_next_sequence_number(str(tmp_path))
+        seq: int = get_next_sequence_number(str(tmp_path), "mmm")
         assert seq == 1
 
     def test_nonexistent_directory(self, tmp_path: Path) -> None:
         """Non-existent directory should return 1."""
-        seq: int = get_next_sequence_number(str(tmp_path / "nonexistent"))
+        seq: int = get_next_sequence_number(str(tmp_path / "nonexistent"), "mmm")
         assert seq == 1
 
     def test_with_existing_sessions(self, tmp_path: Path) -> None:
         """Should return next number after existing sessions."""
-        (tmp_path / "dlab-analysis-001").mkdir()
-        (tmp_path / "dlab-analysis-002").mkdir()
-        (tmp_path / "dlab-analysis-005").mkdir()
+        (tmp_path / "dlab-mmm-workdir-001").mkdir()
+        (tmp_path / "dlab-mmm-workdir-002").mkdir()
+        (tmp_path / "dlab-mmm-workdir-005").mkdir()
 
-        seq: int = get_next_sequence_number(str(tmp_path))
+        seq: int = get_next_sequence_number(str(tmp_path), "mmm")
         assert seq == 6
 
     def test_ignores_other_directories(self, tmp_path: Path) -> None:
         """Should ignore directories not matching the pattern."""
-        (tmp_path / "dlab-analysis-003").mkdir()
+        (tmp_path / "dlab-mmm-workdir-003").mkdir()
         (tmp_path / "other-directory").mkdir()
-        (tmp_path / "dlab-analysis-notanumber").mkdir()
+        (tmp_path / "dlab-mmm-workdir-notanumber").mkdir()
 
-        seq: int = get_next_sequence_number(str(tmp_path))
+        seq: int = get_next_sequence_number(str(tmp_path), "mmm")
         assert seq == 4
+
+    def test_different_dpacks_independent(self, tmp_path: Path) -> None:
+        """Different dpack names should have independent sequence numbers."""
+        (tmp_path / "dlab-mmm-workdir-001").mkdir()
+        (tmp_path / "dlab-mmm-workdir-002").mkdir()
+        (tmp_path / "dlab-poem-workdir-001").mkdir()
+
+        assert get_next_sequence_number(str(tmp_path), "mmm") == 3
+        assert get_next_sequence_number(str(tmp_path), "poem") == 2
 
 
 class TestCopyDataToWorkdir:
@@ -227,8 +236,8 @@ class TestCreateSession:
         state1: dict[str, Any] = create_session(config, str(data_dir), base_dir=str(tmp_path))
         state2: dict[str, Any] = create_session(config, str(data_dir), base_dir=str(tmp_path))
 
-        assert "analysis-001" in state1["work_dir"]
-        assert "analysis-002" in state2["work_dir"]
+        assert "dlab-test-dpack-workdir-001" in state1["work_dir"]
+        assert "dlab-test-dpack-workdir-002" in state2["work_dir"]
 
 
 class TestSetupOpencodeConfig:
