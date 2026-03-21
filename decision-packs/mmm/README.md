@@ -16,13 +16,30 @@ The orchestrator retries up to 3 rounds if models don't converge, with increasin
 
 ## Quick start
 
+An example dataset is included in `example-data/`:
+
 ```bash
 dlab \
   --dpack decision-packs/mmm \
-  --data path/to/marketing_data.csv \
+  --data decision-packs/mmm/example-data/example_dataset.csv \
   --env-file .env \
+  --work-dir ./mmm-example \
   --prompt "Analyze our marketing spend and recommend budget allocation"
 ```
+
+### Example dataset ground truth
+
+The example dataset is a synthetic 104-week, 3-channel dataset with known ground truth. Use it to verify the agent recovers correct values.
+
+| Channel | True ROAS | Contribution (% of revenue) |
+|---------|-----------|----------------------------|
+| paid_search | 0.90 | 6.5% |
+| social | 2.00 | 5.5% |
+| email | 3.51 | 2.5% |
+
+Revenue split: 81.7% baseline, 14.5% marketing, ~0% controls.
+
+The optimal budget reallocation (unconstrained) shifts spend from paid_search (lowest ROAS) toward email and social (highest ROAS), yielding ~1.7% total sales uplift.
 
 ## Environment variables
 
