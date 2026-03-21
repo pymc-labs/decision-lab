@@ -33,9 +33,12 @@ pip install dlab-cli
 ## Quick start
 
 ```bash
-# Run a decision-pack on your data
-dlab --dpack decision-packs/mmm --data ./marketing-spend.csv --env-file .env \
-  --work-dir ./mmm-run --prompt "Build a marketing mix model"
+# Run the MMM decision-pack on the included example dataset
+dlab --dpack decision-packs/mmm \
+  --data decision-packs/mmm/example-data/example_dataset.csv \
+  --env-file .env \
+  --work-dir ./mmm-run \
+  --prompt "Analyze our marketing spend and recommend budget allocation"
 
 # Watch it work
 dlab connect ./mmm-run
