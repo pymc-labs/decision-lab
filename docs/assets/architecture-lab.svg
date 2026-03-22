@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d1117"/>
+      <stop offset="100%" style="stop-color:#161b22"/>
+    </linearGradient>
+    <filter id="glow2">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="520" fill="url(#bg2)" rx="12"/>
+
+  <!-- ===== PROFESSOR (top) ===== -->
+  <rect x="310" y="30" width="280" height="90" rx="12" fill="#161b22" stroke="#58a6ff" stroke-width="1.5" filter="url(#shadow)"/>
+  <!-- Professor icon: graduation cap -->
+  <g transform="translate(340, 60)">
+    <polygon points="15,5 0,15 15,25 30,15" fill="none" stroke="#58a6ff" stroke-width="1.5"/>
+    <line x1="15" y1="25" x2="15" y2="35" stroke="#58a6ff" stroke-width="1.5"/>
+    <line x1="6" y1="18" x2="6" y2="30" stroke="#58a6ff" stroke-width="1"/>
+    <path d="M 6,30 Q 6,35 15,35" fill="none" stroke="#58a6ff" stroke-width="1"/>
+  </g>
+  <text x="385" y="68" fill="#e6edf3" font-size="16" font-weight="600">The Professor</text>
+  <text x="385" y="88" fill="#8b949e" font-size="11">Orchestrator agent — designs the research</text>
+  <text x="385" y="102" fill="#8b949e" font-size="11">agenda, reviews results, suggests revisions</text>
+
+  <!-- Arrows from professor to grad students -->
+  <line x1="380" y1="120" x2="160" y2="190" stroke="#30363d" stroke-width="1.5" marker-end="url(#arrowGray)"/>
+  <line x1="450" y1="120" x2="450" y2="190" stroke="#30363d" stroke-width="1.5"/>
+  <line x1="520" y1="120" x2="740" y2="190" stroke="#30363d" stroke-width="1.5"/>
+
+  <!-- Arrow markers -->
+  <defs>
+    <marker id="arrowGray" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#30363d"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#58a6ff"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#3fb950"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#f85149"/>
+    </marker>
+  </defs>
+
+  <!-- Small downward arrows -->
+  <polygon points="156,188 160,196 164,188" fill="#30363d"/>
+  <polygon points="446,188 450,196 454,188" fill="#30363d"/>
+  <polygon points="736,188 740,196 744,188" fill="#30363d"/>
+
+  <!-- ===== GRAD STUDENTS (middle row) ===== -->
+
+  <!-- Student 1 -->
+  <rect x="60" y="200" width="200" height="110" rx="10" fill="#161b22" stroke="#8b949e" stroke-width="1" filter="url(#shadow)"/>
+  <g transform="translate(80, 220)">
+    <circle cx="8" cy="6" r="6" fill="none" stroke="#d2a8ff" stroke-width="1.2"/>
+    <path d="M 0,20 Q 8,14 16,20" fill="none" stroke="#d2a8ff" stroke-width="1.2"/>
+  </g>
+  <text x="108" y="230" fill="#d2a8ff" font-size="13" font-weight="600">Grad Student 1</text>
+  <text x="80" y="252" fill="#8b949e" font-size="10">Approach: Informative priors</text>
+  <text x="80" y="266" fill="#8b949e" font-size="10">Method: Hierarchical model</text>
+  <rect x="80" y="278" width="60" height="18" rx="4" fill="#1a3a1a" stroke="#3fb950" stroke-width="0.8"/>
+  <text x="84" y="291" fill="#3fb950" font-size="9" font-weight="500">CONVERGED</text>
+  <rect x="148" y="278" width="92" height="18" rx="4" fill="#0d2534" stroke="#58a6ff" stroke-width="0.8"/>
+  <text x="153" y="291" fill="#58a6ff" font-size="9">R-hat: 1.01</text>
+
+  <!-- Student 2 -->
+  <rect x="350" y="200" width="200" height="110" rx="10" fill="#161b22" stroke="#8b949e" stroke-width="1" filter="url(#shadow)"/>
+  <g transform="translate(370, 220)">
+    <circle cx="8" cy="6" r="6" fill="none" stroke="#d2a8ff" stroke-width="1.2"/>
+    <path d="M 0,20 Q 8,14 16,20" fill="none" stroke="#d2a8ff" stroke-width="1.2"/>
+  </g>
+  <text x="398" y="230" fill="#d2a8ff" font-size="13" font-weight="600">Grad Student 2</text>
+  <text x="370" y="252" fill="#8b949e" font-size="10">Approach: Weakly informative</text>
+  <text x="370" y="266" fill="#8b949e" font-size="10">Method: Additive model</text>
+  <rect x="370" y="278" width="84" height="18" rx="4" fill="#3d1a1a" stroke="#f85149" stroke-width="0.8"/>
+  <text x="374" y="291" fill="#f85149" font-size="9" font-weight="500">DIVERGENT</text>
+  <rect x="462" y="278" width="72" height="18" rx="4" fill="#3d2a0d" stroke="#d29922" stroke-width="0.8"/>
+  <text x="467" y="291" fill="#d29922" font-size="9">R-hat: 2.4</text>
+
+  <!-- Student 3 -->
+  <rect x="640" y="200" width="200" height="110" rx="10" fill="#161b22" stroke="#8b949e" stroke-width="1" filter="url(#shadow)"/>
+  <g transform="translate(660, 220)">
+    <circle cx="8" cy="6" r="6" fill="none" stroke="#d2a8ff" stroke-width="1.2"/>
+    <path d="M 0,20 Q 8,14 16,20" fill="none" stroke="#d2a8ff" stroke-width="1.2"/>
+  </g>
+  <text x="688" y="230" fill="#d2a8ff" font-size="13" font-weight="600">Grad Student 3</text>
+  <text x="660" y="252" fill="#8b949e" font-size="10">Approach: Flat priors + events</text>
+  <text x="660" y="266" fill="#8b949e" font-size="10">Method: Saturating model</text>
+  <rect x="660" y="278" width="60" height="18" rx="4" fill="#1a3a1a" stroke="#3fb950" stroke-width="0.8"/>
+  <text x="664" y="291" fill="#3fb950" font-size="9" font-weight="500">CONVERGED</text>
+  <rect x="728" y="278" width="92" height="18" rx="4" fill="#0d2534" stroke="#58a6ff" stroke-width="0.8"/>
+  <text x="733" y="291" fill="#58a6ff" font-size="9">R-hat: 1.02</text>
+
+  <!-- Revision arrow (professor sends student 2 back) -->
+  <path d="M 540,260 C 570,260 585,180 570,140 C 555,120 520,120 510,120" fill="none" stroke="#f85149" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrowRed)"/>
+  <text x="576" y="182" fill="#f85149" font-size="9" font-style="italic" transform="rotate(-80, 576, 182)">revise &amp; retry</text>
+
+  <!-- Arrows down to defense -->
+  <line x1="160" y1="310" x2="350" y2="380" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+  <line x1="740" y1="310" x2="550" y2="380" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+  <!-- Dashed line from student 2 (didn't make it) -->
+  <line x1="450" y1="310" x2="450" y2="380" stroke="#8b949e" stroke-width="1" stroke-dasharray="4,3" opacity="0.4"/>
+
+  <!-- ===== DISSERTATION DEFENSE (bottom) ===== -->
+  <rect x="310" y="385" width="280" height="100" rx="12" fill="#161b22" stroke="#3fb950" stroke-width="1.5" filter="url(#shadow)"/>
+  <!-- Gavel / defense icon -->
+  <g transform="translate(330, 410)">
+    <rect x="2" y="12" width="20" height="4" rx="2" fill="#3fb950" opacity="0.7"/>
+    <rect x="8" y="2" width="8" height="12" rx="2" fill="#3fb950" opacity="0.9"/>
+  </g>
+  <text x="368" y="425" fill="#e6edf3" font-size="16" font-weight="600">Dissertation Defense</text>
+  <text x="368" y="445" fill="#8b949e" font-size="11">Consolidates all paths. Synthesizes</text>
+  <text x="368" y="459" fill="#8b949e" font-size="11">findings or declares: "more data needed"</text>
+  <rect x="368" y="466" width="130" height="16" rx="3" fill="#0d2534" stroke="#58a6ff" stroke-width="0.5"/>
+  <text x="375" y="477" fill="#58a6ff" font-size="9">2 of 3 paths converged</text>
+
+  <!-- Decorative label -->
+  <text x="450" y="15" text-anchor="middle" fill="#30363d" font-size="10" letter-spacing="4" text-transform="uppercase">HOW DECISION-LAB WORKS</text>
+
+  <!-- Side annotation: Lab Protocols -->
+  <rect x="14" y="360" width="130" height="55" rx="8" fill="#161b22" stroke="#d29922" stroke-width="1" stroke-dasharray="4,2" opacity="0.8"/>
+  <text x="24" y="380" fill="#d29922" font-size="10" font-weight="600">Lab Protocols</text>
+  <text x="24" y="394" fill="#8b949e" font-size="9">Skills, priors,</text>
+  <text x="24" y="406" fill="#8b949e" font-size="9">mandatory diagnostics</text>
+
+  <!-- Side annotation: Frozen Lab -->
+  <rect x="756" y="360" width="130" height="55" rx="8" fill="#161b22" stroke="#d29922" stroke-width="1" stroke-dasharray="4,2" opacity="0.8"/>
+  <text x="766" y="380" fill="#d29922" font-size="10" font-weight="600">Frozen Lab</text>
+  <text x="766" y="394" fill="#8b949e" font-size="9">Docker environment</text>
+  <text x="766" y="406" fill="#8b949e" font-size="9">Pinned dependencies</text>
+</svg>

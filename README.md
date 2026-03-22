@@ -1,26 +1,44 @@
 # decision-lab
 
-Coding agents write good code. They make bad analytical decisions. decision-lab gives you the tools to fix the second part.
+### A framework for Agentic Decision Science
 
-decision-lab runs autonomous coding agents in frozen Docker environments with domain-specific skills and parallel subagents. You package the environment, the prompts, and the skills into a **decision-pack**, point it at your data, and get back reports, figures, and recommendations that hold up to scrutiny.
+*Your data deserves a dissertation defense, not a dashboard.*
 
-<!-- demo gif here -->
+<p align="center">
+  <img src="docs/assets/hero-branching-paths.svg" alt="decision-lab explores multiple analytical paths, prunes the ones that fail, and converges on a decision — or tells you the data isn't enough." width="800"/>
+</p>
 
-## Why
+Most AI data analysis works like an undergrad pulling an all-nighter: pick one approach, run it, write up whatever comes out, hope for the best.
+
+decision-lab works like a research group. A **professor** agent designs the research plan. **Grad student** agents fan out to run parallel Bayesian causal experiments — different priors, different model structures, different hypotheses. Each reports back with diagnostics, not just results.
+
+The professor reviews everything. Suggests revisions. Sends students back to try alternative approaches when results don't converge. When the evidence is strong, it synthesizes a recommendation. When the paths diverge irreconcilably, it says the thing no other AI tool will say: **"we can't tell from this data."**
+
+This is **Agentic Decision Science**: structured exploration of the analytical space, with the rigor to know when to stop.
+
+## Why this exists
 
 There are many ways to analyze a dataset. Most of them are wrong. An unsupervised agent picks one path through the analytical space and commits to it. If that path happens to be wrong, you get a nice-looking report with bad conclusions. Nobody notices for months.
 
-We tested this on marketing mix modeling. We gave vanilla Claude Code and our MMM agent the same adversarial dataset where no valid inference was possible. Claude Code fit a model and recommended budget reallocations. Our agent tried 11 approaches, found that none of the models converged, said so, and recommended experiments to collect better data.
+We tested this on marketing mix modeling. We gave vanilla Claude Code and our MMM agent the same adversarial dataset where no valid inference was possible. **Claude Code fit a model and recommended budget reallocations.** Our agent tried 11 approaches, found that none of the models converged, said so, and recommended experiments to collect better data.
 
 decision-lab (`dlab`) is the framework we built to make agents behave like that.
 
 ## How it works
 
-**Skills.** decision-packs include domain-specific skills: mandatory diagnostics, preferred model structures, informative priors. These constrain the agent to methodologically sound paths.
+<p align="center">
+  <img src="docs/assets/architecture-lab.svg" alt="The Professor orchestrator delegates to Grad Student parallel agents, reviews results, sends back revisions, and consolidates at the Dissertation Defense." width="800"/>
+</p>
 
-**Parallel subagents.** decision-lab lets the coding agent fan out multiple subagents with different approaches to the same problem (different priors, different data prep, different model structures) and consolidates their results. Structured exploration instead of a single random walk. Supports running compute-heavy tasks in the cloud on [Modal](https://modal.com).
+**The Professor** (orchestrator agent) designs the research agenda, decomposes the question into parallel experiments, and decides when the evidence is sufficient — or when it isn't.
 
-**Frozen environments.** Every session runs in a pinned Docker image. Library APIs change constantly and LLMs are trained on old versions. decision-packs lock the environment so the agent codes against the right API.
+**The Grad Students** (parallel subagents) each pursue a different analytical approach to the same problem. Different priors, different model structures, different data prep. They report back with full diagnostics: convergence checks, posterior predictive checks, sensitivity analyses. Supports running compute-heavy experiments in the cloud on [Modal](https://modal.com).
+
+**Lab Protocols** (skills in a decision-pack) encode domain knowledge that prevents methodological mistakes — mandatory diagnostics, preferred model structures, informative priors. The equivalent of "read these papers before you touch the data."
+
+**The Lab** (frozen Docker environment) ensures reproducible conditions. Library APIs change constantly and LLMs are trained on old versions. decision-packs lock the environment so the agent codes against the right API.
+
+**The Dissertation Defense** (consolidation) collates all decision paths. If the students converge on the same answer through different methods, that's a strong recommendation. If they diverge irreconcilably, the professor says so — because "the data doesn't support a decision" is better than a confident wrong one.
 
 ## Install
 
@@ -50,7 +68,7 @@ claude
 
 ## What's a decision-pack?
 
-A directory with everything an agent needs: frozen environment, system prompts, domain skills, tools, and permissions.
+A decision-pack bundles everything an agent needs into a portable directory: frozen environment, system prompts, domain skills, tools, and permissions. Think of it as the lab setup — equipment, protocols, and safety rules — before you start running experiments.
 
 ```
 my-dpack/
@@ -61,10 +79,10 @@ my-dpack/
   opencode/
     opencode.json       # Permissions
     agents/
-      orchestrator.md   # Main agent system prompt
+      orchestrator.md   # The Professor
     tools/              # Custom tools
-    skills/             # Domain knowledge
-    parallel_agents/    # Fan-out configs
+    skills/             # Lab protocols
+    parallel_agents/    # Grad student configs
 ```
 
 See the [poem decision-pack](decision-packs/poem/) for a fully annotated example showing how all the pieces connect. Here's what happens when you run it:
@@ -179,7 +197,7 @@ dlab install DPACK_PATH                       # Create shortcut command
 
 ## Built by PyMC Labs
 
-dlab is developed by [PyMC Labs](https://www.pymc-labs.com), the team behind [PyMC](https://github.com/pymc-devs/pymc) and [pymc-marketing](https://github.com/pymc-labs/pymc-marketing).
+decision-lab is developed by [PyMC Labs](https://www.pymc-labs.com), the team behind [PyMC](https://github.com/pymc-devs/pymc) and [pymc-marketing](https://github.com/pymc-labs/pymc-marketing).
 
 ## License
 
