@@ -1,0 +1,15 @@
+{
+  "name": "decision-lab-video",
+  "version": "1.0.0",
+  "scripts": {
+    "studio": "npx remotion studio",
+    "render": "npx remotion render DecisionLabDemo"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.436",
+    "@remotion/cli": "4.0.436",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "remotion": "4.0.436"
+  }
+}
