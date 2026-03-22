@@ -33,13 +33,13 @@ The example dataset is a synthetic 104-week, 3-channel dataset with known ground
 
 | Channel | True ROAS | Contribution (% of revenue) |
 |---------|-----------|----------------------------|
-| paid_search | 0.90 | 6.5% |
-| social | 2.00 | 5.5% |
-| email | 3.51 | 2.5% |
+| paid_search | 2.0 | 30.7% |
+| social | 3.5 | 26.5% |
+| email | 6.0 | 12.8% |
 
-Revenue split: 81.7% baseline, 14.5% marketing, ~0% controls.
+Revenue split: 20% baseline, 70% marketing, 10% controls.
 
-The optimal budget reallocation (unconstrained) shifts spend from paid_search (lowest ROAS) toward email and social (highest ROAS), yielding ~1.7% total sales uplift.
+The optimal budget reallocation shifts spend from paid_search (lowest ROAS) toward email and social (highest ROAS).
 
 ## Environment variables
 
