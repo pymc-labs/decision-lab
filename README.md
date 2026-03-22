@@ -14,7 +14,7 @@ decision-lab works like a research group. A **professor** agent designs the rese
 
 The professor reviews everything. Suggests revisions. Sends students back to try alternative approaches when results don't converge. When the evidence is strong, it synthesizes a recommendation. When the paths diverge irreconcilably, it says the thing no other AI tool will say: **"we can't tell from this data."**
 
-Everyone's building agentic data science. decision-lab is the one rigorous enough to say no. We call this **Decision Science** — structured exploration of the analytical space, with the rigor to know when to stop.
+Everyone's building agentic data science. decision-lab is the one rigorous enough to say no. We call this **Agentic Decision Science** — structured exploration of the analytical space, with the rigor to know when to stop.
 
 ## Why this exists
 
