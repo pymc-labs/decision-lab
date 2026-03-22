@@ -41,6 +41,61 @@ Revenue split: 20% baseline, 70% marketing, 10% controls.
 
 The optimal budget reallocation shifts spend from paid_search (lowest ROAS) toward email and social (highest ROAS).
 
+### Example run output
+
+```
+dlab · mmm-agent-oc · anthropic/claude-opus-4-5
+Session:    /home/ubuntu/decision-lab/mmm-example
+
+[1/4] Setting up environment
+      Image: dlab-mmm (cached)
+      Container started: mmm-example
+[2/4] Pre-run hooks
+      deploy_modal.sh
+        Deploying Modal app...
+        ✓ App deployed in 1.4s! 🎉
+        Modal app deployed.
+[3/4] Running agent ...
+      ╭──────────────────── Monitoring ─────────────────────╮
+      │ dlab connect ./mmm-example                          │
+      │   Live-monitor the run                              │
+      │                                                     │
+      │ dlab timeline ./mmm-example                         │
+      │   View execution timeline after the run             │
+      ╰─────────────────────────────────────────────────────╯
+[4/4] Cleanup
+      Stopping container...
+      Done.
+```
+
+A run on this dataset with Claude Opus takes ~19 minutes and costs ~$7. The agent:
+- Spawns 2 parallel data-preparers (Sonnet + Gemini)
+- Creates 4 modeling plans with different prior configurations
+- Spawns 4 parallel modelers that fit on Modal
+- Consolidates results, runs budget optimization at multiple risk levels
+- Writes a business report and a technical report
+
+```
+main                                          |████░░░░░░░░░░░░░░██░░░░░░░░░░░░░░░░░░░░██████████| 19.4m
+data-preparer .../instance-1                  |    █████████████                                  | 5.1m
+data-preparer .../instance-2                  |    ██████                                         | 2.3m
+modeler .../instance-1                        |                     █████████████                 | 5.3m
+modeler .../instance-2                        |                     ██████████████                | 5.5m
+modeler .../instance-3                        |                     ██████████████                | 5.6m
+modeler .../instance-4                        |                     ████████████                  | 4.6m
+modeler .../consolidator                      |                                   ████            | 1.7m
+```
+
+Recovered values vs ground truth:
+
+| Channel | True ROAS | Agent ROAS | Error |
+|---------|-----------|------------|-------|
+| paid_search | 2.0 | 1.74 | -13% |
+| social | 3.5 | 3.37 | -4% |
+| email | 6.0 | 4.84 | -19% |
+
+Channel ranking recovered correctly (email > social > paid_search). The agent correctly recommends shifting budget from paid_search to email and social.
+
 ## Environment variables
 
 Create a `.env` file:
