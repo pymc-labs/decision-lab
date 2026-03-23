@@ -126,6 +126,11 @@ def create_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="Path to environment file (passed to Docker container)",
     )
+    parser.add_argument(
+        "--no-sandboxing",
+        action="store_true",
+        help="Run opencode locally without Docker (no container isolation)",
+    )
 
     # Install subcommand
     install_parser = subparsers.add_parser(
@@ -232,6 +237,18 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
+    # Resolve execution mode: Docker vs local
+    no_sandboxing: bool = getattr(args, "no_sandboxing", False)
+    if not no_sandboxing:
+        from dlab.local import is_docker_available
+        if not is_docker_available():
+            print(
+                "Error: Docker is not installed. "
+                "To run without sandboxing, run again with flag --no-sandboxing",
+                file=sys.stderr,
+            )
+            return 1
+
     # Auto-default --env-file to decision-pack .env if present
     if not args.env_file:
         dpack_env: Path = Path(args.dpack).resolve() / ".env"
@@ -304,14 +321,17 @@ def cmd_run(args: argparse.Namespace) -> int:
                 return 0
 
         # Overwrite .opencode with latest from decision-pack (agent prompts may have changed)
-        # Use subprocess rm -rf because Docker creates root-owned files
-        # (e.g. node_modules/) that shutil.rmtree cannot delete.
         opencode_dir = Path(work_dir) / ".opencode"
         if opencode_dir.exists():
-            subprocess.run(
-                ["sudo", "rm", "-rf", str(opencode_dir)],
-                check=True,
-            )
+            if no_sandboxing:
+                # Local mode: files are user-owned
+                shutil.rmtree(opencode_dir)
+            else:
+                # Docker mode: files may be root-owned (e.g. node_modules/)
+                subprocess.run(
+                    ["sudo", "rm", "-rf", str(opencode_dir)],
+                    check=True,
+                )
         setup_opencode_config(config["config_dir"], work_dir)
 
         # Refresh hook scripts from decision-pack
@@ -335,7 +355,10 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     # --- Header ---
     I: str = "      "  # 6-space indent for content under phase labels
-    console.print(f"[bold]dlab[/bold] [dim]·[/dim] {config['name']} [dim]·[/dim] {model}")
+    if no_sandboxing:
+        console.print(f"[bold]dlab[/bold] [dim]·[/dim] {config['name']} [dim]·[/dim] {model} [dim]·[/dim] [yellow]no sandboxing[/yellow]")
+    else:
+        console.print(f"[bold]dlab[/bold] [dim]·[/dim] {config['name']} [dim]·[/dim] {model}")
     if continue_mode:
         console.print(f"[dim]Continuing:[/dim] {work_dir}")
     else:
@@ -345,17 +368,17 @@ def cmd_run(args: argparse.Namespace) -> int:
         console.print(f"{I}[yellow]         The agent may fail if it needs API keys.[/yellow]")
     console.print()
 
-    # Compute step numbering (pre/post hooks are optional steps)
+    # Compute step numbering
     hooks: dict[str, Any] = config.get("hooks", {})
     pre_run_hooks: list[str] = hooks.get("pre-run", [])
     post_run_hooks: list[str] = hooks.get("post-run", [])
 
     step: int = 0
     total_steps: int = 2  # setup + cleanup (always present)
-    if pre_run_hooks:
+    if not no_sandboxing and pre_run_hooks:
         total_steps += 1
     total_steps += 1  # running agent (always present)
-    if post_run_hooks:
+    if not no_sandboxing and post_run_hooks:
         total_steps += 1
 
     def next_step(label: str) -> str:
@@ -363,7 +386,57 @@ def cmd_run(args: argparse.Namespace) -> int:
         step += 1
         return f"[bold]\\[{step}/{total_steps}] {label}[/bold]"
 
-    # --- Setup (image + container) ---
+    # =====================================================================
+    # LOCAL MODE (--no-sandboxing)
+    # =====================================================================
+    if no_sandboxing:
+        from dlab.local import (
+            build_local_env,
+            build_local_prompt,
+            copy_docker_dir,
+            run_opencode_local,
+        )
+
+        console.print(next_step("Setting up local environment"))
+        # Copy docker/ as _docker/ so the agent can read it
+        copy_docker_dir(config["config_dir"], work_dir)
+        console.print(f"{I}[dim]Copied docker/ to _docker/[/dim]")
+
+        env_file_path: str | None = getattr(args, "env_file", None)
+        local_env: dict[str, str] = build_local_env(env_file=env_file_path)
+        console.print(f"{I}[green]Ready[/green]")
+
+        # Prepend system instructions to prompt
+        local_prompt: str = build_local_prompt(prompt, config)
+
+        console.print(next_step("Running agent ..."))
+        hint_text: Text = Text()
+        hint_text.append("dlab connect ", style="bold")
+        hint_text.append(work_dir, style="dim")
+        hint_text.append("\n  Live-monitor the run\n\n")
+        hint_text.append("dlab timeline ", style="bold")
+        hint_text.append(work_dir, style="dim")
+        hint_text.append("\n  View execution timeline after the run")
+        panel: Panel = Panel(hint_text, title="[dim]Monitoring[/dim]", border_style="dim", expand=False, padding=(0, 1))
+        console.print(Padding(panel, (0, 0, 0, 6)))
+
+        exit_code, stdout, stderr = run_opencode_local(
+            work_dir, local_prompt, model, local_env,
+        )
+        if stderr:
+            console.print(f"{I}[red]{stderr}[/red]", highlight=False)
+
+        console.print(next_step("Cleanup"))
+        if exit_code == 0:
+            console.print(f"{I}[bold green]Done.[/bold green]")
+        else:
+            console.print(f"{I}[bold red]Done (exit code {exit_code}).[/bold red]")
+
+        return exit_code
+
+    # =====================================================================
+    # DOCKER MODE (default)
+    # =====================================================================
     force_rebuild: bool = getattr(args, "rebuild", False)
     opencode_version: str = config["opencode_version"]
 

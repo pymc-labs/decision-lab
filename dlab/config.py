@@ -159,6 +159,16 @@ def load_dpack_config(config_dir: str) -> dict[str, Any]:
 
     config["config_dir"] = config_dir_str
 
+    # Autodetect package_manager from docker/ contents if not specified
+    if "package_manager" not in config:
+        docker_dir: Path = config_path / "docker"
+        if (docker_dir / "environment.yml").exists():
+            config["package_manager"] = "conda"
+        elif (docker_dir / "pixi.toml").exists():
+            config["package_manager"] = "pixi"
+        else:
+            config["package_manager"] = "pip"
+
     # Default opencode_version to "latest" if not specified
     if "opencode_version" not in config:
         config["opencode_version"] = "latest"
