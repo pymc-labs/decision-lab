@@ -1,6 +1,0 @@
-{
-  "default_agent": "orchestrator",
-  "permission": {
-    "external_directory": { "*": "allow" }
-  }
-}

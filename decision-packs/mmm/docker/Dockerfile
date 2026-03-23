@@ -18,7 +18,6 @@ RUN conda install -y \
     scikit-learn=1.8.0 \
     statsmodels=0.14.6 \
     arviz=0.23.1 \
-    pytensor=2.35.1 \
     pyyaml=6.0.3 \
     && conda clean -afy
 

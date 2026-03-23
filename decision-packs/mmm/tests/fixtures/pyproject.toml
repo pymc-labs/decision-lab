@@ -22,7 +22,6 @@ dependencies = [
     "statsmodels==0.14.6",
     "arviz==0.23.1",
     "pymc @ git+https://github.com/pymc-devs/pymc.git@v6",
-    "pytensor==2.35.1",
     "pyyaml==6.0.3",
 
     # From pip

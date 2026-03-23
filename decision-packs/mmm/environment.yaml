@@ -20,8 +20,7 @@ dependencies:
   - statsmodels=0.14.6
   # Bayesian
   - arviz=0.23.1
-  # pymc pinned to v6 branch (moved to pip section below)
-  - pytensor=2.35.1
+  # pymc and pytensor moved to pip section (v6 branch resolves its own pytensor)
   # Utils
   - pyyaml=6.0.3
   # Pip packages (must be via pip for Coiled package sync compatibility)
