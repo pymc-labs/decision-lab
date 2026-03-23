@@ -10,7 +10,7 @@
 
 Most AI data analysis works like one analyst pulling an all-nighter: pick one approach, run it, write up whatever comes out, hope for the best.
 
-decision-lab works like a research lab. A **PI** agent designs the research plan. **Researcher** agents fan out to run parallel Bayesian causal experiments — different priors, different model structures, different hypotheses. Each reports back with diagnostics, not just results.
+decision-lab works like a research lab. A **PI** (principal investigator) agent designs the research plan. **Researcher** agents fan out to run parallel Bayesian causal experiments — different priors, different model structures, different hypotheses. Each reports back with diagnostics, not just results.
 
 The PI reviews everything. Suggests revisions. Sends researchers back to try alternative approaches when results don't converge. When the evidence is strong, it synthesizes a recommendation. When the paths diverge irreconcilably, it says the thing no other AI tool will say: **"we can't tell from this data."**
 
