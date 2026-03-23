@@ -398,6 +398,14 @@ def cmd_run(args: argparse.Namespace) -> int:
         )
 
         console.print(next_step("Setting up local environment"))
+
+        # Check opencode is installed
+        if shutil.which("opencode") is None:
+            console.print(f"{I}[bold red]Error:[/bold red] opencode is not installed.")
+            console.print(f"{I}Install with: [bold]curl -fsSL https://opencode.ai/install | bash[/bold]")
+            console.print(f"{I}See: [dim]https://opencode.ai[/dim]")
+            return 1
+
         # Copy docker/ as _docker/ so the agent can read it
         copy_docker_dir(config["config_dir"], work_dir)
         console.print(f"{I}[dim]Copied docker/ to _docker/[/dim]")
