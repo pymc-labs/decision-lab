@@ -25,7 +25,7 @@ from rich.console import Group
 ARTIFACT_EXTENSIONS = {".md", ".py", ".txt", ".csv", ".png", ".jpg", ".jpeg", ".pdf"}
 
 # Directories to exclude from artifact discovery
-EXCLUDE_DIRS = {".git", ".opencode", "_opencode_logs", "node_modules", "__pycache__", "data"}
+EXCLUDE_DIRS = {".git", ".opencode", "_opencode_logs", "_docker", "_hooks", "node_modules", "__pycache__", "data"}
 
 # Image extensions
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
