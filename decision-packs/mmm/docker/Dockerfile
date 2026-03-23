@@ -18,7 +18,6 @@ RUN conda install -y \
     scikit-learn=1.8.0 \
     statsmodels=0.14.6 \
     arviz=0.23.1 \
-    pymc=5.26.1 \
     pytensor=2.35.1 \
     pyyaml=6.0.3 \
     && conda clean -afy
@@ -32,6 +31,7 @@ RUN conda install -y \
 # xarray/h5py pinned to match Modal app for cloudpickle compatibility
 # modal for cloud MCMC fitting
 RUN pip install --no-cache-dir \
+    "pymc @ git+https://github.com/pymc-devs/pymc.git@v6" \
     numpy==2.3.5 \
     pyarrow==23.0.0 \
     pymc-marketing==0.18.0 \
