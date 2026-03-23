@@ -2,7 +2,7 @@
 
 ### A framework for Agentic Data Science
 
-*Your data deserves a peer review, not a best guess.*
+*Your data deserves a peer review, not a guess.*
 
 <p align="center">
   <img src="docs/assets/hero-branching-paths.svg" alt="decision-lab explores multiple analytical paths, prunes the ones that fail, and converges on a decision — or tells you the data isn't enough." width="800"/>
