@@ -45,7 +45,7 @@
       <polygon points="0 0, 8 3, 0 6" fill="#3fb950"/>
     </marker>
     <marker id="arrowRed" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-      <polygon points="0 0, 8 3, 0 6" fill="#c75c5c"/>
+      <polygon points="0 0, 8 3, 0 6" fill="#c46a6a"/>
     </marker>
   </defs>
 
@@ -99,9 +99,9 @@
   <text x="733" y="291" fill="#58a6ff" font-size="9">R-hat: 1.02</text>
 
   <!-- Revision arrow (PI sends researcher 2 back) -->
-  <path d="M 550,255 Q 620,180 560,120" fill="none" stroke="#c75c5c" stroke-width="1.5" marker-end="url(#arrowRed)"/>
-  <text x="625" y="176" fill="#c75c5c" font-size="9">revise &amp;</text>
-  <text x="625" y="188" fill="#c75c5c" font-size="9">retry</text>
+  <path d="M 550,255 C 630,225 630,105 590,75" fill="none" stroke="#c46a6a" stroke-width="1.5" marker-end="url(#arrowRed)"/>
+  <text x="636" y="160" fill="#c46a6a" font-size="9" font-style="normal">revise &amp;</text>
+  <text x="636" y="172" fill="#c46a6a" font-size="9" font-style="normal">retry</text>
 
   <!-- Arrows down to defense -->
   <line x1="160" y1="310" x2="350" y2="380" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
