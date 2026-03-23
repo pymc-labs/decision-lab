@@ -678,7 +678,7 @@ export const DecisionLabDemo = () => {
               fontStyle: "italic",
             }}
           >
-            Your data deserves a peer review, not a dashboard.
+            Your data deserves a peer review, not a best guess.
           </div>
           <div style={{ fontSize: "16px", color: C.blue, letterSpacing: "2px" }}>
             AGENTIC DATA SCIENCE
