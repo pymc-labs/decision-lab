@@ -428,11 +428,15 @@ def cmd_run(args: argparse.Namespace) -> int:
         panel: Panel = Panel(hint_text, title="[dim]Monitoring[/dim]", border_style="dim", expand=False, padding=(0, 1))
         console.print(Padding(panel, (0, 0, 0, 6)))
 
-        exit_code, stdout, stderr = run_opencode_local(
-            work_dir, local_prompt, model, local_env,
-        )
-        if stderr:
-            console.print(f"{I}[red]{stderr}[/red]", highlight=False)
+        try:
+            exit_code, stdout, stderr = run_opencode_local(
+                work_dir, local_prompt, model, local_env,
+            )
+            if stderr:
+                console.print(f"{I}[red]{stderr}[/red]", highlight=False)
+        except KeyboardInterrupt:
+            console.print(f"\n{I}[yellow]Interrupted.[/yellow]")
+            exit_code = 130
 
         console.print(next_step("Cleanup"))
         if exit_code == 0:
