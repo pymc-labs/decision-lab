@@ -184,7 +184,7 @@ const AgentPanel = ({ label, number, color, status, statusColor, detail, at }) =
     >
       <div style={{ display: "flex", alignItems: "center", marginBottom: "6px" }}>
         <span style={{ color, fontSize: "12px", fontWeight: 700, letterSpacing: "0.5px" }}>
-          GRAD STUDENT {number}
+          RESEARCHER {number}
         </span>
       </div>
       <div style={{ color: C.text, fontSize: "13px", marginBottom: "4px" }}>{label}</div>
@@ -299,12 +299,12 @@ export const DecisionLabDemo = () => {
           />
         </Line>
 
-        {/* ═══ SCENE 2: Professor plans (80-170) ═══ */}
+        {/* ═══ SCENE 2: PI plans (80-170) ═══ */}
         <Line at={85}>
           <span>{""}</span>
         </Line>
         <Line at={90}>
-          <Badge label="PROFESSOR" color={C.blue} icon="🎓" />
+          <Badge label="PI" color={C.blue} icon="🔬" />
           <span style={{ color: C.white, fontWeight: 600 }}>Designing research agenda...</span>
         </Line>
 
@@ -317,7 +317,7 @@ export const DecisionLabDemo = () => {
         </Line>
         <Line at={125}>
           <span style={{ color: C.dimmed }}>  ├─ </span>
-          <span style={{ color: C.text }}>Fan out 3 grad students with different modeling strategies</span>
+          <span style={{ color: C.text }}>Fan out 3 researchers with different modeling strategies</span>
         </Line>
         <Line at={135}>
           <span style={{ color: C.dimmed }}>  ├─ </span>
@@ -368,14 +368,14 @@ export const DecisionLabDemo = () => {
           <span style={{ color: C.text }}>Imputed from adjacent weeks via rolling median</span>
         </Line>
 
-        {/* ═══ SCENE 4: Parallel grad students fan out (270-480) ═══ */}
+        {/* ═══ SCENE 4: Parallel researchers fan out (270-480) ═══ */}
         <Line at={280}>
           <span>{""}</span>
         </Line>
         <Line at={285}>
-          <Badge label="PROFESSOR" color={C.blue} icon="🎓" />
+          <Badge label="PI" color={C.blue} icon="🔬" />
           <span style={{ color: C.white, fontWeight: 600 }}>
-            Dispatching 3 grad students in parallel
+            Dispatching 3 researchers in parallel
           </span>
         </Line>
 
@@ -435,7 +435,7 @@ export const DecisionLabDemo = () => {
           <span>{""}</span>
         </Line>
         <Line at={415}>
-          <Badge label="GRAD STUDENT 2" color={C.orange} />
+          <Badge label="RESEARCHER 2" color={C.orange} />
           <span style={{ color: C.red, fontWeight: 600 }}>✗ Posterior Predictive Check FAILED</span>
         </Line>
         <Line at={428}>
@@ -444,13 +444,13 @@ export const DecisionLabDemo = () => {
           </span>
         </Line>
 
-        {/* Professor sends back */}
+        {/* PI sends back */}
         <Line at={448}>
           <span>{""}</span>
         </Line>
         <Line at={453}>
-          <Badge label="PROFESSOR" color={C.blue} icon="🎓" />
-          <span style={{ color: C.yellow, fontWeight: 600 }}>↩ Revision for Student 2</span>
+          <Badge label="PI" color={C.blue} icon="🔬" />
+          <span style={{ color: C.yellow, fontWeight: 600 }}>↩ Revision for Researcher 2</span>
         </Line>
         <Line at={465}>
           <span style={{ color: C.yellow }}>
@@ -460,7 +460,7 @@ export const DecisionLabDemo = () => {
 
         {/* Re-fit progress */}
         <Line at={485}>
-          <Badge label="GRAD STUDENT 2" color={C.orange} />
+          <Badge label="RESEARCHER 2" color={C.orange} />
           <span style={{ color: C.text }}>Re-fitting with holiday effects... </span>
           {frame >= 485 && frame < 515 && <Spinner startFrame={485} duration={30} />}
         </Line>
@@ -470,7 +470,7 @@ export const DecisionLabDemo = () => {
           <span style={{ color: C.text }}>Converged on retry — R̂ 1.02, PPC passed</span>
         </Line>
 
-        {/* ═══ SCENE 5: Dissertation Defense (540-700) ═══ */}
+        {/* ═══ SCENE 5: Peer Review (540-700) ═══ */}
         <Line at={545}>
           <span>{""}</span>
         </Line>
@@ -484,7 +484,7 @@ export const DecisionLabDemo = () => {
               display: "inline-block",
             }}
           >
-            <Badge label="DISSERTATION DEFENSE" color={C.green} icon="⚖" />
+            <Badge label="PEER REVIEW" color={C.green} icon="⚖" />
             <span style={{ color: C.white, fontWeight: 600 }}>
               Consolidating 3 analytical paths
             </span>
@@ -494,7 +494,7 @@ export const DecisionLabDemo = () => {
         <Line at={575}>
           <span style={{ color: C.green }}>  ✓ </span>
           <span style={{ color: C.text }}>
-            All 3 students converged (1 after revision)
+            All 3 researchers converged (1 after revision)
           </span>
         </Line>
         <Line at={590}>
@@ -514,7 +514,7 @@ export const DecisionLabDemo = () => {
           <span>{""}</span>
         </Line>
         <Line at={630}>
-          <Badge label="PROFESSOR" color={C.blue} icon="🎓" />
+          <Badge label="PI" color={C.blue} icon="🔬" />
           <span style={{ color: C.white, fontWeight: 700 }}>
             Verdict: Strong consensus — recommendation is robust
           </span>
@@ -678,7 +678,7 @@ export const DecisionLabDemo = () => {
               fontStyle: "italic",
             }}
           >
-            Your data deserves a dissertation defense, not a dashboard.
+            Your data deserves a peer review, not a dashboard.
           </div>
           <div style={{ fontSize: "16px", color: C.blue, letterSpacing: "2px" }}>
             AGENTIC DATA SCIENCE

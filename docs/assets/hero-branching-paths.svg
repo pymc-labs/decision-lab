@@ -86,7 +86,7 @@
   <text x="450" y="38" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="600" letter-spacing="3" text-transform="uppercase">AGENTIC DATA SCIENCE</text>
 
   <!-- Subtitle -->
-  <text x="450" y="385" text-anchor="middle" fill="#8b949e" font-size="12" font-style="italic">Your data deserves a dissertation defense, not a dashboard</text>
+  <text x="450" y="385" text-anchor="middle" fill="#8b949e" font-size="12" font-style="italic">Your data deserves a peer review, not a dashboard</text>
 
   <!-- Labels -->
   <text x="100" y="240" text-anchor="middle" fill="#8b949e" font-size="10">Question</text>

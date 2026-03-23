@@ -2,17 +2,17 @@
 
 ### A framework for Agentic Data Science
 
-*Your data deserves a dissertation defense, not a dashboard.*
+*Your data deserves a peer review, not a dashboard.*
 
 <p align="center">
   <img src="docs/assets/hero-branching-paths.svg" alt="decision-lab explores multiple analytical paths, prunes the ones that fail, and converges on a decision — or tells you the data isn't enough." width="800"/>
 </p>
 
-Most AI data analysis works like an undergrad pulling an all-nighter: pick one approach, run it, write up whatever comes out, hope for the best.
+Most AI data analysis works like one analyst pulling an all-nighter: pick one approach, run it, write up whatever comes out, hope for the best.
 
-decision-lab works like a research group. A **professor** agent designs the research plan. **Grad student** agents fan out to run parallel Bayesian causal experiments — different priors, different model structures, different hypotheses. Each reports back with diagnostics, not just results.
+decision-lab works like a research lab. A **PI** agent designs the research plan. **Researcher** agents fan out to run parallel Bayesian causal experiments — different priors, different model structures, different hypotheses. Each reports back with diagnostics, not just results.
 
-The professor reviews everything. Suggests revisions. Sends students back to try alternative approaches when results don't converge. When the evidence is strong, it synthesizes a recommendation. When the paths diverge irreconcilably, it says the thing no other AI tool will say: **"we can't tell from this data."**
+The PI reviews everything. Suggests revisions. Sends researchers back to try alternative approaches when results don't converge. When the evidence is strong, it synthesizes a recommendation. When the paths diverge irreconcilably, it says the thing no other AI tool will say: **"we can't tell from this data."**
 
 Everyone's building agentic data science. decision-lab is the one rigorous enough to say no. We call this **Agentic Decision Science** — structured exploration of the analytical space, with the rigor to know when to stop.
 
@@ -27,18 +27,18 @@ decision-lab (`dlab`) is the framework we built to make agents behave like that.
 ## How it works
 
 <p align="center">
-  <img src="docs/assets/architecture-lab.svg" alt="The Professor orchestrator delegates to Grad Student parallel agents, reviews results, sends back revisions, and consolidates at the Dissertation Defense." width="800"/>
+  <img src="docs/assets/architecture-lab.svg" alt="The PI orchestrator delegates to Researcher parallel agents, reviews results, sends back revisions, and consolidates at the Peer Review." width="800"/>
 </p>
 
-**The Professor** (orchestrator agent) designs the research agenda, decomposes the question into parallel experiments, and decides when the evidence is sufficient — or when it isn't.
+**The PI** (orchestrator agent) designs the research agenda, decomposes the question into parallel experiments, and decides when the evidence is sufficient — or when it isn't.
 
-**The Grad Students** (parallel subagents) each pursue a different analytical approach to the same problem. Different priors, different model structures, different data prep. They report back with full diagnostics: convergence checks, posterior predictive checks, sensitivity analyses. Supports running compute-heavy experiments in the cloud on [Modal](https://modal.com).
+**The Researchers** (parallel subagents) each pursue a different analytical approach to the same problem. Different priors, different model structures, different data prep. They report back with full diagnostics: convergence checks, posterior predictive checks, sensitivity analyses. Supports running compute-heavy experiments in the cloud on [Modal](https://modal.com).
 
 **Lab Protocols** (skills in a decision-pack) encode domain knowledge that prevents methodological mistakes — mandatory diagnostics, preferred model structures, informative priors. The equivalent of "read these papers before you touch the data."
 
 **The Lab** (frozen Docker environment) ensures reproducible conditions. Library APIs change constantly and LLMs are trained on old versions. decision-packs lock the environment so the agent codes against the right API.
 
-**The Dissertation Defense** (consolidation) collates all decision paths. If the students converge on the same answer through different methods, that's a strong recommendation. If they diverge irreconcilably, the professor says so — because "the data doesn't support a decision" is better than a confident wrong one.
+**The Peer Review** (consolidation) collates all decision paths. If the researchers converge on the same answer through different methods, that's a strong recommendation. If they diverge irreconcilably, the PI says so — because "the data doesn't support a decision" is better than a confident wrong one.
 
 ## Install
 
@@ -79,10 +79,10 @@ my-dpack/
   opencode/
     opencode.json       # Permissions
     agents/
-      orchestrator.md   # The Professor
+      orchestrator.md   # The PI
     tools/              # Custom tools
     skills/             # Lab protocols
-    parallel_agents/    # Grad student configs
+    parallel_agents/    # Researcher configs
 ```
 
 See the [poem decision-pack](decision-packs/poem/) for a fully annotated example showing how all the pieces connect. Here's what happens when you run it:
