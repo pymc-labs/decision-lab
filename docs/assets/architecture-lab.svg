@@ -100,7 +100,7 @@
 
   <!-- Revision arrow (PI sends researcher 2 back) -->
   <path d="M 540,260 C 570,260 585,180 570,140 C 555,120 520,120 510,120" fill="none" stroke="#f85149" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrowRed)"/>
-  <text x="576" y="182" fill="#f85149" font-size="9" font-style="italic" transform="rotate(-80, 576, 182)">revise &amp; retry</text>
+  <text x="565" y="175" fill="#f85149" font-size="9">revise &amp; retry</text>
 
   <!-- Arrows down to defense -->
   <line x1="160" y1="310" x2="350" y2="380" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
