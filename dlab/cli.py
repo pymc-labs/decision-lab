@@ -468,8 +468,17 @@ def cmd_run(args: argparse.Namespace) -> int:
         console.print(f"{I}[dim]Reason: {rebuild_reason}[/dim]")
         console.print(f"{I}[dim]opencode version: {opencode_version}[/dim]")
         try:
-            build_image(config["config_dir"], image_name, opencode_version)
-            console.print(f"{I}[green]Image built.[/green]")
+            build_line_count: int = 0
+
+            with console.status(f"{I}[dim]Building... (0 lines)[/dim]", spinner="dots") as status:
+                def _on_build_output(line: str) -> None:
+                    nonlocal build_line_count
+                    build_line_count += 1
+                    status.update(f"{I}[dim]Building... ({build_line_count} lines)[/dim]")
+
+                build_image(config["config_dir"], image_name, opencode_version, on_output=_on_build_output)
+
+            console.print(f"{I}[green]Image built.[/green] [dim]({build_line_count} lines)[/dim]")
         except ValueError as e:
             console.print(f"{I}[bold red]Error:[/bold red] {e}", highlight=False)
             return 1

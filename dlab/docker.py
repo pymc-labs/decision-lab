@@ -13,6 +13,7 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Callable
 
 
 # Template for the wrapper Dockerfile that adds opencode to the base image
@@ -217,7 +218,46 @@ def _remove_dangling_image(old_id: str | None, current_name: str) -> None:
     subprocess.run(["docker", "rmi", old_id], capture_output=True)
 
 
-def build_image(config_dir: str, image_name: str, opencode_version: str = "latest") -> None:
+def _run_docker_build(
+    cmd: list[str],
+    on_output: Callable[[str], None] | None = None,
+) -> tuple[int, str]:
+    """
+    Run a docker build command, streaming output line by line.
+
+    Parameters
+    ----------
+    cmd : list[str]
+        Docker build command.
+    on_output : Callable[[str], None] | None
+        Called for each output line.
+
+    Returns
+    -------
+    tuple[int, str]
+        (return_code, stderr_text).
+    """
+    proc: subprocess.Popen[str] = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    stderr_lines: list[str] = []
+    for line in proc.stdout:  # type: ignore[union-attr]
+        line = line.rstrip("\n")
+        if on_output:
+            on_output(line)
+    proc.wait()
+    return proc.returncode, "\n".join(stderr_lines)
+
+
+def build_image(
+    config_dir: str,
+    image_name: str,
+    opencode_version: str = "latest",
+    on_output: Callable[[str], None] | None = None,
+) -> None:
     """
     Build a Docker image from a decision-pack's docker/ directory with opencode installed.
 
@@ -235,6 +275,8 @@ def build_image(config_dir: str, image_name: str, opencode_version: str = "lates
         Name to tag the built image with.
     opencode_version : str
         Version of opencode to install (default: "latest").
+    on_output : Callable[[str], None] | None
+        Optional callback invoked for each line of build output.
 
     Raises
     ------
@@ -253,14 +295,13 @@ def build_image(config_dir: str, image_name: str, opencode_version: str = "lates
     old_wrapper_id: str | None = _get_image_id(image_name)
 
     # Step 1: Build the base image from decision-pack's Dockerfile
-    result: subprocess.CompletedProcess[str] = subprocess.run(
+    returncode, stderr = _run_docker_build(
         ["docker", "build", "-t", base_image_name, str(docker_dir)],
-        capture_output=True,
-        text=True,
+        on_output=on_output,
     )
 
-    if result.returncode != 0:
-        raise ValueError(f"Docker build failed: {result.stderr}")
+    if returncode != 0:
+        raise ValueError(f"Docker build failed: {stderr}")
 
     # Step 2: Create wrapper Dockerfile that adds opencode
     if opencode_version == "latest":
@@ -281,19 +322,18 @@ def build_image(config_dir: str, image_name: str, opencode_version: str = "lates
         dockerfile_path: Path = Path(tmpdir) / "Dockerfile"
         dockerfile_path.write_text(wrapper_dockerfile)
 
-        result = subprocess.run(
+        returncode, stderr = _run_docker_build(
             [
                 "docker", "build",
                 "-t", image_name,
                 "--label", f"{SOURCE_HASH_LABEL}={source_hash}",
                 tmpdir,
             ],
-            capture_output=True,
-            text=True,
+            on_output=on_output,
         )
 
-        if result.returncode != 0:
-            raise ValueError(f"Docker build (opencode wrapper) failed: {result.stderr}")
+        if returncode != 0:
+            raise ValueError(f"Docker build (opencode wrapper) failed: {stderr}")
 
     # Step 5: Remove old images if they became dangling after re-tagging
     _remove_dangling_image(old_base_id, base_image_name)
