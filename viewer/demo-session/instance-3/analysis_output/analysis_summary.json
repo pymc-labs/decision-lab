@@ -1,0 +1,32 @@
+{
+  "model_name": "Conservative Data + Geometric Adstock",
+  "instance": 3,
+  "convergence": {
+    "converged": true,
+    "rhat_max": 1.002,
+    "ess_bulk_min": 2104,
+    "ess_tail_min": 1678,
+    "divergences": 0,
+    "total_draws": 8000
+  },
+  "fit_quality": {
+    "r2_in_sample": 0.89,
+    "mape": 0.072,
+    "r2_out_of_sample": 0.83
+  },
+  "roas": {
+    "tv": {"mean": 2.18, "sd": 0.39, "hdi_low": 1.49, "hdi_high": 2.92},
+    "digital": {"mean": 3.95, "sd": 0.57, "hdi_low": 2.89, "hdi_high": 5.04},
+    "social": {"mean": 2.76, "sd": 0.48, "hdi_low": 1.87, "hdi_high": 3.68},
+    "search": {"mean": 4.28, "sd": 0.65, "hdi_low": 3.06, "hdi_high": 5.52},
+    "print": {"mean": 1.08, "sd": 0.35, "hdi_low": 0.43, "hdi_high": 1.73}
+  },
+  "saturation": {
+    "tv": 0.70,
+    "digital": 0.76,
+    "social": 0.55,
+    "search": 0.83,
+    "print": 0.43
+  },
+  "runtime_seconds": 298
+}

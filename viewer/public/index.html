@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Decision Lab — Session Viewer</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #1c2128;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-secondary: #8b949e;
+    --accent: #f97316;
+    --accent-dim: rgba(249, 115, 22, 0.15);
+    --green: #3fb950;
+    --green-dim: rgba(63, 185, 80, 0.15);
+    --blue: #58a6ff;
+    --blue-dim: rgba(88, 166, 255, 0.15);
+    --purple: #bc8cff;
+    --purple-dim: rgba(188, 140, 255, 0.15);
+    --red: #f85149;
+    --yellow: #d29922;
+    --node-size: 44px;
+    --sidebar-width: 320px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Header */
+  .header {
+    height: 56px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 16px;
+  }
+  .header-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 16px;
+  }
+  .header-logo svg { width: 28px; height: 28px; }
+  .header-badge {
+    background: var(--green-dim);
+    color: var(--green);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .header-info {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .header-info span { display: flex; align-items: center; gap: 4px; }
+
+  /* Main layout */
+  .main {
+    display: flex;
+    height: calc(100vh - 56px);
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+  }
+  .sidebar-content {
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  /* Workflow steps in sidebar */
+  .step-item {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.15s;
+    position: relative;
+  }
+  .step-item:hover { background: var(--bg-tertiary); }
+  .step-item.active { background: var(--accent-dim); border-left: 3px solid var(--accent); }
+  .step-item.active .step-label { color: var(--accent); }
+  .step-label {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .step-agent {
+    font-size: 11px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .step-time {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+  .step-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .step-status.completed { background: var(--green); }
+  .step-status.running { background: var(--yellow); animation: pulse 1.5s infinite; }
+  .step-status.failed { background: var(--red); }
+  .step-metrics {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .step-metric {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .step-metric.good { background: var(--green-dim); color: var(--green); }
+  .step-metric.warn { background: rgba(210, 153, 34, 0.15); color: var(--yellow); }
+  .step-metric.selected-badge { background: var(--accent-dim); color: var(--accent); }
+  .parallel-indicator {
+    font-size: 10px;
+    color: var(--purple);
+    background: var(--purple-dim);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Center: Graph + Content */
+  .center {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Graph panel */
+  .graph-panel {
+    height: 260px;
+    min-height: 200px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    overflow: auto;
+  }
+  .graph-panel svg {
+    display: block;
+  }
+
+  /* Graph nodes */
+  .graph-node {
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+  .graph-node:hover { filter: brightness(1.2); }
+  .graph-node.active rect,
+  .graph-node.active circle { stroke: var(--accent); stroke-width: 2.5; }
+
+  /* Content panel */
+  .content-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 32px;
+    background: var(--bg);
+  }
+  .content-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .content-subtitle {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+  }
+
+  /* Markdown rendering */
+  .markdown-body {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+  }
+  .markdown-body h1 { font-size: 22px; font-weight: 700; margin: 24px 0 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .markdown-body h2 { font-size: 18px; font-weight: 600; margin: 20px 0 10px; color: var(--accent); }
+  .markdown-body h3 { font-size: 15px; font-weight: 600; margin: 16px 0 8px; }
+  .markdown-body p { margin: 8px 0; }
+  .markdown-body ul, .markdown-body ol { margin: 8px 0; padding-left: 24px; }
+  .markdown-body li { margin: 4px 0; }
+  .markdown-body code {
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+  .markdown-body pre {
+    background: var(--bg-tertiary);
+    padding: 12px 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 12px 0;
+    border: 1px solid var(--border);
+  }
+  .markdown-body pre code { background: none; padding: 0; }
+  .markdown-body table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+    font-size: 13px;
+  }
+  .markdown-body th, .markdown-body td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+  }
+  .markdown-body th {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--text-secondary);
+  }
+  .markdown-body strong { color: #fff; }
+  .markdown-body blockquote {
+    border-left: 3px solid var(--accent);
+    padding-left: 12px;
+    color: var(--text-secondary);
+    margin: 12px 0;
+  }
+
+  /* JSON viewer */
+  .json-viewer {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre-wrap;
+  }
+  .json-key { color: var(--blue); }
+  .json-string { color: var(--green); }
+  .json-number { color: var(--accent); }
+  .json-boolean { color: var(--purple); }
+  .json-null { color: var(--text-secondary); }
+
+  /* Metrics cards */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .metric-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .metric-card-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .metric-card-value {
+    font-size: 24px;
+    font-weight: 700;
+  }
+  .metric-card-value.good { color: var(--green); }
+  .metric-card-value.warn { color: var(--yellow); }
+  .metric-card-value.accent { color: var(--accent); }
+
+  /* ROAS bar chart */
+  .roas-chart {
+    margin: 16px 0;
+  }
+  .roas-bar-row {
+    display: flex;
+    align-items: center;
+    margin: 8px 0;
+    gap: 12px;
+  }
+  .roas-label {
+    width: 70px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .roas-bar-container {
+    flex: 1;
+    height: 28px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+  .roas-bar {
+    height: 100%;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    transition: width 0.6s ease;
+    position: relative;
+  }
+  .roas-bar .hdi-range {
+    position: absolute;
+    right: 8px;
+    font-size: 10px;
+    opacity: 0.7;
+  }
+  .roas-value {
+    width: 50px;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* Saturation gauge */
+  .saturation-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .saturation-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    text-align: center;
+  }
+  .saturation-card-label { font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+  .saturation-ring {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 8px;
+  }
+  .saturation-value { font-size: 18px; font-weight: 700; }
+
+  /* Tabs for artifact types */
+  .artifact-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+  .artifact-tab {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+    background: none;
+    border: none;
+  }
+  .artifact-tab:hover { color: var(--text); background: var(--bg-tertiary); }
+  .artifact-tab.active { color: var(--accent); background: var(--accent-dim); }
+
+  /* Budget comparison */
+  .budget-table {
+    width: 100%;
+    margin: 12px 0;
+  }
+  .budget-change-positive { color: var(--green); }
+  .budget-change-negative { color: var(--red); }
+
+  /* Prompt box */
+  .prompt-box {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin: 12px 0;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text);
+    font-style: italic;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">
+    <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="28" height="28" rx="6" fill="#f97316"/>
+      <path d="M7 14L12 9L17 14L12 19Z" fill="white"/>
+      <path d="M14 10L19 5L24 10L19 15Z" fill="white" opacity="0.6"/>
+    </svg>
+    Decision Lab
+  </div>
+  <span class="header-badge" id="status-badge">Completed</span>
+  <div class="header-info">
+    <span id="dpack-name"></span>
+    <span id="session-duration"></span>
+    <span id="model-name"></span>
+  </div>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-header">Workflow Steps</div>
+    <div class="sidebar-content" id="sidebar-steps"></div>
+  </div>
+  <div class="center">
+    <div class="graph-panel" id="graph-panel"></div>
+    <div class="content-panel" id="content-panel">
+      <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-secondary);">
+        Select a workflow step to view details
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Minimal markdown parser (no external deps)
+const md = {
+  render(text) {
+    if (!text) return '';
+    let html = text
+      // Code blocks
+      .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="lang-$1">$2</code></pre>')
+      // Tables
+      .replace(/^(\|.+\|)\n(\|[-| :]+\|)\n((?:\|.+\|\n?)*)/gm, (_, header, sep, body) => {
+        const ths = header.split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
+        const rows = body.trim().split('\n').map(row => {
+          const tds = row.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('');
+          return `<tr>${tds}</tr>`;
+        }).join('');
+        return `<table><thead><tr>${ths}</tr></thead><tbody>${rows}</tbody></table>`;
+      })
+      // Headers
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      // Bold + italic
+      .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      // Inline code
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      // Unordered lists
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      // Ordered lists
+      .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+      // Paragraphs (simple: blank lines)
+      .replace(/\n\n/g, '</p><p>')
+      // Line breaks
+      .replace(/\n/g, '<br>');
+
+    // Wrap consecutive <li> in <ul>
+    html = html.replace(/(<li>.*?<\/li>(?:<br>)?)+/g, match => {
+      return '<ul>' + match.replace(/<br>/g, '') + '</ul>';
+    });
+
+    return '<p>' + html + '</p>';
+  }
+};
+
+let sessionData = null;
+let activeStepId = null;
+
+async function init() {
+  const res = await fetch('/api/session');
+  sessionData = await res.json();
+
+  renderHeader();
+  renderSidebar();
+  renderGraph();
+
+  // Select first step
+  selectStep('start');
+}
+
+function renderHeader() {
+  const s = sessionData;
+  document.getElementById('dpack-name').textContent = `Pack: ${s.dpack}`;
+  document.getElementById('model-name').textContent = s.model.split('/').pop();
+
+  const start = new Date(s.started_at);
+  const end = new Date(s.completed_at);
+  const mins = Math.round((end - start) / 60000);
+  document.getElementById('session-duration').textContent = `${mins} min`;
+}
+
+function renderSidebar() {
+  const container = document.getElementById('sidebar-steps');
+  container.innerHTML = '';
+
+  for (const step of sessionData.workflow) {
+    const el = document.createElement('div');
+    el.className = 'step-item';
+    el.dataset.id = step.id;
+
+    let metricsHtml = '';
+    if (step.metrics) {
+      const r2Class = step.metrics.r2 >= 0.9 ? 'good' : 'warn';
+      metricsHtml = `<div class="step-metrics">
+        <span class="step-metric ${r2Class}">R²=${step.metrics.r2}</span>
+        <span class="step-metric ${step.metrics.divergences === 0 ? 'good' : 'warn'}">div=${step.metrics.divergences}</span>
+        ${step.selected ? '<span class="step-metric selected-badge">SELECTED</span>' : ''}
+      </div>`;
+    }
+
+    let parallelHtml = '';
+    if (step.parallel_group) {
+      parallelHtml = `<span class="parallel-indicator">parallel</span>`;
+    }
+
+    const duration = step.started_at && step.completed_at
+      ? formatDuration(new Date(step.completed_at) - new Date(step.started_at))
+      : '';
+
+    el.innerHTML = `
+      <div class="step-label">
+        <span class="step-status ${step.status}"></span>
+        ${step.label}
+        ${parallelHtml}
+      </div>
+      <div class="step-agent">${step.agent}${step.instance ? ` #${step.instance}` : ''}</div>
+      ${duration ? `<div class="step-time">${duration}</div>` : ''}
+      ${metricsHtml}
+    `;
+
+    el.addEventListener('click', () => selectStep(step.id));
+    container.appendChild(el);
+  }
+}
+
+function formatDuration(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m ${s % 60}s`;
+}
+
+// ---- Graph Rendering ----
+
+function renderGraph() {
+  const steps = sessionData.workflow;
+  const panel = document.getElementById('graph-panel');
+
+  // Layout: assign x,y positions
+  // Use a layered approach: each step gets a layer based on dependency depth
+  const layers = {};
+  const positions = {};
+  const nodeWidth = 160;
+  const nodeHeight = 48;
+  const layerGap = 100;
+  const nodeGap = 20;
+
+  // BFS to assign layers
+  const visited = new Set();
+  const queue = [{ id: 'start', layer: 0 }];
+  const stepMap = {};
+  steps.forEach(s => stepMap[s.id] = s);
+
+  while (queue.length > 0) {
+    const { id, layer } = queue.shift();
+    if (visited.has(id)) continue;
+    visited.add(id);
+
+    if (!layers[layer]) layers[layer] = [];
+    layers[layer].push(id);
+
+    const step = stepMap[id];
+    if (step && step.children) {
+      for (const child of step.children) {
+        queue.push({ id: child, layer: layer + 1 });
+      }
+    }
+  }
+
+  // Calculate positions
+  const maxNodesInLayer = Math.max(...Object.values(layers).map(l => l.length));
+  const svgWidth = Math.max((Object.keys(layers).length) * (nodeWidth + layerGap) + 80, 900);
+  const svgHeight = Math.max(maxNodesInLayer * (nodeHeight + nodeGap) + 60, 240);
+
+  for (const [layerIdx, nodeIds] of Object.entries(layers)) {
+    const x = 40 + parseInt(layerIdx) * (nodeWidth + layerGap);
+    const totalHeight = nodeIds.length * nodeHeight + (nodeIds.length - 1) * nodeGap;
+    const startY = (svgHeight - totalHeight) / 2;
+
+    nodeIds.forEach((id, i) => {
+      positions[id] = {
+        x,
+        y: startY + i * (nodeHeight + nodeGap),
+        w: nodeWidth,
+        h: nodeHeight
+      };
+    });
+  }
+
+  // Build SVG
+  let svg = `<svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">`;
+
+  // Defs for arrow markers and gradients
+  svg += `<defs>
+    <marker id="arrow" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,3 L0,6" fill="#30363d"/>
+    </marker>
+    <linearGradient id="grad-green" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#238636"/>
+      <stop offset="100%" stop-color="#2ea043"/>
+    </linearGradient>
+    <linearGradient id="grad-orange" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#f97316"/>
+    </linearGradient>
+  </defs>`;
+
+  // Draw edges
+  for (const step of steps) {
+    if (!step.children) continue;
+    const from = positions[step.id];
+    if (!from) continue;
+
+    for (const childId of step.children) {
+      const to = positions[childId];
+      if (!to) continue;
+
+      const x1 = from.x + from.w;
+      const y1 = from.y + from.h / 2;
+      const x2 = to.x;
+      const y2 = to.y + to.h / 2;
+      const cx1 = x1 + (x2 - x1) * 0.4;
+      const cx2 = x2 - (x2 - x1) * 0.4;
+
+      svg += `<path d="M${x1},${y1} C${cx1},${y1} ${cx2},${y2} ${x2},${y2}"
+        fill="none" stroke="#30363d" stroke-width="2" marker-end="url(#arrow)"/>`;
+    }
+  }
+
+  // Draw nodes
+  for (const step of steps) {
+    const pos = positions[step.id];
+    if (!pos) continue;
+
+    const isSelected = step.selected;
+    const fill = isSelected ? 'var(--accent-dim)' : 'var(--bg-secondary)';
+    const stroke = isSelected ? 'var(--accent)' : 'var(--border)';
+    const strokeW = isSelected ? 2 : 1;
+
+    // Agent color coding
+    let agentColor = 'var(--text-secondary)';
+    if (step.agent === 'orchestrator') agentColor = 'var(--blue)';
+    if (step.agent === 'data-explorer') agentColor = 'var(--green)';
+    if (step.agent === 'data-preparer') agentColor = 'var(--purple)';
+    if (step.agent === 'modeler') agentColor = 'var(--accent)';
+
+    // Status dot
+    const statusColor = step.status === 'completed' ? 'var(--green)' :
+                        step.status === 'running' ? 'var(--yellow)' : 'var(--red)';
+
+    const label = step.label.length > 22 ? step.label.substring(0, 20) + '...' : step.label;
+
+    svg += `<g class="graph-node" data-id="${step.id}" onclick="selectStep('${step.id}')">
+      <rect x="${pos.x}" y="${pos.y}" width="${pos.w}" height="${pos.h}"
+        rx="8" fill="${fill}" stroke="${stroke}" stroke-width="${strokeW}"/>
+      <circle cx="${pos.x + 14}" cy="${pos.y + pos.h/2}" r="4" fill="${statusColor}"/>
+      <text x="${pos.x + 26}" y="${pos.y + pos.h/2 - 5}" fill="var(--text)"
+        font-size="11" font-weight="600" font-family="inherit">${label}</text>
+      <text x="${pos.x + 26}" y="${pos.y + pos.h/2 + 10}" fill="${agentColor}"
+        font-size="10" font-family="inherit">${step.agent}${step.instance ? ' #'+step.instance : ''}</text>
+    </g>`;
+  }
+
+  svg += '</svg>';
+  panel.innerHTML = svg;
+}
+
+// ---- Step Selection & Content ----
+
+function selectStep(stepId) {
+  activeStepId = stepId;
+
+  // Update sidebar
+  document.querySelectorAll('.step-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.id === stepId);
+  });
+
+  // Update graph
+  document.querySelectorAll('.graph-node').forEach(el => {
+    el.classList.toggle('active', el.dataset.id === stepId);
+  });
+
+  // Load content
+  const step = sessionData.workflow.find(s => s.id === stepId);
+  renderStepContent(step);
+}
+
+async function renderStepContent(step) {
+  const panel = document.getElementById('content-panel');
+
+  if (step.id === 'start') {
+    panel.innerHTML = `
+      <div class="content-title">Session Start</div>
+      <div class="content-subtitle">MMM Analysis Session</div>
+      <h3 style="margin-top: 16px; font-size: 14px; color: var(--text-secondary);">User Prompt</h3>
+      <div class="prompt-box">${sessionData.prompt}</div>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-card-label">Decision Pack</div>
+          <div class="metric-card-value accent">${sessionData.dpack}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-card-label">Model</div>
+          <div class="metric-card-value" style="font-size: 14px;">${sessionData.model.split('/').pop()}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-card-label">Status</div>
+          <div class="metric-card-value good">${sessionData.status}</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-card-label">Duration</div>
+          <div class="metric-card-value accent">${formatDuration(new Date(sessionData.completed_at) - new Date(sessionData.started_at))}</div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // Check for model instances with metrics (show comparison view)
+  if (step.id === 'conflict') {
+    await renderConflictView(panel, step);
+    return;
+  }
+
+  if (step.id === 'optimize') {
+    await renderBudgetView(panel, step);
+    return;
+  }
+
+  // For model steps, show rich metrics
+  if (step.metrics) {
+    await renderModelView(panel, step);
+    return;
+  }
+
+  // Default: show artifacts
+  if (step.artifacts && step.artifacts.length > 0) {
+    let tabsHtml = '<div class="artifact-tabs">';
+    step.artifacts.forEach((a, i) => {
+      const name = a.split('/').pop();
+      tabsHtml += `<button class="artifact-tab ${i === 0 ? 'active' : ''}"
+        onclick="loadArtifact('${a}', this)">${name}</button>`;
+    });
+    tabsHtml += '</div>';
+
+    panel.innerHTML = `
+      <div class="content-title">${step.label}</div>
+      <div class="content-subtitle">${step.agent} — ${formatDuration(new Date(step.completed_at) - new Date(step.started_at))}</div>
+      ${tabsHtml}
+      <div id="artifact-content"><div style="color: var(--text-secondary);">Loading...</div></div>
+    `;
+
+    loadArtifact(step.artifacts[0]);
+  } else {
+    panel.innerHTML = `
+      <div class="content-title">${step.label}</div>
+      <div class="content-subtitle">${step.agent} — ${formatDuration(new Date(step.completed_at) - new Date(step.started_at))}</div>
+      <p style="color: var(--text-secondary); margin-top: 16px;">No artifacts produced by this step.</p>
+    `;
+  }
+}
+
+async function loadArtifact(path, tabEl) {
+  if (tabEl) {
+    tabEl.parentElement.querySelectorAll('.artifact-tab').forEach(t => t.classList.remove('active'));
+    tabEl.classList.add('active');
+  }
+
+  const container = document.getElementById('artifact-content');
+  if (!container) return;
+  container.innerHTML = '<div style="color: var(--text-secondary);">Loading...</div>';
+
+  try {
+    const ext = path.split('.').pop();
+    if (ext === 'json') {
+      const res = await fetch(`/api/artifact/${path}`);
+      const data = await res.json();
+      container.innerHTML = `<div class="json-viewer">${syntaxHighlight(JSON.stringify(data, null, 2))}</div>`;
+    } else {
+      const res = await fetch(`/api/artifact/${path}`);
+      const text = await res.text();
+      container.innerHTML = `<div class="markdown-body">${md.render(text)}</div>`;
+    }
+  } catch (e) {
+    container.innerHTML = `<div style="color: var(--red);">Error loading artifact: ${e.message}</div>`;
+  }
+}
+
+function syntaxHighlight(json) {
+  return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
+    function (match) {
+      let cls = 'json-number';
+      if (/^"/.test(match)) {
+        cls = /:$/.test(match) ? 'json-key' : 'json-string';
+      } else if (/true|false/.test(match)) {
+        cls = 'json-boolean';
+      } else if (/null/.test(match)) {
+        cls = 'json-null';
+      }
+      return `<span class="${cls}">${match}</span>`;
+    });
+}
+
+async function renderModelView(panel, step) {
+  const m = step.metrics;
+  const analysisPath = step.artifacts.find(a => a.endsWith('.json'));
+
+  let analysisData = null;
+  if (analysisPath) {
+    try {
+      const res = await fetch(`/api/artifact/${analysisPath}`);
+      analysisData = await res.json();
+    } catch (e) {}
+  }
+
+  const roas = analysisData?.roas || {};
+  const saturation = analysisData?.saturation || {};
+  const channels = Object.keys(roas);
+  const maxRoas = Math.max(...channels.map(c => roas[c]?.hdi_high || roas[c]?.mean || 0));
+
+  const channelColors = { tv: '#ef4444', digital: '#3b82f6', social: '#a855f7', search: '#22c55e', print: '#8b5cf6' };
+
+  let roasHtml = '';
+  for (const ch of channels) {
+    const r = roas[ch];
+    const pct = (r.mean / maxRoas * 100).toFixed(0);
+    const hdiPct = ((r.hdi_high - r.hdi_low) / maxRoas * 100).toFixed(0);
+    const color = channelColors[ch] || 'var(--accent)';
+    roasHtml += `<div class="roas-bar-row">
+      <div class="roas-label">${ch.charAt(0).toUpperCase() + ch.slice(1)}</div>
+      <div class="roas-bar-container">
+        <div class="roas-bar" style="width: ${pct}%; background: ${color}40; border-left: 3px solid ${color};">
+          <span class="hdi-range">[${r.hdi_low.toFixed(1)} – ${r.hdi_high.toFixed(1)}]</span>
+        </div>
+      </div>
+      <div class="roas-value" style="color: ${color};">${r.mean.toFixed(2)}x</div>
+    </div>`;
+  }
+
+  let satHtml = '';
+  for (const ch of channels) {
+    const sat = saturation[ch];
+    if (sat == null) continue;
+    const pct = (sat * 100).toFixed(0);
+    const color = sat > 0.75 ? 'var(--red)' : sat > 0.55 ? 'var(--yellow)' : 'var(--green)';
+    const circumference = 2 * Math.PI * 34;
+    const offset = circumference * (1 - sat);
+    satHtml += `<div class="saturation-card">
+      <div class="saturation-card-label">${ch.charAt(0).toUpperCase() + ch.slice(1)}</div>
+      <svg class="saturation-ring" viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border)" stroke-width="6"/>
+        <circle cx="40" cy="40" r="34" fill="none" stroke="${color}" stroke-width="6"
+          stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
+          stroke-linecap="round" transform="rotate(-90 40 40)"/>
+        <text x="40" y="44" text-anchor="middle" fill="${color}" font-size="16" font-weight="700" font-family="inherit">${pct}%</text>
+      </svg>
+    </div>`;
+  }
+
+  panel.innerHTML = `
+    <div class="content-title">${step.label}${step.selected ? ' <span style="color: var(--accent); font-size: 14px;">★ SELECTED</span>' : ''}</div>
+    <div class="content-subtitle">${step.agent} #${step.instance} — ${formatDuration(step.duration_seconds * 1000)}</div>
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-card-label">R² (in-sample)</div>
+        <div class="metric-card-value ${m.r2 >= 0.9 ? 'good' : 'warn'}">${m.r2}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-card-label">MAPE</div>
+        <div class="metric-card-value ${m.mape <= 0.07 ? 'good' : 'warn'}">${(m.mape * 100).toFixed(1)}%</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-card-label">Divergences</div>
+        <div class="metric-card-value ${m.divergences === 0 ? 'good' : 'warn'}">${m.divergences}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-card-label">Converged</div>
+        <div class="metric-card-value ${m.converged ? 'good' : 'warn'}">${m.converged ? 'Yes' : 'No'}</div>
+      </div>
+    </div>
+
+    <h2 style="font-size: 16px; margin-top: 24px; color: var(--accent);">Channel ROAS</h2>
+    <div class="roas-chart">${roasHtml}</div>
+
+    <h2 style="font-size: 16px; margin-top: 24px; color: var(--accent);">Saturation Levels</h2>
+    <div class="saturation-grid">${satHtml}</div>
+
+    ${step.artifacts.find(a => a.endsWith('.md')) ? `
+    <h2 style="font-size: 16px; margin-top: 24px; color: var(--accent);">Full Report</h2>
+    <div id="artifact-content"><div style="color: var(--text-secondary);">Loading...</div></div>
+    ` : ''}
+  `;
+
+  const mdArtifact = step.artifacts.find(a => a.endsWith('.md'));
+  if (mdArtifact) {
+    loadArtifact(mdArtifact);
+  }
+}
+
+async function renderConflictView(panel, step) {
+  // Load conflict detection markdown
+  const allModels = sessionData.workflow.filter(s => s.parallel_group === 'modeling');
+
+  let comparisonHtml = '<table class="markdown-body" style="font-size: 13px;"><thead><tr><th>Metric</th>';
+  allModels.forEach(m => {
+    comparisonHtml += `<th>${m.label}${m.selected ? ' ★' : ''}</th>`;
+  });
+  comparisonHtml += '</tr></thead><tbody>';
+
+  const metrics = [
+    { key: 'r2', label: 'R²', fmt: v => v.toFixed(2) },
+    { key: 'mape', label: 'MAPE', fmt: v => (v*100).toFixed(1)+'%' },
+    { key: 'divergences', label: 'Divergences', fmt: v => v },
+  ];
+  metrics.forEach(({ key, label, fmt }) => {
+    comparisonHtml += `<tr><td><strong>${label}</strong></td>`;
+    allModels.forEach(m => {
+      const val = m.metrics[key];
+      comparisonHtml += `<td>${fmt(val)}</td>`;
+    });
+    comparisonHtml += '</tr>';
+  });
+  comparisonHtml += '</tbody></table>';
+
+  panel.innerHTML = `
+    <div class="content-title">${step.label}</div>
+    <div class="content-subtitle">Result: <strong style="color: var(--green);">No Conflicts Detected</strong></div>
+
+    <h2 style="font-size: 16px; margin-top: 20px; color: var(--accent);">Model Comparison</h2>
+    ${comparisonHtml}
+
+    <div class="artifact-tabs" style="margin-top: 20px;">
+      ${step.artifacts.map((a, i) => `<button class="artifact-tab ${i === 0 ? 'active' : ''}"
+        onclick="loadArtifact('${a}', this)">${a.split('/').pop()}</button>`).join('')}
+    </div>
+    <div id="artifact-content"><div style="color: var(--text-secondary);">Loading...</div></div>
+  `;
+
+  if (step.artifacts.length > 0) {
+    loadArtifact(step.artifacts[0]);
+  }
+}
+
+async function renderBudgetView(panel, step) {
+  let budgetData = null;
+  const jsonPath = step.artifacts.find(a => a.endsWith('.json'));
+  if (jsonPath) {
+    try {
+      const res = await fetch(`/api/artifact/${jsonPath}`);
+      budgetData = await res.json();
+    } catch (e) {}
+  }
+
+  if (!budgetData) {
+    panel.innerHTML = `<div class="content-title">${step.label}</div><p>No data available.</p>`;
+    return;
+  }
+
+  const alloc = budgetData.allocation;
+  const channels = Object.keys(alloc);
+
+  let tableHtml = '<table class="markdown-body" style="font-size: 13px;"><thead><tr><th>Channel</th><th>Current</th><th>Optimized</th><th>Change</th></tr></thead><tbody>';
+  channels.forEach(ch => {
+    const a = alloc[ch];
+    const changeClass = a.change_pct > 0 ? 'budget-change-positive' : 'budget-change-negative';
+    const changeSign = a.change_pct > 0 ? '+' : '';
+    tableHtml += `<tr>
+      <td><strong>${ch.charAt(0).toUpperCase() + ch.slice(1)}</strong></td>
+      <td>$${(a.current/1000).toFixed(0)}K</td>
+      <td>$${(a.optimized/1000).toFixed(0)}K</td>
+      <td class="${changeClass}">${changeSign}${a.change_pct.toFixed(0)}%</td>
+    </tr>`;
+  });
+  tableHtml += '</tbody></table>';
+
+  // Build bar comparison
+  const maxSpend = Math.max(...channels.map(c => Math.max(alloc[c].current, alloc[c].optimized)));
+  let barsHtml = '';
+  const channelColors = { tv: '#ef4444', digital: '#3b82f6', social: '#a855f7', search: '#22c55e', print: '#8b5cf6' };
+  channels.forEach(ch => {
+    const a = alloc[ch];
+    const curPct = (a.current / maxSpend * 100).toFixed(0);
+    const optPct = (a.optimized / maxSpend * 100).toFixed(0);
+    const color = channelColors[ch] || 'var(--accent)';
+    barsHtml += `<div style="margin: 12px 0;">
+      <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px;">${ch.charAt(0).toUpperCase() + ch.slice(1)}</div>
+      <div style="display: flex; gap: 4px; align-items: center;">
+        <div style="width: 60px; font-size: 11px; color: var(--text-secondary);">Current</div>
+        <div style="flex: 1; height: 16px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
+          <div style="width: ${curPct}%; height: 100%; background: ${color}40; border-radius: 3px;"></div>
+        </div>
+        <div style="width: 60px; font-size: 11px; text-align: right;">$${(a.current/1000).toFixed(0)}K</div>
+      </div>
+      <div style="display: flex; gap: 4px; align-items: center; margin-top: 2px;">
+        <div style="width: 60px; font-size: 11px; color: var(--accent);">Optimal</div>
+        <div style="flex: 1; height: 16px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
+          <div style="width: ${optPct}%; height: 100%; background: ${color}; border-radius: 3px;"></div>
+        </div>
+        <div style="width: 60px; font-size: 11px; text-align: right; color: var(--accent);">$${(a.optimized/1000).toFixed(0)}K</div>
+      </div>
+    </div>`;
+  });
+
+  panel.innerHTML = `
+    <div class="content-title">${step.label}</div>
+    <div class="content-subtitle">Risk level: ±${budgetData.risk_level} bounds</div>
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-card-label">Total Budget</div>
+        <div class="metric-card-value accent">$${(budgetData.total_budget/1e6).toFixed(1)}M</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-card-label">Expected Uplift</div>
+        <div class="metric-card-value good">+${budgetData.expected_uplift_pct}%</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-card-label">Additional Revenue</div>
+        <div class="metric-card-value good">+$${(budgetData.expected_additional_revenue/1000).toFixed(0)}K/mo</div>
+      </div>
+    </div>
+
+    <h2 style="font-size: 16px; margin-top: 24px; color: var(--accent);">Budget Allocation</h2>
+    ${barsHtml}
+
+    <h2 style="font-size: 16px; margin-top: 24px; color: var(--accent);">Allocation Table</h2>
+    ${tableHtml}
+
+    <h2 style="font-size: 16px; margin-top: 24px; color: var(--accent);">Key Moves</h2>
+    <ul style="font-size: 13px; line-height: 1.8; padding-left: 20px;">
+      ${budgetData.key_moves.map(m => `<li>${m}</li>`).join('')}
+    </ul>
+  `;
+}
+
+// Init
+init();
+</script>
+</body>
+</html>

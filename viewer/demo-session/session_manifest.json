@@ -1,0 +1,153 @@
+{
+  "session_id": "dlab-analysis-001",
+  "dpack": "mmm",
+  "prompt": "Analyze our marketing spend data to understand channel ROI and optimize our Q2 2026 budget allocation. We spend roughly $2.4M/month across TV, Digital, Social, Search, and Print. We want to know which channels are saturated and where to reallocate.",
+  "model": "anthropic/claude-sonnet-4-6",
+  "started_at": "2026-03-22T14:30:00Z",
+  "completed_at": "2026-03-22T15:47:23Z",
+  "status": "completed",
+  "workflow": [
+    {
+      "id": "start",
+      "label": "Session Start",
+      "agent": "orchestrator",
+      "status": "completed",
+      "started_at": "2026-03-22T14:30:00Z",
+      "completed_at": "2026-03-22T14:30:05Z",
+      "children": ["explore"]
+    },
+    {
+      "id": "explore",
+      "label": "Data Exploration",
+      "agent": "data-explorer",
+      "status": "completed",
+      "started_at": "2026-03-22T14:30:05Z",
+      "completed_at": "2026-03-22T14:34:18Z",
+      "artifacts": ["data_summary.md"],
+      "children": ["dataprep-1", "dataprep-2"]
+    },
+    {
+      "id": "dataprep-1",
+      "label": "Data Prep: Minimal Cleaning",
+      "agent": "data-preparer",
+      "instance": 1,
+      "parallel_group": "data-prep",
+      "status": "completed",
+      "started_at": "2026-03-22T14:34:18Z",
+      "completed_at": "2026-03-22T14:38:42Z",
+      "artifacts": [],
+      "children": ["consolidate"]
+    },
+    {
+      "id": "dataprep-2",
+      "label": "Data Prep: Conservative Cleaning",
+      "agent": "data-preparer",
+      "instance": 2,
+      "parallel_group": "data-prep",
+      "status": "completed",
+      "started_at": "2026-03-22T14:34:18Z",
+      "completed_at": "2026-03-22T14:39:11Z",
+      "artifacts": [],
+      "children": ["consolidate"]
+    },
+    {
+      "id": "consolidate",
+      "label": "Consolidate & Plan Models",
+      "agent": "orchestrator",
+      "status": "completed",
+      "started_at": "2026-03-22T14:39:11Z",
+      "completed_at": "2026-03-22T14:42:30Z",
+      "artifacts": ["modeling_plans.md"],
+      "children": ["model-1", "model-2", "model-3"]
+    },
+    {
+      "id": "model-1",
+      "label": "Model 1: Geometric Adstock",
+      "agent": "modeler",
+      "instance": 1,
+      "parallel_group": "modeling",
+      "status": "completed",
+      "started_at": "2026-03-22T14:42:30Z",
+      "completed_at": "2026-03-22T14:48:12Z",
+      "duration_seconds": 342,
+      "artifacts": ["instance-1/summary.md", "instance-1/analysis_output/analysis_summary.json"],
+      "metrics": {
+        "r2": 0.91,
+        "mape": 0.068,
+        "converged": true,
+        "divergences": 0
+      },
+      "children": ["conflict"]
+    },
+    {
+      "id": "model-2",
+      "label": "Model 2: Weibull Adstock",
+      "agent": "modeler",
+      "instance": 2,
+      "parallel_group": "modeling",
+      "status": "completed",
+      "started_at": "2026-03-22T14:42:30Z",
+      "completed_at": "2026-03-22T14:50:37Z",
+      "duration_seconds": 487,
+      "artifacts": ["instance-2/summary.md", "instance-2/analysis_output/analysis_summary.json"],
+      "metrics": {
+        "r2": 0.93,
+        "mape": 0.059,
+        "converged": true,
+        "divergences": 12
+      },
+      "children": ["conflict"],
+      "selected": true
+    },
+    {
+      "id": "model-3",
+      "label": "Model 3: Conservative + Geometric",
+      "agent": "modeler",
+      "instance": 3,
+      "parallel_group": "modeling",
+      "status": "completed",
+      "started_at": "2026-03-22T14:42:30Z",
+      "completed_at": "2026-03-22T14:47:28Z",
+      "duration_seconds": 298,
+      "artifacts": ["instance-3/summary.md", "instance-3/analysis_output/analysis_summary.json"],
+      "metrics": {
+        "r2": 0.89,
+        "mape": 0.072,
+        "converged": true,
+        "divergences": 0
+      },
+      "children": ["conflict"]
+    },
+    {
+      "id": "conflict",
+      "label": "Conflict Detection",
+      "agent": "orchestrator",
+      "status": "completed",
+      "started_at": "2026-03-22T14:50:37Z",
+      "completed_at": "2026-03-22T14:53:15Z",
+      "artifacts": ["conflict_detection.md", "model_selection.md"],
+      "result": "no_conflict",
+      "children": ["optimize"]
+    },
+    {
+      "id": "optimize",
+      "label": "Budget Optimization",
+      "agent": "orchestrator",
+      "status": "completed",
+      "started_at": "2026-03-22T14:53:15Z",
+      "completed_at": "2026-03-22T15:02:44Z",
+      "artifacts": ["budget_20pct/optimization_summary.json"],
+      "children": ["reports"]
+    },
+    {
+      "id": "reports",
+      "label": "Final Reports",
+      "agent": "orchestrator",
+      "status": "completed",
+      "started_at": "2026-03-22T15:02:44Z",
+      "completed_at": "2026-03-22T15:47:23Z",
+      "artifacts": ["report.md", "technical_report.md"],
+      "children": []
+    }
+  ]
+}

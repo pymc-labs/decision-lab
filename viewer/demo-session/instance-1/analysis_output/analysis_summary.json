@@ -1,0 +1,39 @@
+{
+  "model_name": "Standard Saturating MMM (Geometric Adstock)",
+  "instance": 1,
+  "convergence": {
+    "converged": true,
+    "rhat_max": 1.003,
+    "ess_bulk_min": 1847,
+    "ess_tail_min": 1421,
+    "divergences": 0,
+    "total_draws": 8000
+  },
+  "fit_quality": {
+    "r2_in_sample": 0.91,
+    "mape": 0.068,
+    "r2_out_of_sample": 0.84
+  },
+  "roas": {
+    "tv": {"mean": 2.31, "sd": 0.42, "hdi_low": 1.58, "hdi_high": 3.12},
+    "digital": {"mean": 3.87, "sd": 0.61, "hdi_low": 2.74, "hdi_high": 5.03},
+    "social": {"mean": 2.94, "sd": 0.55, "hdi_low": 1.92, "hdi_high": 3.98},
+    "search": {"mean": 4.12, "sd": 0.73, "hdi_low": 2.78, "hdi_high": 5.51},
+    "print": {"mean": 1.23, "sd": 0.38, "hdi_low": 0.52, "hdi_high": 1.94}
+  },
+  "saturation": {
+    "tv": 0.67,
+    "digital": 0.78,
+    "social": 0.52,
+    "search": 0.81,
+    "print": 0.41
+  },
+  "adstock_halflife_weeks": {
+    "tv": 3.2,
+    "digital": 1.1,
+    "social": 0.8,
+    "search": 0.5,
+    "print": 2.8
+  },
+  "runtime_seconds": 342
+}

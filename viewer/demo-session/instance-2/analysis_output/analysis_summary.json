@@ -1,0 +1,32 @@
+{
+  "model_name": "Flexible Adstock MMM (Weibull CDF)",
+  "instance": 2,
+  "convergence": {
+    "converged": true,
+    "rhat_max": 1.006,
+    "ess_bulk_min": 1203,
+    "ess_tail_min": 987,
+    "divergences": 12,
+    "total_draws": 8000
+  },
+  "fit_quality": {
+    "r2_in_sample": 0.93,
+    "mape": 0.059,
+    "r2_out_of_sample": 0.86
+  },
+  "roas": {
+    "tv": {"mean": 2.58, "sd": 0.51, "hdi_low": 1.67, "hdi_high": 3.54},
+    "digital": {"mean": 3.62, "sd": 0.58, "hdi_low": 2.54, "hdi_high": 4.72},
+    "social": {"mean": 3.21, "sd": 0.63, "hdi_low": 2.04, "hdi_high": 4.41},
+    "search": {"mean": 3.89, "sd": 0.68, "hdi_low": 2.63, "hdi_high": 5.20},
+    "print": {"mean": 1.41, "sd": 0.44, "hdi_low": 0.59, "hdi_high": 2.24}
+  },
+  "saturation": {
+    "tv": 0.61,
+    "digital": 0.74,
+    "social": 0.48,
+    "search": 0.79,
+    "print": 0.38
+  },
+  "runtime_seconds": 487
+}

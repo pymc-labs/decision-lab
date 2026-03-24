@@ -1,0 +1,21 @@
+{
+  "risk_level": "20%",
+  "bounds": "±20% of current spend",
+  "total_budget": 2400000,
+  "expected_uplift_pct": 8.3,
+  "expected_additional_revenue": 662400,
+  "allocation": {
+    "tv": {"current": 680000, "optimized": 578000, "change_pct": -15.0},
+    "digital": {"current": 520000, "optimized": 468000, "change_pct": -10.0},
+    "social": {"current": 380000, "optimized": 456000, "change_pct": 20.0},
+    "search": {"current": 440000, "optimized": 484000, "change_pct": 10.0},
+    "print": {"current": 180000, "optimized": 144000, "change_pct": -20.0}
+  },
+  "key_moves": [
+    "Increase Social by 20% ($76K) — lowest saturation, strong ROAS",
+    "Increase Search by 10% ($44K) — highest ROAS despite high saturation",
+    "Decrease TV by 15% ($102K) — high saturation, moderate ROAS",
+    "Decrease Print by 20% ($36K) — lowest ROAS, limited impact",
+    "Decrease Digital by 10% ($52K) — approaching saturation ceiling"
+  ]
+}
