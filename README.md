@@ -1,20 +1,20 @@
 # decision-lab
 
-### A framework for Agentic Data Science
+### A framework for Agentic Decision Science
 
-*Your data deserves a peer review, not a best guess.*
+*Science-grade rigor. Startup-grade speed.*
 
 <p align="center">
   <img src="docs/assets/hero-branching-paths.svg" alt="decision-lab explores multiple analytical paths, prunes the ones that fail, and converges on a decision — or tells you the data isn't enough." width="800"/>
 </p>
 
-Most AI data analysis works like one analyst pulling an all-nighter: pick one approach, run it, write up whatever comes out, hope for the best.
+Most AI data analysis works like one analyst pulling an all-nighter: pick one approach, run it, write up whatever comes out, hope for the best. You get speed, but you don't get rigor. Or you hire a team of PhDs, and you get rigor — in six months.
 
-decision-lab works like a research lab. A **PI** (principal investigator) agent designs the research plan. **Researcher** agents fan out to run parallel Bayesian causal experiments — different priors, different model structures, different hypotheses. Each reports back with diagnostics, not just results.
+decision-lab gives you both. It works like having PyMC Labs in a box: a **PI** (principal investigator) agent designs the research plan. **Researcher** agents fan out to run parallel Bayesian causal experiments — different priors, different model structures, different hypotheses. Each reports back with diagnostics, not just results.
 
-The PI reviews everything. Suggests revisions. Sends researchers back to try alternative approaches when results don't converge. When the evidence is strong, it synthesizes a recommendation. When the paths diverge irreconcilably, it says the thing no other AI tool will say: **"we can't tell from this data."**
+The PI reviews everything. Suggests revisions. Sends researchers back to try alternative approaches when results don't converge. When the evidence is strong, it synthesizes a recommendation. When it isn't, it does something no other AI tool will do: it tells you **what it doesn't know** and designs the **targeted experiments** that would resolve the uncertainty fastest.
 
-Everyone's building agentic data science. decision-lab is the one rigorous enough to say no. We call this **Agentic Decision Science** — structured exploration of the analytical space, with the rigor to know when to stop.
+That's the difference. It doesn't just say "we can't tell from this data" — it says "here's how to find out." We call this **Agentic Decision Science** — PhD-level rigor at the speed the business actually needs.
 
 ## Why this exists
 
@@ -38,7 +38,7 @@ decision-lab (`dlab`) is the framework we built to make agents behave like that.
 
 **The Lab** (frozen Docker environment) ensures reproducible conditions. Library APIs change constantly and LLMs are trained on old versions. decision-packs lock the environment so the agent codes against the right API.
 
-**The Peer Review** (consolidation) collates all decision paths. If the researchers converge on the same answer through different methods, that's a strong recommendation. If they diverge irreconcilably, the PI says so — because "the data doesn't support a decision" is better than a confident wrong one.
+**The Peer Review** (consolidation) collates all decision paths. If the researchers converge on the same answer through different methods, that's a strong recommendation. If they diverge, the PI doesn't just flag the disagreement — it identifies which uncertainty matters most and recommends the experiment that would resolve it. "The data doesn't support a decision *yet* — here's the fastest way to get there."
 
 ## Install
 

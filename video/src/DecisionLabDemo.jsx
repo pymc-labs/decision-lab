@@ -678,10 +678,10 @@ export const DecisionLabDemo = () => {
               fontStyle: "italic",
             }}
           >
-            Your data deserves a peer review, not a guess.
+            Science-grade rigor. Startup-grade speed.
           </div>
           <div style={{ fontSize: "16px", color: C.blue, letterSpacing: "2px" }}>
-            AGENTIC DATA SCIENCE
+            AGENTIC DECISION SCIENCE
           </div>
           <div style={{ fontSize: "14px", color: C.dimmed, marginTop: "30px" }}>
             pip install dlab-cli
