@@ -98,18 +98,50 @@ def build_local_prompt(prompt: str, config: dict[str, Any]) -> str:
         detect_package_manager(config["config_dir"]),
     )
 
+    work_dir_abs: str = str(Path(config["config_dir"]).resolve().parent)
+    # Use the actual work dir if available, fall back to config dir parent
+    # (the caller should pass work_dir in config if needed)
+
     system_instructions: str = (
-        "IMPORTANT --- SYSTEM INSTRUCTIONS: "
-        "You're running in a work directory that was supposed to run in a "
-        f"docker container with python managed by {pkg_mgr}. "
-        "This has not been set up. Please read the contents in _docker/ and "
-        "see whether you're already operating in a similar environment. "
-        "If not, try to set up the environment as best as possible. "
-        "Also read _hooks/, which contains scripts that are supposed to run "
-        "before the actual work begins, respectively after it's done."
+        "IMPORTANT --- SYSTEM INSTRUCTIONS (NO-SANDBOXING MODE):\n\n"
+        "You're running locally, NOT inside a Docker container. The decision-pack "
+        f"was designed for a Docker environment with python managed by {pkg_mgr}.\n\n"
+        "## Step 1: Set up the environment\n\n"
+        "Read `_docker/Dockerfile` carefully. It shows:\n"
+        "- Which base image and package manager was intended\n"
+        "- Which dependency file to install from (requirements.txt, environment.yml, pixi.toml)\n"
+        "- Which directories from _docker/ would have been COPY'd into the container "
+        "(e.g., custom Python libraries like `COPY <SUB_DIR>/ /opt/<SUB_DIR>/`)\n\n"
+        f"Use `{pkg_mgr}` to create and install a local environment from the dependency "
+        "file in `_docker/`. For example:\n"
+        "- pip: `python -m venv .venv && .venv/bin/pip install -r _docker/requirements.txt`\n"
+        "- conda: `conda create -p .conda-env --yes && conda env update -p .conda-env -f _docker/environment.yml`\n"
+        "- uv: `uv venv .venv && uv pip install --python .venv/bin/python -r _docker/requirements.txt`\n"
+        "- pixi: `cp _docker/pixi.toml . && pixi install`\n\n"
+        "If the Dockerfile COPY'd any Python libraries from _docker/ into the container, "
+        "you need to make those importable by setting the ABSOLUTE path to _docker/ in "
+        "PYTHONPATH when running scripts:\n"
+        "`PYTHONPATH=/absolute/path/to/workdir/_docker:$PYTHONPATH python my_script.py`\n\n"
+        "## Step 2: Verify the environment works\n\n"
+        "After setting up, run a small test script that imports the key packages from the "
+        "dependency file to confirm everything is installed correctly. Fix any import errors "
+        "before proceeding.\n\n"
+        "## Step 3: Read the hooks\n\n"
+        "Read `_hooks/` — these are scripts that would have run inside the container before "
+        "and after the agent session. Adapt and run pre-run hooks if they make sense locally "
+        "(e.g., skip Modal deployment if not applicable, but run data setup scripts).\n\n"
+        "## Step 4: Subagent environment instructions\n\n"
+        "When you call parallel-agents or task subagents, you MUST include in each prompt:\n"
+        "- The absolute path to the correct python binary (e.g., `/absolute/path/to/.venv/bin/python`)\n"
+        "- The correct PYTHONPATH value (e.g., `PYTHONPATH=/absolute/path/to/workdir/_docker:$PYTHONPATH`)\n"
+        "- Instructions to use this python for all script execution\n\n"
+        "Subagents do NOT inherit your environment setup. They start fresh and need explicit "
+        "instructions on which python to use.\n\n"
+        "---\n\n"
+        "Now follows the User's request:\n"
     )
 
-    return f"{system_instructions}\n\nNow follows the User's request:\n{prompt}"
+    return f"{system_instructions}{prompt}"
 
 
 def build_local_env(env_file: str | None = None) -> dict[str, str]:
