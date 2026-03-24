@@ -10,9 +10,9 @@
 
 Most AI data analysis works like one analyst pulling an all-nighter: pick one approach, run it, write up whatever comes out, hope for the best. You get speed, but you don't get rigor. Or you hire a team of PhDs, and you get rigor — in six months.
 
-decision-lab gives you both. It works like having PyMC Labs in a box: a **PI** (principal investigator) agent designs the research plan. **Researcher** agents fan out to run parallel Bayesian causal experiments — different priors, different model structures, different hypotheses. Each reports back with diagnostics, not just results.
+decision-lab gives you both. It works like having PyMC Labs in a box: a **professor** agent designs the research plan. **Grad student** agents fan out to run parallel Bayesian causal experiments — different priors, different model structures, different hypotheses. Each reports back with diagnostics, not just results.
 
-The PI reviews everything. Suggests revisions. Sends researchers back to try alternative approaches when results don't converge. When the evidence is strong, it synthesizes a recommendation. When it isn't, it does something no other AI tool will do: it tells you **what it doesn't know** and designs the **targeted experiments** that would resolve the uncertainty fastest.
+The professor reviews everything. Suggests revisions. Sends grad students back to try alternative approaches when results don't converge. When the evidence is strong, it synthesizes a recommendation. When it isn't, it does something no other AI tool will do: it tells you **what it doesn't know** and designs the **targeted experiments** that would resolve the uncertainty fastest.
 
 That's the difference. It doesn't just say "we can't tell from this data" — it says "here's how to find out." We call this **Agentic Decision Science** — PhD-level rigor at the speed the business actually needs.
 
@@ -27,18 +27,18 @@ decision-lab (`dlab`) is the framework we built to make agents behave like that.
 ## How it works
 
 <p align="center">
-  <img src="docs/assets/architecture-lab.svg" alt="The PI orchestrator delegates to Researcher parallel agents, reviews results, sends back revisions, and consolidates at the Peer Review." width="800"/>
+  <img src="docs/assets/architecture-lab.svg" alt="The Professor orchestrator delegates to Grad Student parallel agents, reviews results, sends back revisions, and consolidates at the Dissertation Defense." width="800"/>
 </p>
 
-**The PI** (orchestrator agent) designs the research agenda, decomposes the question into parallel experiments, and decides when the evidence is sufficient — or when it isn't.
+**The Professor** (orchestrator agent) designs the research agenda, decomposes the question into parallel experiments, and decides when the evidence is sufficient — or when it isn't.
 
-**The Researchers** (parallel subagents) each pursue a different analytical approach to the same problem. Different priors, different model structures, different data prep. They report back with full diagnostics: convergence checks, posterior predictive checks, sensitivity analyses. Supports running compute-heavy experiments in the cloud on [Modal](https://modal.com).
+**The Grad Students** (parallel subagents) each pursue a different analytical approach to the same problem. Different priors, different model structures, different data prep. They report back with full diagnostics: convergence checks, posterior predictive checks, sensitivity analyses. Supports running compute-heavy experiments in the cloud on [Modal](https://modal.com).
 
 **Lab Protocols** (skills in a decision-pack) encode domain knowledge that prevents methodological mistakes — mandatory diagnostics, preferred model structures, informative priors. The equivalent of "read these papers before you touch the data."
 
 **The Lab** (frozen Docker environment) ensures reproducible conditions. Library APIs change constantly and LLMs are trained on old versions. decision-packs lock the environment so the agent codes against the right API.
 
-**The Peer Review** (consolidation) collates all decision paths. If the researchers converge on the same answer through different methods, that's a strong recommendation. If they diverge, the PI doesn't just flag the disagreement — it identifies which uncertainty matters most and recommends the experiment that would resolve it. "The data doesn't support a decision *yet* — here's the fastest way to get there."
+**The Dissertation Defense** (consolidation) collates all decision paths. If the grad students converge on the same answer through different methods, that's a strong recommendation. If they diverge, the professor doesn't just flag the disagreement — it identifies which uncertainty matters most and recommends the experiment that would resolve it. "The data doesn't support a decision *yet* — here's the fastest way to get there."
 
 ## Install
 
@@ -79,10 +79,10 @@ my-dpack/
   opencode/
     opencode.json       # Permissions
     agents/
-      orchestrator.md   # The PI
+      orchestrator.md   # The Professor
     tools/              # Custom tools
     skills/             # Lab protocols
-    parallel_agents/    # Researcher configs
+    parallel_agents/    # Grad student configs
 ```
 
 See the [poem decision-pack](decision-packs/poem/) for a fully annotated example showing how all the pieces connect. Here's what happens when you run it:

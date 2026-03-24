@@ -16,15 +16,14 @@
   <!-- Background -->
   <rect width="900" height="520" fill="url(#bg2)" rx="12"/>
 
-  <!-- ===== PI (top) ===== -->
+  <!-- ===== PROFESSOR (top) ===== -->
   <rect x="310" y="30" width="280" height="90" rx="12" fill="#161b22" stroke="#58a6ff" stroke-width="1.5" filter="url(#shadow)"/>
-  <!-- PI icon: compass/target -->
+  <!-- Professor icon: graduation cap -->
   <g transform="translate(340, 60)">
-    <circle cx="15" cy="15" r="12" fill="none" stroke="#58a6ff" stroke-width="1.5"/>
-    <circle cx="15" cy="15" r="5" fill="none" stroke="#58a6ff" stroke-width="1.2"/>
-    <circle cx="15" cy="15" r="1.5" fill="#58a6ff"/>
+    <polygon points="15,5 0,15 15,25 30,15" fill="none" stroke="#58a6ff" stroke-width="1.5"/>
+    <line x1="15" y1="15" x2="15" y2="28" stroke="#58a6ff" stroke-width="1.2"/>
   </g>
-  <text x="385" y="68" fill="#e6edf3" font-size="16" font-weight="600">The PI</text>
+  <text x="385" y="68" fill="#e6edf3" font-size="16" font-weight="600">The Professor</text>
   <text x="385" y="88" fill="#8b949e" font-size="11">Orchestrator agent — designs the research</text>
   <text x="385" y="102" fill="#8b949e" font-size="11">agenda, reviews results, suggests revisions</text>
 
@@ -54,7 +53,7 @@
   <polygon points="446,188 450,196 454,188" fill="#30363d"/>
   <polygon points="736,188 740,196 744,188" fill="#30363d"/>
 
-  <!-- ===== RESEARCHERS (middle row) ===== -->
+  <!-- ===== GRAD STUDENTS (middle row) ===== -->
 
   <!-- Student 1 -->
   <rect x="60" y="200" width="200" height="110" rx="10" fill="#161b22" stroke="#8b949e" stroke-width="1" filter="url(#shadow)"/>
@@ -62,7 +61,7 @@
     <circle cx="8" cy="6" r="6" fill="none" stroke="#d2a8ff" stroke-width="1.2"/>
     <path d="M 0,20 Q 8,14 16,20" fill="none" stroke="#d2a8ff" stroke-width="1.2"/>
   </g>
-  <text x="108" y="230" fill="#d2a8ff" font-size="13" font-weight="600">Researcher 1</text>
+  <text x="108" y="230" fill="#d2a8ff" font-size="13" font-weight="600">Grad Student 1</text>
   <text x="80" y="252" fill="#8b949e" font-size="10">Approach: Informative priors</text>
   <text x="80" y="266" fill="#8b949e" font-size="10">Method: Hierarchical model</text>
   <rect x="80" y="278" width="60" height="18" rx="4" fill="#1a3a1a" stroke="#3fb950" stroke-width="0.8"/>
@@ -76,7 +75,7 @@
     <circle cx="8" cy="6" r="6" fill="none" stroke="#d2a8ff" stroke-width="1.2"/>
     <path d="M 0,20 Q 8,14 16,20" fill="none" stroke="#d2a8ff" stroke-width="1.2"/>
   </g>
-  <text x="398" y="230" fill="#d2a8ff" font-size="13" font-weight="600">Researcher 2</text>
+  <text x="398" y="230" fill="#d2a8ff" font-size="13" font-weight="600">Grad Student 2</text>
   <text x="370" y="252" fill="#8b949e" font-size="10">Approach: Weakly informative</text>
   <text x="370" y="266" fill="#8b949e" font-size="10">Method: Additive model</text>
   <rect x="370" y="278" width="84" height="18" rx="4" fill="#3d1a1a" stroke="#f85149" stroke-width="0.8"/>
@@ -90,7 +89,7 @@
     <circle cx="8" cy="6" r="6" fill="none" stroke="#d2a8ff" stroke-width="1.2"/>
     <path d="M 0,20 Q 8,14 16,20" fill="none" stroke="#d2a8ff" stroke-width="1.2"/>
   </g>
-  <text x="688" y="230" fill="#d2a8ff" font-size="13" font-weight="600">Researcher 3</text>
+  <text x="688" y="230" fill="#d2a8ff" font-size="13" font-weight="600">Grad Student 3</text>
   <text x="660" y="252" fill="#8b949e" font-size="10">Approach: Flat priors + events</text>
   <text x="660" y="266" fill="#8b949e" font-size="10">Method: Saturating model</text>
   <rect x="660" y="278" width="60" height="18" rx="4" fill="#1a3a1a" stroke="#3fb950" stroke-width="0.8"/>
@@ -98,7 +97,7 @@
   <rect x="728" y="278" width="92" height="18" rx="4" fill="#0d2534" stroke="#58a6ff" stroke-width="0.8"/>
   <text x="733" y="291" fill="#58a6ff" font-size="9">R-hat: 1.02</text>
 
-  <!-- Revision arrow (PI sends researcher 2 back) -->
+  <!-- Revision arrow (Professor sends grad student 2 back) -->
   <path d="M 550,255 C 630,225 630,105 590,75" fill="none" stroke="#c46a6a" stroke-width="1.5" marker-end="url(#arrowRed)"/>
   <text x="636" y="160" fill="#c46a6a" font-size="9" font-style="normal">revise &amp;</text>
   <text x="636" y="172" fill="#c46a6a" font-size="9" font-style="normal">retry</text>
@@ -109,14 +108,14 @@
   <!-- Dashed line from student 2 (didn't make it) -->
   <line x1="450" y1="310" x2="450" y2="380" stroke="#8b949e" stroke-width="1" stroke-dasharray="4,3" opacity="0.4"/>
 
-  <!-- ===== PEER REVIEW (bottom) ===== -->
+  <!-- ===== DISSERTATION DEFENSE (bottom) ===== -->
   <rect x="310" y="385" width="280" height="100" rx="12" fill="#161b22" stroke="#3fb950" stroke-width="1.5" filter="url(#shadow)"/>
   <!-- Gavel / defense icon -->
   <g transform="translate(330, 410)">
     <rect x="2" y="12" width="20" height="4" rx="2" fill="#3fb950" opacity="0.7"/>
     <rect x="8" y="2" width="8" height="12" rx="2" fill="#3fb950" opacity="0.9"/>
   </g>
-  <text x="368" y="425" fill="#e6edf3" font-size="16" font-weight="600">Peer Review</text>
+  <text x="368" y="425" fill="#e6edf3" font-size="16" font-weight="600">Dissertation Defense</text>
   <text x="368" y="445" fill="#8b949e" font-size="11">Consolidates all paths. Synthesizes</text>
   <text x="368" y="459" fill="#8b949e" font-size="11">findings or declares: "more data needed"</text>
   <rect x="368" y="466" width="130" height="16" rx="3" fill="#0d2534" stroke="#58a6ff" stroke-width="0.5"/>
