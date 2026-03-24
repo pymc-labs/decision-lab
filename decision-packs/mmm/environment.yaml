@@ -20,13 +20,12 @@ dependencies:
   - statsmodels=0.14.6
   # Bayesian
   - arviz=0.23.1
-  - pymc=5.26.1
-  - pytensor=2.35.1
   # Utils
   - pyyaml=6.0.3
   # Pip packages (must be via pip for Coiled package sync compatibility)
   - pip
   - pip:
+    - "pymc @ git+https://github.com/pymc-devs/pymc.git@v6"
     - numpy==2.3.5
     - pyarrow==23.0.0
     - pymc-marketing==0.18.0
