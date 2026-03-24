@@ -429,12 +429,44 @@ def cmd_run(args: argparse.Namespace) -> int:
         console.print(Padding(panel, (0, 0, 0, 6)))
 
         try:
-            exit_code, stdout, stderr = run_opencode_local(
-                work_dir, local_prompt, model, local_env,
-            )
+            import threading
+            import time as _time
+
+            log_file_local: Path = Path(work_dir) / "_opencode_logs" / "main.log"
+            local_log_lines: int = 0
+            local_agent_running: bool = True
+
+            def _count_local_log_lines() -> None:
+                nonlocal local_log_lines
+                while local_agent_running:
+                    try:
+                        if log_file_local.exists():
+                            local_log_lines = sum(1 for _ in open(log_file_local))
+                    except (IOError, OSError):
+                        pass
+                    _time.sleep(0.5)
+
+            log_counter_local = threading.Thread(target=_count_local_log_lines, daemon=True)
+            log_counter_local.start()
+
+            with console.status(f"{I}[dim]0 log entries[/dim]", spinner="dots", spinner_style="dim") as status:
+                def _tick_local_status() -> None:
+                    while local_agent_running:
+                        status.update(f"{I}[dim]{local_log_lines} log entries[/dim]")
+                        _time.sleep(0.5)
+
+                ticker_local = threading.Thread(target=_tick_local_status, daemon=True)
+                ticker_local.start()
+
+                exit_code, stdout, stderr = run_opencode_local(
+                    work_dir, local_prompt, model, local_env,
+                )
+                local_agent_running = False
+
             if stderr:
                 console.print(f"{I}[red]{stderr}[/red]", highlight=False)
         except KeyboardInterrupt:
+            local_agent_running = False
             console.print(f"\n{I}[yellow]Interrupted.[/yellow]")
             exit_code = 130
 
@@ -470,15 +502,15 @@ def cmd_run(args: argparse.Namespace) -> int:
         try:
             build_line_count: int = 0
 
-            with console.status(f"{I}[dim]Building... (0 lines)[/dim]", spinner="dots") as status:
+            with console.status(f"{I}[dim]0 log entries[/dim]", spinner="dots", spinner_style="dim") as status:
                 def _on_build_output(line: str) -> None:
                     nonlocal build_line_count
                     build_line_count += 1
-                    status.update(f"{I}[dim]Building... ({build_line_count} lines)[/dim]")
+                    status.update(f"{I}[dim]{build_line_count} log entries[/dim]")
 
                 build_image(config["config_dir"], image_name, opencode_version, on_output=_on_build_output)
 
-            console.print(f"{I}[green]Image built.[/green] [dim]({build_line_count} lines)[/dim]")
+            console.print(f"{I}[green]Image built.[/green]")
         except ValueError as e:
             console.print(f"{I}[bold red]Error:[/bold red] {e}", highlight=False)
             return 1
@@ -555,9 +587,41 @@ def cmd_run(args: argparse.Namespace) -> int:
         panel: Panel = Panel(hint_text, title="[dim]Monitoring[/dim]", border_style="dim", expand=False, padding=(0, 1))
         console.print(Padding(panel, (0, 0, 0, 6)))
 
-        exit_code, stdout, stderr = run_opencode(
-            container_name, prompt, model,
-        )
+        # Monitor log file growth while agent runs
+        import threading
+        import time as _time
+
+        log_file: Path = Path(work_dir) / "_opencode_logs" / "main.log"
+        agent_log_lines: int = 0
+        agent_running: bool = True
+
+        def _count_log_lines() -> None:
+            nonlocal agent_log_lines
+            while agent_running:
+                try:
+                    if log_file.exists():
+                        agent_log_lines = sum(1 for _ in open(log_file))
+                except (IOError, OSError):
+                    pass
+                _time.sleep(0.5)
+
+        log_counter = threading.Thread(target=_count_log_lines, daemon=True)
+        log_counter.start()
+
+        with console.status(f"{I}[dim]0 log entries[/dim]", spinner="dots", spinner_style="dim") as status:
+            def _tick_agent_status() -> None:
+                while agent_running:
+                    status.update(f"{I}[dim]{agent_log_lines} log entries[/dim]")
+                    _time.sleep(0.5)
+
+            ticker = threading.Thread(target=_tick_agent_status, daemon=True)
+            ticker.start()
+
+            exit_code, stdout, stderr = run_opencode(
+                container_name, prompt, model,
+            )
+            agent_running = False
+
         if stderr:
             console.print(f"{I}[red]{stderr}[/red]", highlight=False)
 
