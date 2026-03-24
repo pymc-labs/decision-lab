@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="docs/_static/dai.png" alt="decision-lab logo" width="300">
-</p>
+<img src="docs/_static/dai.png" alt="decision-lab logo" width="150">
 
 # decision-lab
 
