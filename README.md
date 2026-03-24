@@ -10,7 +10,7 @@
 
 Most AI data analysis works like one analyst pulling an all-nighter: pick one approach, run it, write up whatever comes out, hope for the best. You get speed, but you don't get rigor. Or you hire a team of PhDs, and you get rigor — in six months.
 
-decision-lab gives you both. It works like having PyMC Labs in a box: a **professor** agent designs the research plan. **Grad student** agents fan out to run parallel Bayesian causal experiments — different priors, different model structures, different hypotheses. Each reports back with diagnostics, not just results.
+decision-lab gives you both. It works like a research lab in a box: a **professor** agent designs the research plan. **Grad student** agents fan out to run parallel Bayesian causal experiments — different priors, different model structures, different hypotheses. Each reports back with diagnostics, not just results.
 
 The professor reviews everything. Suggests revisions. Sends grad students back to try alternative approaches when results don't converge. When the evidence is strong, it synthesizes a recommendation. When it isn't, it does something no other AI tool will do: it tells you **what it doesn't know** and designs the **targeted experiments** that would resolve the uncertainty fastest.
 
