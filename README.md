@@ -1,4 +1,4 @@
-<img src="docs/_static/dai.png" alt="decision-lab logo" width="150">
+<img src="docs/_static/dai.png" alt="decision-lab logo" width="200">
 
 # decision-lab
 
