@@ -20,7 +20,7 @@ That's the difference. It doesn't just say "we can't tell from this data" — it
 
 There are many ways to analyze a dataset. Most of them are wrong. An unsupervised agent picks one path through the analytical space and commits to it. If that path happens to be wrong, you get a nice-looking report with bad conclusions. Nobody notices for months.
 
-We tested this on marketing mix modeling. We gave vanilla Claude Code and our MMM agent the same adversarial dataset where no valid inference was possible. **Claude Code fit a model and recommended budget reallocations.** Our agent tried 11 approaches, found that none of the models converged, said so, and recommended experiments to collect better data.
+We tested this on marketing mix modeling. We gave vanilla Claude Code and our MMM agent the same adversarial dataset where no valid inference was possible. **Claude Code fit a model and recommended budget reallocations.** `decision-lab` tried 11 approaches, found that the data could not reliably differentiate a co-founder, said so, and recommended experiments to inform the ambiguity.
 
 decision-lab (`dlab`) is the framework we built to make agents behave like that.
 
@@ -81,7 +81,7 @@ my-dpack/
     agents/
       orchestrator.md   # The Professor
     tools/              # Custom tools
-    skills/             # Lab protocols
+    skills/             # Domain knowledge
     parallel_agents/    # Grad student configs
 ```
 
