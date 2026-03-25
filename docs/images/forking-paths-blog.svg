@@ -1,0 +1,227 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+    <filter id="glowBlue">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowGreen">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowRed">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowAmber">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrowGray" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="none" stroke="#484f58" stroke-width="1"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="540" fill="url(#bg)"/>
+
+  <!-- Dot grid -->
+  <g opacity="0.08">
+    <pattern id="dots" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+      <circle cx="20" cy="20" r="1" fill="#e6edf3"/>
+    </pattern>
+    <rect width="960" height="540" fill="url(#dots)"/>
+  </g>
+
+  <!-- Title -->
+  <text x="480" y="38" text-anchor="middle" fill="#e6edf3" font-size="15" font-weight="600" letter-spacing="3" text-transform="uppercase">THE GARDEN OF FORKING PATHS</text>
+  <text x="480" y="58" text-anchor="middle" fill="#8b949e" font-size="11" font-style="italic">Every analytical workflow is a series of judgment calls</text>
+
+  <!-- ==================== LEFT SIDE: Vanilla Agent ==================== -->
+  <text x="240" y="90" text-anchor="middle" fill="#f85149" font-size="12" font-weight="600" letter-spacing="1">VANILLA AGENT</text>
+
+  <!-- Starting node -->
+  <circle cx="240" cy="130" r="18" fill="none" stroke="#58a6ff" stroke-width="2" filter="url(#glowBlue)"/>
+  <text x="240" y="135" text-anchor="middle" fill="#58a6ff" font-size="16" font-weight="700">?</text>
+  <text x="240" y="155" text-anchor="middle" fill="#8b949e" font-size="9">Dataset</text>
+
+  <!-- Fork 1: Missing data -->
+  <line x1="240" y1="148" x2="175" y2="195" stroke="#58a6ff" stroke-width="1.5" opacity="0.3"/>
+  <line x1="240" y1="148" x2="240" y2="195" stroke="#58a6ff" stroke-width="1.5" opacity="0.3"/>
+  <line x1="240" y1="148" x2="305" y2="195" stroke="#58a6ff" stroke-width="2" opacity="0.9"/>
+  <text x="240" y="180" text-anchor="middle" fill="#484f58" font-size="8">Missing data?</text>
+
+  <!-- Small nodes at fork 1 -->
+  <circle cx="175" cy="200" r="4" fill="#484f58" opacity="0.4"/>
+  <circle cx="240" cy="200" r="4" fill="#484f58" opacity="0.4"/>
+  <circle cx="305" cy="200" r="5" fill="#58a6ff" opacity="0.6"/>
+
+  <!-- Fork 2: Priors (from right branch) -->
+  <line x1="305" y1="205" x2="270" y2="250" stroke="#58a6ff" stroke-width="1.5" opacity="0.3"/>
+  <line x1="305" y1="205" x2="340" y2="250" stroke="#58a6ff" stroke-width="2" opacity="0.9"/>
+  <text x="310" y="235" text-anchor="middle" fill="#484f58" font-size="8">Priors?</text>
+
+  <circle cx="270" cy="255" r="4" fill="#484f58" opacity="0.4"/>
+  <circle cx="340" cy="255" r="5" fill="#58a6ff" opacity="0.6"/>
+
+  <!-- Fork 3: Model structure -->
+  <line x1="340" y1="260" x2="310" y2="305" stroke="#58a6ff" stroke-width="1.5" opacity="0.3"/>
+  <line x1="340" y1="260" x2="370" y2="305" stroke="#58a6ff" stroke-width="2" opacity="0.9"/>
+  <text x="348" y="290" text-anchor="middle" fill="#484f58" font-size="8">Model?</text>
+
+  <circle cx="310" cy="310" r="4" fill="#484f58" opacity="0.4"/>
+  <circle cx="370" cy="310" r="5" fill="#58a6ff" opacity="0.6"/>
+
+  <!-- Fork 4: Diagnostics -->
+  <line x1="370" y1="315" x2="340" y2="360" stroke="#58a6ff" stroke-width="1.5" opacity="0.3"/>
+  <line x1="370" y1="315" x2="400" y2="360" stroke="#58a6ff" stroke-width="2" opacity="0.9"/>
+  <text x="378" y="345" text-anchor="middle" fill="#484f58" font-size="8">Diagnostics?</text>
+
+  <circle cx="340" cy="365" r="4" fill="#484f58" opacity="0.4"/>
+  <circle cx="400" cy="365" r="5" fill="#58a6ff" opacity="0.6"/>
+
+  <!-- Arrow to bad outcome -->
+  <line x1="400" y1="370" x2="320" y2="420" stroke="#f85149" stroke-width="2" opacity="0.8"/>
+
+  <!-- Bad outcome node -->
+  <circle cx="300" cy="440" r="22" fill="none" stroke="#f85149" stroke-width="2" filter="url(#glowRed)"/>
+  <text x="300" y="436" text-anchor="middle" fill="#f85149" font-size="9" font-weight="600">Reallocate</text>
+  <text x="300" y="448" text-anchor="middle" fill="#f85149" font-size="9" font-weight="600">100% to TV</text>
+  <text x="300" y="472" text-anchor="middle" fill="#f85149" font-size="9" opacity="0.8">Confidently wrong</text>
+
+  <!-- Skipped checks - X marks -->
+  <g filter="url(#glowRed)" opacity="0.7">
+    <text x="165" y="204" text-anchor="middle" fill="#f85149" font-size="11" font-weight="700">✗</text>
+    <text x="230" y="204" text-anchor="middle" fill="#f85149" font-size="11" font-weight="700">✗</text>
+    <text x="260" y="259" text-anchor="middle" fill="#f85149" font-size="11" font-weight="700">✗</text>
+    <text x="300" y="314" text-anchor="middle" fill="#f85149" font-size="11" font-weight="700">✗</text>
+    <text x="330" y="369" text-anchor="middle" fill="#f85149" font-size="11" font-weight="700">✗</text>
+  </g>
+
+  <!-- Label: single random path -->
+  <rect x="130" y="390" width="130" height="20" rx="4" fill="#f8514920" stroke="#f85149" stroke-width="0.5"/>
+  <text x="195" y="404" text-anchor="middle" fill="#f85149" font-size="9">One random path chosen</text>
+
+  <!-- ==================== DIVIDER ==================== -->
+  <line x1="480" y1="80" x2="480" y2="500" stroke="#30363d" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="480" y="520" text-anchor="middle" fill="#484f58" font-size="9">Same dataset — different judgment</text>
+
+  <!-- ==================== RIGHT SIDE: Decision Lab ==================== -->
+  <text x="720" y="90" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="600" letter-spacing="1">DECISION LAB</text>
+
+  <!-- Starting node -->
+  <circle cx="720" cy="130" r="18" fill="none" stroke="#58a6ff" stroke-width="2" filter="url(#glowBlue)"/>
+  <text x="720" y="135" text-anchor="middle" fill="#58a6ff" font-size="16" font-weight="700">?</text>
+  <text x="720" y="155" text-anchor="middle" fill="#8b949e" font-size="9">Dataset</text>
+
+  <!-- Fork 1: Missing data — ALL explored -->
+  <line x1="720" y1="148" x2="640" y2="195" stroke="#58a6ff" stroke-width="1.5" opacity="0.7"/>
+  <line x1="720" y1="148" x2="720" y2="195" stroke="#58a6ff" stroke-width="1.5" opacity="0.7"/>
+  <line x1="720" y1="148" x2="800" y2="195" stroke="#58a6ff" stroke-width="1.5" opacity="0.7"/>
+  <text x="720" y="180" text-anchor="middle" fill="#58a6ff" font-size="8">Missing data?</text>
+
+  <circle cx="640" cy="200" r="5" fill="#58a6ff" opacity="0.6"/>
+  <circle cx="720" cy="200" r="5" fill="#58a6ff" opacity="0.6"/>
+  <circle cx="800" cy="200" r="5" fill="#58a6ff" opacity="0.6"/>
+
+  <!-- Branch from left: explore priors -->
+  <line x1="640" y1="205" x2="610" y2="250" stroke="#58a6ff" stroke-width="1.5" opacity="0.5"/>
+  <line x1="640" y1="205" x2="670" y2="250" stroke="#58a6ff" stroke-width="1.5" opacity="0.5"/>
+  <circle cx="610" cy="255" r="4" fill="#f85149" opacity="0.6"/>
+  <circle cx="670" cy="255" r="4" fill="#f85149" opacity="0.6"/>
+  <text x="608" y="272" text-anchor="middle" fill="#f85149" font-size="7">diverged</text>
+  <text x="670" y="272" text-anchor="middle" fill="#f85149" font-size="7">diverged</text>
+
+  <!-- Branch from middle: explore priors -->
+  <line x1="720" y1="205" x2="695" y2="250" stroke="#58a6ff" stroke-width="1.5" opacity="0.5"/>
+  <line x1="720" y1="205" x2="745" y2="250" stroke="#58a6ff" stroke-width="1.5" opacity="0.5"/>
+  <circle cx="695" cy="255" r="4" fill="#f85149" opacity="0.6"/>
+  <circle cx="745" cy="255" r="4" fill="#f85149" opacity="0.6"/>
+  <text x="695" y="272" text-anchor="middle" fill="#f85149" font-size="7">diverged</text>
+  <text x="745" y="272" text-anchor="middle" fill="#f85149" font-size="7">diverged</text>
+
+  <!-- Branch from right: explore priors -->
+  <line x1="800" y1="205" x2="770" y2="250" stroke="#58a6ff" stroke-width="1.5" opacity="0.5"/>
+  <line x1="800" y1="205" x2="830" y2="250" stroke="#58a6ff" stroke-width="1.5" opacity="0.5"/>
+  <circle cx="770" cy="255" r="4" fill="#f85149" opacity="0.6"/>
+  <circle cx="830" cy="255" r="4" fill="#f85149" opacity="0.6"/>
+  <text x="770" y="272" text-anchor="middle" fill="#f85149" font-size="7">diverged</text>
+  <text x="830" y="272" text-anchor="middle" fill="#f85149" font-size="7">diverged</text>
+
+  <!-- More branches explored deeper -->
+  <line x1="610" y1="260" x2="595" y2="300" stroke="#484f58" stroke-width="1" opacity="0.3" stroke-dasharray="3,3"/>
+  <line x1="670" y1="260" x2="655" y2="300" stroke="#484f58" stroke-width="1" opacity="0.3" stroke-dasharray="3,3"/>
+  <line x1="695" y1="260" x2="690" y2="300" stroke="#484f58" stroke-width="1" opacity="0.3" stroke-dasharray="3,3"/>
+  <line x1="745" y1="260" x2="740" y2="300" stroke="#484f58" stroke-width="1" opacity="0.3" stroke-dasharray="3,3"/>
+  <line x1="770" y1="260" x2="775" y2="300" stroke="#484f58" stroke-width="1" opacity="0.3" stroke-dasharray="3,3"/>
+  <line x1="830" y1="260" x2="825" y2="300" stroke="#484f58" stroke-width="1" opacity="0.3" stroke-dasharray="3,3"/>
+
+  <!-- Small failed nodes deeper -->
+  <circle cx="595" cy="305" r="3" fill="#f85149" opacity="0.4"/>
+  <circle cx="655" cy="305" r="3" fill="#f85149" opacity="0.4"/>
+  <circle cx="690" cy="305" r="3" fill="#f85149" opacity="0.4"/>
+  <circle cx="740" cy="305" r="3" fill="#f85149" opacity="0.4"/>
+  <circle cx="775" cy="305" r="3" fill="#f85149" opacity="0.4"/>
+  <circle cx="825" cy="305" r="3" fill="#f85149" opacity="0.4"/>
+
+  <!-- Additional retry branches (showing 11 attempts) -->
+  <line x1="610" y1="260" x2="625" y2="300" stroke="#484f58" stroke-width="1" opacity="0.3" stroke-dasharray="3,3"/>
+  <line x1="745" y1="260" x2="720" y2="300" stroke="#484f58" stroke-width="1" opacity="0.3" stroke-dasharray="3,3"/>
+  <line x1="830" y1="260" x2="845" y2="300" stroke="#484f58" stroke-width="1" opacity="0.3" stroke-dasharray="3,3"/>
+  <circle cx="625" cy="305" r="3" fill="#f85149" opacity="0.4"/>
+  <circle cx="720" cy="305" r="3" fill="#f85149" opacity="0.4"/>
+  <circle cx="845" cy="305" r="3" fill="#f85149" opacity="0.4"/>
+
+  <!-- X marks on all failed deep nodes -->
+  <g opacity="0.5">
+    <text x="595" y="322" text-anchor="middle" fill="#f85149" font-size="8">✗</text>
+    <text x="625" y="322" text-anchor="middle" fill="#f85149" font-size="8">✗</text>
+    <text x="655" y="322" text-anchor="middle" fill="#f85149" font-size="8">✗</text>
+    <text x="690" y="322" text-anchor="middle" fill="#f85149" font-size="8">✗</text>
+    <text x="720" y="322" text-anchor="middle" fill="#f85149" font-size="8">✗</text>
+    <text x="740" y="322" text-anchor="middle" fill="#f85149" font-size="8">✗</text>
+    <text x="775" y="322" text-anchor="middle" fill="#f85149" font-size="8">✗</text>
+    <text x="825" y="322" text-anchor="middle" fill="#f85149" font-size="8">✗</text>
+    <text x="845" y="322" text-anchor="middle" fill="#f85149" font-size="8">✗</text>
+  </g>
+
+  <!-- All paths converge to assessment -->
+  <line x1="595" y1="310" x2="720" y2="375" stroke="#484f58" stroke-width="0.5" opacity="0.3" stroke-dasharray="3,3"/>
+  <line x1="655" y1="310" x2="720" y2="375" stroke="#484f58" stroke-width="0.5" opacity="0.3" stroke-dasharray="3,3"/>
+  <line x1="720" y1="310" x2="720" y2="375" stroke="#484f58" stroke-width="0.5" opacity="0.3" stroke-dasharray="3,3"/>
+  <line x1="775" y1="310" x2="720" y2="375" stroke="#484f58" stroke-width="0.5" opacity="0.3" stroke-dasharray="3,3"/>
+  <line x1="845" y1="310" x2="720" y2="375" stroke="#484f58" stroke-width="0.5" opacity="0.3" stroke-dasharray="3,3"/>
+
+  <!-- Assessment box -->
+  <rect x="640" y="365" width="160" height="40" rx="6" fill="#161b22" stroke="#d29922" stroke-width="1.5"/>
+  <text x="720" y="382" text-anchor="middle" fill="#d29922" font-size="10" font-weight="600">11 paths explored</text>
+  <text x="720" y="396" text-anchor="middle" fill="#d29922" font-size="10" font-weight="600">0 converged</text>
+
+  <!-- Honest outcome node -->
+  <circle cx="720" cy="445" r="22" fill="none" stroke="#d29922" stroke-width="2" filter="url(#glowAmber)"/>
+  <text x="720" y="441" text-anchor="middle" fill="#d29922" font-size="9" font-weight="600">Insufficient</text>
+  <text x="720" y="453" text-anchor="middle" fill="#d29922" font-size="9" font-weight="600">signal</text>
+  <line x1="720" y1="405" x2="720" y2="423" stroke="#d29922" stroke-width="1.5"/>
+
+  <text x="720" y="480" text-anchor="middle" fill="#d29922" font-size="9" opacity="0.8">Honestly uncertain</text>
+
+  <!-- Label: systematic exploration -->
+  <rect x="655" y="490" width="130" height="20" rx="4" fill="#3fb95020" stroke="#3fb950" stroke-width="0.5"/>
+  <text x="720" y="504" text-anchor="middle" fill="#3fb950" font-size="9">All paths systematically tested</text>
+
+  <!-- ==================== LEGEND ==================== -->
+  <g transform="translate(30, 480)">
+    <line x1="0" y1="0" x2="20" y2="0" stroke="#58a6ff" stroke-width="1.5"/>
+    <text x="26" y="4" fill="#8b949e" font-size="9">Explored path</text>
+
+    <line x1="0" y1="16" x2="20" y2="16" stroke="#484f58" stroke-width="1" stroke-dasharray="3,3"/>
+    <text x="26" y="20" fill="#8b949e" font-size="9">Pruned path</text>
+
+    <text x="6" y="36" fill="#f85149" font-size="11" font-weight="700">✗</text>
+    <text x="26" y="36" fill="#8b949e" font-size="9">Failed check</text>
+  </g>
+
+</svg>
