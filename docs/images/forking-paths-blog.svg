@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 610" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#0d1117"/>
@@ -19,14 +19,14 @@
   </defs>
 
   <!-- Background -->
-  <rect width="960" height="600" fill="url(#bg)"/>
+  <rect width="960" height="610" fill="url(#bg)"/>
 
   <!-- Dot grid -->
   <g opacity="0.08">
     <pattern id="dots" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
       <circle cx="20" cy="20" r="1" fill="#e6edf3"/>
     </pattern>
-    <rect width="960" height="600" fill="url(#dots)"/>
+    <rect width="960" height="610" fill="url(#dots)"/>
   </g>
 
   <!-- Title -->
@@ -102,8 +102,8 @@
   <text x="240" y="542" text-anchor="middle" fill="#f85149" font-size="8" opacity="0.8">All look plausible — which one is right?</text>
 
   <!-- ==================== DIVIDER ==================== -->
-  <line x1="480" y1="80" x2="480" y2="560" stroke="#30363d" stroke-width="1" stroke-dasharray="4,4"/>
-  <text x="480" y="580" text-anchor="middle" fill="#484f58" font-size="9">Same dataset — different judgment</text>
+  <line x1="480" y1="80" x2="480" y2="550" stroke="#30363d" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="480" y="595" text-anchor="middle" fill="#484f58" font-size="9">Same dataset — different judgment</text>
 
   <!-- ==================== RIGHT SIDE: Decision Lab ==================== -->
   <text x="720" y="90" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="600" letter-spacing="1">DECISION LAB</text>
@@ -194,15 +194,15 @@
   <text x="720" y="548" text-anchor="middle" fill="#3fb950" font-size="9" opacity="0.8">Tested, falsified, trusted</text>
 
   <!-- ==================== LEGEND ==================== -->
-  <g transform="translate(30, 555)">
-    <circle cx="6" cy="0" r="4" fill="#3fb950" opacity="0.7"/>
-    <text x="16" y="4" fill="#8b949e" font-size="9">Passed diagnostics</text>
+  <g transform="translate(0, 565)">
+    <circle cx="280" cy="0" r="4" fill="#3fb950" opacity="0.7"/>
+    <text x="290" y="4" fill="#8b949e" font-size="9">Passed diagnostics</text>
 
-    <circle cx="130" cy="0" r="4" fill="#f85149" opacity="0.6"/>
-    <text x="140" y="4" fill="#8b949e" font-size="9">Pruned (failed checks)</text>
+    <circle cx="430" cy="0" r="4" fill="#f85149" opacity="0.6"/>
+    <text x="440" y="4" fill="#8b949e" font-size="9">Pruned (failed checks)</text>
 
-    <line x1="270" y1="0" x2="282" y2="0" stroke="#3fb950" stroke-width="1.5" opacity="0.7"/>
-    <text x="288" y="4" fill="#8b949e" font-size="9">Converged path</text>
+    <line x1="610" y1="0" x2="624" y2="0" stroke="#3fb950" stroke-width="1.5" opacity="0.7"/>
+    <text x="630" y="4" fill="#8b949e" font-size="9">Converged path</text>
   </g>
 
 </svg>
