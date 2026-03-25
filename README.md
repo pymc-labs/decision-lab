@@ -4,7 +4,7 @@ Coding agents write good code. They make bad analytical decisions.
 
 Ask a coding agent to analyze your marketing data and it will fit a model, generate charts, and recommend budget reallocations — all in clean, well-documented code. The problem is the model might be wrong, the assumptions unchecked, and the recommendations unsupported. Nobody notices for months.
 
-decision-lab red-teams your analysis. It tries to break its own conclusions before showing them to you — so the reports you get actually hold up to scrutiny.
+decision-lab runs your analysis multiple ways — different models, different assumptions, different priors. Then it red-teams the results: do they converge? Where do they break? If the conclusions survive, you can trust them. If they don't, it tells you what experiment would resolve the ambiguity.
 
 ## What you get
 
@@ -27,9 +27,9 @@ That's the difference: an agent that knows when to say "we don't know."
 
 ## How it works
 
-You define what the agent should stress-test — which diagnostics to run, what priors to use, what assumptions to challenge. The agent explores multiple approaches instead of committing to the first one that runs, actively tries to falsify its own results, and consolidates everything into a single report. If it can't break the conclusions, you can trust them. If it can, it tells you why.
+You define a decision-pack: the modeling approaches to explore, the diagnostics to run, and the assumptions to test. The agent fans out across multiple analysis paths in parallel — different models, different priors, different transformations. Then it compares: do they agree? Where do they diverge? Is the divergence resolvable with the current data, or do you need a new experiment?
 
-This is packaged as a **decision-pack**: a directory containing domain skills, agent prompts, and a pinned environment so the agent codes against the right library versions.
+Everything consolidates into a single report: what was tried, what converged, what didn't, and what to do next.
 
 Point it at your data:
 
