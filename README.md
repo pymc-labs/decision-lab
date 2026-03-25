@@ -9,7 +9,7 @@ decision-lab runs multiple modeling approaches in parallel, checks whether they 
 
 ## Why
 
-We tested this on marketing mix modeling. We gave vanilla Claude Code and our MMM agent the same adversarial dataset where no valid inference was possible. Claude Code fit a model and recommended budget reallocations. Our agent tried 11 approaches, found that none of the models converged, said so, and recommended experiments to collect better data.
+We [tested this on marketing mix modeling](https://www.youtube.com/watch?v=ess4qV8JKQc). We gave vanilla Claude Code and our MMM agent the same adversarial dataset where no valid inference was possible. Claude Code fit a model and recommended budget reallocations. Our agent tried 11 approaches, found that none of the models converged, said so, and recommended experiments to collect better data.
 
 That's the behavior we want: an agent that knows when to stop.
 
