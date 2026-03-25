@@ -191,7 +191,7 @@
   <text x="720" y="506" text-anchor="middle" fill="#3fb950" font-size="10" font-weight="700">Validated</text>
   <text x="720" y="519" text-anchor="middle" fill="#3fb950" font-size="10" font-weight="700">decision</text>
 
-  <text x="720" y="548" text-anchor="middle" fill="#3fb950" font-size="9" opacity="0.8">Tested, falsified, trusted</text>
+  <text x="720" y="555" text-anchor="middle" fill="#3fb950" font-size="9" opacity="0.8">Tested, falsified, trusted</text>
 
   <!-- ==================== LEGEND ==================== -->
   <g transform="translate(0, 565)">
