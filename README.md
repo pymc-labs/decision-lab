@@ -12,7 +12,14 @@ We tested this on marketing mix modeling. We gave vanilla Claude Code and a deci
 
 **Claude Code** fit a model and recommended budget reallocations. Confidently wrong.
 
-**decision-lab** explored 11 modeling approaches, found that none converged, said so, and recommended collecting better data instead.
+**decision-lab** explored 11 modeling approaches, found that none converged, and told you:
+
+```
+⚠ No valid model found
+  11 modeling approaches attempted — 0 converged
+  Root cause: insufficient signal in current data (see report §4)
+  Recommendation: run a geo-holdout experiment to isolate channel effects
+```
 
 That's the difference: an agent that knows when to say "we don't know."
 
@@ -20,13 +27,11 @@ That's the difference: an agent that knows when to say "we don't know."
 
 ## How it works
 
-You define a **decision-pack** — a directory containing everything an agent needs to do a specific kind of analysis well:
+You tell the agent what good analysis looks like for your domain — which diagnostics to run, what priors to use, what assumptions to check. It explores multiple approaches instead of committing to the first one that runs, and consolidates the results into a single report.
 
-- **Domain skills** — mandatory diagnostics, preferred model structures, informative priors. These keep the agent on methodologically sound paths instead of letting it improvise.
-- **Parallel exploration** — the agent tries multiple approaches to the same problem (different priors, different data prep, different model structures) and consolidates the results. Structured model comparison, not a single random walk.
-- **Frozen environments** — every session runs in a pinned Docker image so the agent codes against the right library versions, not whatever it was trained on.
+This is packaged as a **decision-pack**: a directory containing domain skills, agent prompts, and a pinned environment so the agent codes against the right library versions.
 
-Then you point it at your data:
+Point it at your data:
 
 ```bash
 dlab --dpack decision-packs/mmm \
@@ -41,17 +46,11 @@ dlab connect ./mmm-run        # Live TUI: agent status, logs, cost tracking
 dlab timeline ./mmm-run       # Gantt chart of the full session
 ```
 
-## Install
-
-Requires [Docker](https://docs.docker.com/get-docker/) and Python 3.10+.
+## Get started
 
 ```bash
 pip install dlab-cli
-```
 
-## Quick start
-
-```bash
 # Run the MMM decision-pack on the included example dataset
 dlab --dpack decision-packs/mmm \
   --data decision-packs/mmm/example-data/example_dataset.csv \
@@ -62,6 +61,8 @@ dlab --dpack decision-packs/mmm \
 # Watch it work
 dlab connect ./mmm-run
 ```
+
+Runs in Docker under the hood — [install Docker](https://docs.docker.com/get-docker/) if you don't have it. Requires Python 3.10+.
 
 ## Build your own decision-pack
 
