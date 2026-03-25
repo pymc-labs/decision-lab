@@ -8,6 +8,10 @@ That gap is why we built Decision Lab — and why we're releasing it as open sou
 
 ## The Garden of Forking Paths
 
+<p align="center">
+  <img src="images/forking-paths-blog.svg" alt="The Garden of Forking Paths" width="800">
+</p>
+
 Every analytical workflow is a series of judgment calls. How do you handle missing values? Which model structure fits the problem? What priors encode reasonable domain knowledge? What diagnostics confirm the model actually learned something real?
 
 Experienced data scientists navigate this space using intuition built over years of practice. They know when a result "smells wrong." They know which shortcuts are safe and which ones hide landmines. Language models navigate the same space probabilistically — and they're remarkably good at producing plausible-sounding nonsense wrapped in confident language.
