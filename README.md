@@ -25,12 +25,12 @@ You package everything an agent needs into a **decision-pack**: a frozen Docker 
 
 ## Install
 
-- [Install Docker](https://docs.docker.com/get-docker/) — we recommend running agents in a sandboxed container with a pinned environment for reproducibility. If you don't want to use Docker, run with `--no-sandboxing` and the agent will set up its own environment locally.
-- Python 3.10+
-
 ```bash
 pip install dlab-cli
 ```
+
+- Python 3.10+
+- [Install Docker](https://docs.docker.com/get-docker/) — we recommend running agents in a sandboxed container with a pinned environment for reproducibility. If you don't want to use Docker, run with `--no-sandboxing` and the agent will set up its own environment locally.
 
 ## Quick start
 
