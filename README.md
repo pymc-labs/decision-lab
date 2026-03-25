@@ -1,30 +1,49 @@
 # decision-lab
 
-Coding agents write good code. They make bad analytical decisions. decision-lab gives you the tools to fix the second part.
+Coding agents write good code. They make bad analytical decisions.
 
-decision-lab runs autonomous coding agents in frozen Docker environments with domain-specific skills and parallel subagents. You package the environment, the prompts, and the skills into a **decision-pack**, point it at your data, and get back reports, figures, and recommendations that hold up to scrutiny.
+Ask a coding agent to analyze your marketing data and it will fit a model, generate charts, and recommend budget reallocations — all in clean, well-documented code. The problem is the model might be wrong, the assumptions unchecked, and the recommendations unsupported. Nobody notices for months.
+
+decision-lab makes agents behave like careful analysts. It gives them domain knowledge, makes them check their own work, and lets them explore multiple approaches before committing to one — so the reports you get actually hold up to scrutiny.
+
+## What you get
+
+We tested this on marketing mix modeling. We gave vanilla Claude Code and a decision-lab agent the same adversarial dataset where **no valid inference was possible**.
+
+**Claude Code** fit a model and recommended budget reallocations. Confidently wrong.
+
+**decision-lab** explored 11 modeling approaches, found that none converged, said so, and recommended collecting better data instead.
+
+That's the difference: an agent that knows when to say "we don't know."
 
 <!-- demo gif here -->
 
-## Why
-
-There are many ways to analyze a dataset. Most of them are wrong. An unsupervised agent picks one path through the analytical space and commits to it. If that path happens to be wrong, you get a nice-looking report with bad conclusions. Nobody notices for months.
-
-We tested this on marketing mix modeling. We gave vanilla Claude Code and our MMM agent the same adversarial dataset where no valid inference was possible. Claude Code fit a model and recommended budget reallocations. Our agent tried 11 approaches, found that none of the models converged, said so, and recommended experiments to collect better data.
-
-decision-lab (`dlab`) is the framework we built to make agents behave like that.
-
 ## How it works
 
-**Skills.** decision-packs include domain-specific skills: mandatory diagnostics, preferred model structures, informative priors. These constrain the agent to methodologically sound paths.
+You define a **decision-pack** — a directory containing everything an agent needs to do a specific kind of analysis well:
 
-**Parallel subagents.** decision-lab lets the coding agent fan out multiple subagents with different approaches to the same problem (different priors, different data prep, different model structures) and consolidates their results. Structured exploration instead of a single random walk. Supports running compute-heavy tasks in the cloud on [Modal](https://modal.com).
+- **Domain skills** — mandatory diagnostics, preferred model structures, informative priors. These keep the agent on methodologically sound paths instead of letting it improvise.
+- **Parallel exploration** — the agent tries multiple approaches to the same problem (different priors, different data prep, different model structures) and consolidates the results. Structured model comparison, not a single random walk.
+- **Frozen environments** — every session runs in a pinned Docker image so the agent codes against the right library versions, not whatever it was trained on.
 
-**Frozen environments.** Every session runs in a pinned Docker image. Library APIs change constantly and LLMs are trained on old versions. decision-packs lock the environment so the agent codes against the right API.
+Then you point it at your data:
+
+```bash
+dlab --dpack decision-packs/mmm \
+  --data your_marketing_data.csv \
+  --prompt "Analyze our marketing spend and recommend budget allocation"
+```
+
+And monitor it while it runs:
+
+```bash
+dlab connect ./mmm-run        # Live TUI: agent status, logs, cost tracking
+dlab timeline ./mmm-run       # Gantt chart of the full session
+```
 
 ## Install
 
-**Requires [Docker](https://docs.docker.com/get-docker/)** and Python 3.10+
+Requires [Docker](https://docs.docker.com/get-docker/) and Python 3.10+.
 
 ```bash
 pip install dlab-cli
@@ -44,17 +63,9 @@ dlab --dpack decision-packs/mmm \
 dlab connect ./mmm-run
 ```
 
-Or build your own decision-pack. Ask Claude to scaffold one for you:
+## Build your own decision-pack
 
-```bash
-dhub install pymc-labs/decision-lab
-claude
-# > "Create a decision-pack for time series forecasting with statsforecast"
-```
-
-## What's a decision-pack?
-
-A directory with everything an agent needs: frozen environment, system prompts, domain skills, tools, and permissions.
+A decision-pack is a directory with a config, a Docker environment, agent prompts, and domain skills:
 
 ```
 my-dpack/
@@ -71,31 +82,21 @@ my-dpack/
     parallel_agents/    # Fan-out configs
 ```
 
-See the [poem decision-pack](decision-packs/poem/) for a fully annotated example showing how all the pieces connect. Here's what happens when you run it:
+Scaffold one interactively:
 
 ```bash
-dlab --dpack decision-packs/poem --env-file .env --prompt "Write me a poem about the ocean"
+dlab create-dpack
 ```
 
-1. dlab builds the Docker image from [`docker/Dockerfile`](decision-packs/poem/docker/Dockerfile) (cached after first run)
-2. The pre-run hook [`say_hi.sh`](decision-packs/poem/say_hi.sh) runs inside the container
-3. The orchestrator ([`literary-agent.md`](decision-packs/poem/opencode/agents/literary-agent.md)) starts and calls POPO the terrible poet ([`popo-poet.md`](decision-packs/poem/opencode/agents/popo-poet.md)) via the `task` tool
-4. The orchestrator reads POPO's poem, decides it's bad, and spawns 3 parallel poet instances ([`poet.md`](decision-packs/poem/opencode/agents/poet.md)) with different styles via the `parallel-agents` tool
-5. Each instance writes `summary.md`. A consolidator (auto-generated from [`poet.yaml`](decision-packs/poem/opencode/parallel_agents/poet.yaml)) compares them
-6. The orchestrator picks the best poem and writes `final_poem.md`
-7. The post-run hook [`print_result.sh`](decision-packs/poem/print_result.sh) prints it to the terminal
+Or ask Claude to build one for you:
 
-The session directory ends up with parallel instance outputs, logs, and the final poem — all browsable with `dlab connect` or `dlab timeline`.
+```bash
+dhub install pymc-labs/decision-lab
+claude
+# > "Create a decision-pack for time series forecasting with statsforecast"
+```
 
 ## Features
-
-### Run sessions
-
-```bash
-dlab --dpack PATH --data PATH --prompt TEXT --env-file .env
-```
-
-Builds the Docker image (cached between runs), starts the container, runs pre-run hooks, launches the agent, runs post-run hooks, fixes file ownership, and stops the container. Without `--work-dir`, sessions are auto-numbered by dpack name (`dlab-mmm-workdir-001`, `dlab-mmm-workdir-002`, ...) and can be resumed with `--continue-dir`.
 
 ### Live monitoring
 
@@ -105,28 +106,20 @@ dlab connect ./mmm-run
 
 A Textual TUI that shows live log events, agent status, cost tracking, and artifacts as the session runs. Browse between the orchestrator, parallel instances, and consolidator. Works with both running and completed sessions.
 
-<!-- ![dlab connect TUI screenshot](docs/assets/connect-tui.png) -->
-
 ### Execution timeline
 
 ```bash
 dlab timeline ./mmm-run
 ```
 
-Displays a Gantt chart of the session with timing, cost breakdown per agent, and idle periods. Shows the orchestrator, all parallel instances, and consolidators on a single timeline.
-
-<!-- ![dlab timeline Gantt chart](docs/assets/timeline-gantt.png) -->
+Displays a Gantt chart of the session with timing, cost breakdown per agent, and idle periods.
 
 ### Creation wizards
 
 ```bash
-dlab create-dpack              # Interactive wizard to scaffold a new decision-pack
-dlab create-parallel-agent     # Wizard to add parallel agent configs to an existing decision-pack
+dlab create-dpack              # Scaffold a new decision-pack
+dlab create-parallel-agent     # Add parallel agent configs to an existing pack
 ```
-
-The decision-pack wizard walks through 8 screens: name, container setup (package manager + base image), features (Decision Hub, Modal, Python library), model selection, permissions, directory skeletons, skill search, and review. Supports conda, pip, uv, and pixi.
-
-<!-- ![dlab create-dpack wizard](docs/assets/create-dpack-wizard.png) -->
 
 ### Install as shortcut
 
@@ -136,25 +129,23 @@ dlab install ./my-dpack
 my-dpack --data ./data --prompt "..."
 ```
 
-Creates a wrapper script in `~/.local/bin/` so you can run a decision-pack by name instead of passing `--dpack` every time.
-
 ### Decision Hub integration
 
-decision-packs work with [Decision Hub](https://hub.decision.ai), a registry of validated skills for data science and AI. Agents can search and install skills from the hub at runtime, giving them access to domain knowledge they weren't originally packaged with.
+decision-packs work with [Decision Hub](https://hub.decision.ai), a registry of validated skills for data science and AI. Agents can search and install skills from the hub at runtime. The hub has 2,200+ skills from 38 organizations with automated evals that verify skills actually improve agent performance.
 
 ```bash
-# Install the Decision Hub CLI as a skill in your decision-pack
 dhub install pymc-labs/dhub-cli --agent opencode
 ```
 
-The hub has 2,200+ skills from 38 organizations with automated evals that verify skills actually improve agent performance.
+### Cloud compute
+
+Supports running compute-heavy tasks on [Modal](https://modal.com) so model fitting doesn't bottleneck on your laptop.
 
 ### Environment variable forwarding
 
-All environment variables starting with `DLAB_` are automatically forwarded from the host to the Docker container. decision-packs use these for runtime configuration:
+Variables starting with `DLAB_` are automatically forwarded to the Docker container:
 
 ```bash
-# MMM decision-pack: fit models locally instead of on Modal
 DLAB_FIT_MODEL_LOCALLY=1 dlab --dpack mmm --data ./data --prompt "..."
 ```
 
@@ -183,7 +174,7 @@ dlab install DPACK_PATH                       # Create shortcut command
 
 ## Built by PyMC Labs
 
-dlab is developed by [PyMC Labs](https://www.pymc-labs.com), the team behind [PyMC](https://github.com/pymc-devs/pymc) and [pymc-marketing](https://github.com/pymc-labs/pymc-marketing).
+decision-lab is developed by [PyMC Labs](https://www.pymc-labs.com), the team behind [PyMC](https://github.com/pymc-devs/pymc) and [pymc-marketing](https://github.com/pymc-labs/pymc-marketing).
 
 ## License
 
