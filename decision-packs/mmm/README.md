@@ -35,8 +35,8 @@ graph TD
     end
 
     M --> J{Judgement}
-    J -- conflicting / failed --> HP
     J -- consistent --> A[Analysis]
+    J -- conflicting / failed --> HP
     A --> O[Reports · Figures · Recommendations]
 ```
 
