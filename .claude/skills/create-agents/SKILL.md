@@ -1,11 +1,174 @@
 ---
-name: Create data science agents
-description: Design agent system prompts (.md files) and parallel-agent configs for data science decision-packs. Use when creating orchestrator, subagent, or parallel agent architectures for analytical workflows.
+name: Design data science agent systems
+description: Design agent system prompts, parallel architectures, and methodological guardrails for data science decision-packs. Use when creating orchestrator, subagent, or parallel agent systems for analytical workflows. Covers anti-fabrication rules, epistemic humility, when to stop, conflict detection, uncertainty reporting, retry protocols, prompt design principles, and the decision-lab runtime mechanics.
 ---
 
-# Creating Agent System Prompts for Data Science
+# Designing Agent Systems for Data Science
 
-This skill covers how to write agent `.md` files and parallel-agent YAML configs for decision-packs that do data science work.
+This skill covers how to write agent `.md` files and parallel-agent YAML configs for decision-packs that do data science work, AND the methodology that makes the difference between agents that produce useful analysis and agents that produce confident garbage.
+
+The principles here come from building and benchmarking the MMM (Marketing Mix Modeling) agent system. They apply to any data science domain where agents explore analytical decisions, fit models, and make recommendations.
+
+---
+
+# Part 1: Methodology
+
+## The Cardinal Rule: Never Fabricate
+
+Agents must NEVER fabricate data, mock parameters, silently swallow errors, or substitute made-up values when code fails. This must appear in every agent prompt.
+
+The forbidden pattern:
+
+```python
+# NEVER DO THIS
+try:
+    n_missing = result.missing_count
+except:
+    n_missing = 0  # FABRICATED
+```
+
+When code fails: read the error, investigate, fix, retry. If unfixable after max 10 attempts: report the error and STOP.
+
+Only three acceptable outcomes:
+1. Code works → use the real value
+2. Code fails → fix it and retry
+3. Code fails and can't be fixed → report error and STOP
+
+Never acceptable: code fails → substitute a made-up value and continue.
+
+Every agent prompt — orchestrator, subagents, consolidator — must contain an explicit anti-fabrication section.
+
+## The Goal Is Understanding, Not a Fitted Model
+
+A running model that fit something is not the goal. The goal is understanding the data by means of mathematical modeling. When modeling approaches fail, that is a valuable insight. Agents must treat non-convergence, conflicting results, and degenerate problems as evidence, not as errors to hide.
+
+A subagent that fails and writes a thorough diagnosis is more valuable than one that hacks its way to a "successful" fit by cutting corners.
+
+## Retry Rounds: Escalating Simplification with Hard Limits
+
+Set a hard limit on modeling/analysis rounds (recommend 3). Track rounds explicitly in a planning document so the agent cannot lose count.
+
+**Round 1: Initial diverse strategies.** If all fail, diagnose the COMMON failure mode across instances.
+
+After Round 1 failure:
+- If the diagnosis is fundamental (data cannot support this analysis): STOP immediately. Do NOT retry.
+- If the diagnosis suggests a structural fix: proceed to Round 2.
+
+**Round 2: Targeted fixes** based on Round 1 diagnosis.
+
+**Round 3: Aggressive simplification** (full pooling, grouping inputs, fewer parameters). Results from heavily simplified approaches have LIMITED value — they show directional patterns but cannot support specific recommendations. The report MUST explain what was lost.
+
+**After Round 3: STOP.** Non-negotiable. Write the report with whatever evidence was gathered.
+
+Stop immediately without further rounds if the simplest possible approach was already tried and still failed.
+
+## Epistemic Humility: When to Stop and Say "We Don't Know"
+
+Every orchestrator prompt must include explicit stopping conditions:
+
+- All approaches fail after the round limit
+- Converged approaches give conflicting recommendations (degenerate problem)
+- Sensitivity to assumptions dominates — different reasonable assumptions give completely different answers
+- Too few observations to support the analysis complexity
+- All results show implausible values (fitting noise, not signal)
+- Even the simplest possible approach fails
+
+### Conflict detection
+
+For quantitative analyses, define objective criteria:
+
+**Magnitude consistency:** Compare key metrics across approaches. If variation exceeds a domain-appropriate threshold, results are CONFLICTING.
+
+**Directional agreement:** Do all approaches agree on the ACTION? (increase/maintain/decrease). Opposite actions = CONFLICTING.
+
+**Ranking consistency:** Do approaches agree on which factors matter most? If not, CONFLICTING.
+
+### The caveats trap
+
+Adding caveats to unsupported recommendations does NOT fix them. "We recommend X, with the caveat that we're uncertain" is WRONG when X and not-X are equally supported. The right response: "We cannot make a recommendation. Here's what experiment would resolve this."
+
+### What the stop report must contain
+
+- What was tried and what failed (every approach, including failures)
+- Root cause: why the data doesn't support reliable inference
+- What CAN be concluded (robust across all approaches)
+- What CANNOT be concluded (and why)
+- Specific, realistic experiments that would resolve the uncertainty (not "collect more data" but "run a geo-holdout test on factor X for 8 weeks")
+
+## Prompt Design: Templates, Not Implementations
+
+Agent prompts must never contain concrete numerical values. Concrete examples with actual numbers get copied verbatim, creating deterministic behavior. At that point, fixed code would be better and cheaper.
+
+The test: if you change a number in a prompt example, does the agent's output change accordingly? If yes, the agent is copying, not reasoning.
+
+Use placeholder syntax: `<VALUE>`, `<COLUMN_NAME>`, `<N_INSTANCES>`. Show structure and patterns, not implementations.
+
+Skills and agent prompts should encode generic best practices:
+- Good: "Run convergence diagnostics after fitting. Check that R-hat < threshold and ESS > threshold."
+- Bad: "Check that R-hat < 1.05 and ESS > 400."
+
+Too many skills or poorly written skills DEGRADE performance. Skills are guardrails, not scripts.
+
+## Reporting Uncertainty and Making Recommendations
+
+### Two types of uncertainty
+
+**Model uncertainty** (from posterior/confidence intervals): "Factor X has effect 2.1 [1.7, 2.5]." Supports decision-making — wide intervals mean proceed with caution.
+
+**Structural uncertainty** (from model disagreement): "Different approaches give effect from 0.2 to 20." Does NOT support decision-making. You cannot choose between opposite conclusions by adding caveats.
+
+### Recommendation constraints
+
+- Never recommend actions you haven't computed or simulated
+- No napkin math — don't multiply a metric by a budget number; run the actual optimization
+- Must discuss MULTIPLE scenarios at different constraint levels, not one "best" answer
+- Recommendations must be realistic and domain-sensible (don't suggest concentrating all resources in one area)
+- Always report intervals, never point estimates alone
+- Base actionable recommendations on conservative scenarios, not unconstrained optimizations
+
+## When the Problem Is Degenerate
+
+A degenerate problem is one where multiple valid approaches give opposite conclusions. The agent must identify the ROOT CAUSE:
+
+- High correlation between inputs (cannot separate individual effects)
+- Insufficient variation in key variables
+- Confounding with external factors
+- Too few observations for the complexity required
+- Prior sensitivity (data has no say)
+
+The agent must recommend SPECIFIC experiments:
+- Holdout tests: pause or vary one factor while others continue
+- Geographic experiments: vary factors across matched regions
+- Controlled variation: randomly vary inputs by ±N% to create identifying variation
+- Time-based experiments: measure before/after a deliberate change
+
+These must be realistic for the domain — not experiments that would never be approved.
+
+## Designing Parallel Exploration
+
+Parallel approaches must be STRUCTURALLY diverse: different model forms, different data prep, different priors. Minor parameter tweaks waste parallel capacity.
+
+Use different LLMs per instance for genuine diversity. The orchestrator can combine data prep diversity with modeling diversity (pipe different data prep outputs into different models).
+
+Each instance runs in isolation — own data copy, own config, relative paths only.
+
+## Transparency: Document Everything
+
+Every approach tried must be documented, including failures. The orchestrator writes two reports:
+- **Business report** — executive summary, recommendations with uncertainty, caveats, experiments
+- **Technical report** — all strategies explored, quality details, model selection rationale, sensitivity analysis, limitations
+
+Agents must explain reasoning at every decision point.
+
+## The Code Workflow
+
+Write code to disk as `.py` files, execute, check output. No inline evaluation. Scripts stay on disk for audit trail.
+
+Subagents use relative paths only. Retry limit: max 10 per error, then stop and report.
+
+---
+
+# Part 2: Technical Setup in decision-lab
 
 ## Agent file format
 
@@ -33,107 +196,33 @@ skills:
 - Tools listed here override the global `opencode.json` permissions for this agent.
 - Skills reference directories under `opencode/skills/` that contain domain knowledge.
 
-## When to use parallel agents
-
-Parallelize when the task has multiple valid approaches and you want to explore them:
-
-- **Different modeling strategies**: Different priors, model structures, or hyperparameters on the same data
-- **Different data preparations**: Different feature engineering, column selection, or cleaning strategies
-- **Different analytical lenses**: Agents focus on different aspects of the same dataset
-- **Model diversity**: Run the same task with different LLMs to get diverse perspectives
-
-Do NOT parallelize when steps are strictly sequential, the task is simple enough for one agent, or there is only one correct approach.
-
-## Core principles for data science agent prompts
-
-These come from building and benchmarking the MMM agent system against vanilla coding agents. They are the difference between agents that produce useful analysis and agents that produce confident garbage.
-
-### 1. The goal is understanding, not a fitted model
-
-A running model that fit something is not the goal. The goal is understanding the data by means of mathematical modeling. When modeling approaches fail, that is a valuable insight. Agents must treat non-convergence, conflicting results, and degenerate problems as evidence, not as errors to hide or work around.
-
-Build this into every agent prompt: non-convergence is evidence about what doesn't work for this data. A model that refuses to fit is telling you something about the problem.
-
-### 2. Transparency about what failed and why
-
-Agents must always be transparent about what they tried, what failed, and why. This is part of the scientific process. Every attempt, every failure mode, every diagnostic should be documented. The orchestrator needs this information to make good decisions about whether to retry, simplify, or stop.
-
-A subagent that fails and writes a thorough diagnosis is more valuable than one that hacks its way to a "successful" fit by cutting corners.
-
-### 3. Never fabricate, mock, or fix parameter values
-
-Agents must NEVER:
-- Fabricate data or results to fill gaps
-- Use mock or placeholder values for model parameters
-- Fix parameters to convenient round numbers without explanation
-- Report metrics they didn't actually compute
-- Silently reduce model complexity to force convergence without disclosing it
-
-If a parameter can't be estimated, say so. If a metric can't be computed, say so. Fabricated results are worse than no results.
-
-### 4. Never put concrete numerical values in prompts
-
-Agent prompts are templates. NEVER include hard-coded numerical values for parameters, thresholds, or example data. Use placeholder syntax: `<VALUE>`, `<COLUMN_NAME>`, `<N_INSTANCES>`. If you need to show a code pattern, use placeholders for all values the agent should derive from the data.
-
-Keep examples minimal and structural. Show the shape of the code, not specific numbers. The agent should derive all values from the data and domain knowledge, not copy from the prompt.
-
-### 5. Know when to stop
-
-Every orchestrator prompt must include explicit criteria for when to stop trying and report that inference is not supported. This is the hardest part to get right, and the most important. Common stopping conditions:
-
-- All models fail to converge after N rounds
-- Converged models give conflicting recommendations (results are sensitive to arbitrary choices)
-- Prior sensitivity dominates (different reasonable priors give completely different answers, meaning the data has no say)
-- Too few observations to support the model complexity
-- The simplest possible model still fails
-
-When the agent stops, it should:
-- Explain what was tried and what failed
-- Identify the root cause (data limitation, model misspecification, identification problem)
-- Recommend specific experiments or data collection to resolve the issue
-- State clearly what CAN and what CANNOT be concluded
-
-Adding caveats to bad recommendations does not fix them. "We recommend X, with the caveat that we're uncertain" is wrong when X and not-X are equally supported by the data.
-
-### 6. Report uncertainty, not point estimates
-
-Agents should report confidence/credible intervals, not point estimates. "Channel X ROAS: 2.12 [1.74, 2.51]" is useful. "Channel X ROAS: 2.12" is not. When uncertainty is high, say so explicitly and explain what it means for decision-making.
-
 ## System prompt structure
 
 A data science agent prompt should have these sections:
 
-1. **Role and personality** — who the agent is and how it approaches work (methodical, transparent, honest about failures)
-2. **Task** — what this agent does in the workflow, as a numbered list
-3. **Critical rules** — non-negotiable constraints that prevent the most common failures. This is the most important section. Include library-specific rules (which imports are deprecated, what internal scaling the library does, what NOT to transform)
-4. **Working directory rules** — parallel agents run in isolated directories; they must use relative paths and never traverse up with `../`
-5. **Workflow phases** — step-by-step process with clear inputs and outputs per phase
-6. **Output requirements** — exact structure of `summary.md` so the consolidator can compare across instances. Include what to write when things succeed AND when they fail
+1. **Role and personality** — methodical, transparent, honest about failures
+2. **Task** — what this agent does, as a numbered list
+3. **Critical rules** — non-negotiable constraints including anti-fabrication. Include library-specific rules (deprecated imports, internal scaling, what NOT to transform)
+4. **Working directory rules** — relative paths, never `../`
+5. **Workflow phases** — step-by-step with clear inputs and outputs
+6. **Output requirements** — exact `summary.md` structure for BOTH success AND failure
 
 ## Orchestrator prompt pattern
 
-The orchestrator coordinates the workflow. Key elements:
-
 - Spawns parallel agents with the `parallel-agents` tool
-- Reviews consolidated results and makes go/no-go decisions based on objective criteria (not vibes)
-- Implements a retry protocol with a hard round limit
-- Detects conflicts across parallel results (e.g., do different approaches agree on the direction of effect?)
-- Writes both a business-facing report and a technical report
-- Has explicit "when to stop" criteria and a template for the "we cannot make recommendations" report
-
-The orchestrator should NOT specify implementation details that the subagent should decide (e.g., sampling parameters, random seeds). It specifies what to explore, not how.
+- Reviews consolidated results with objective conflict detection criteria
+- Implements retry protocol with hard round limit
+- Writes both business and technical reports
+- Has explicit "when to stop" criteria and a degenerate problem report template
+- Does NOT specify implementation details the subagent should decide
 
 ## Subagent prompt pattern
 
-Subagents do focused work. Key elements:
-
-- Receive a specific task from the orchestrator
-- Execute ONE strategy per run (don't autonomously simplify and retry; the orchestrator coordinates retries)
-- Write structured `summary.md` with identical sections across all instances
-- Report failures with thorough diagnosis, not just "it didn't work"
-- All file operations use relative paths within the working directory (never `../` or absolute paths)
-- Read data from `data/` (a copy placed in their instance directory)
-- Write all outputs to `.` or subdirectories (e.g., `./outputs/`, `./analysis_output/`)
+- Executes ONE strategy per run (does not autonomously simplify and retry)
+- Writes structured `summary.md` with identical sections across all instances
+- Reports failures with thorough diagnosis (symptom, likely cause, what might help)
+- All file operations use relative paths
+- Reads data from `data/` (a copy placed in the instance directory)
 
 ## How parallel agents work at runtime
 
@@ -164,8 +253,6 @@ work-dir/                              # The session root
 │       │   ├── data/                  # COPY of session data
 │       │   ├── summary.md             # Instance output
 │       │   └── [other outputs]
-│       ├── instance-2/
-│       │   └── [same structure]
 │       ├── instance-N/
 │       │   └── [same structure]
 │       └── consolidated_summary.md    # Written by consolidator (if >= 3 instances)
@@ -180,7 +267,7 @@ Each instance is fully isolated:
 - **Separate data copy**: The entire `data/` directory is copied into each instance. Instances cannot see each other's files.
 - **Filtered .opencode/**: Each instance gets only the tools, skills, and permissions declared in its agent frontmatter. The `parallel-agents` tool is always removed (instances cannot spawn their own subagents).
 - **Mode promotion**: The agent's `mode` is changed from `subagent` to `primary` in the instance copy, since it runs as the sole agent in its OpenCode session.
-- **Relative paths only**: Because instances run in `parallel/run-<ts>/instance-N/`, any use of `../` or absolute paths breaks isolation. Agent prompts must enforce relative paths.
+- **Relative paths only**: Because instances run in `parallel/run-<ts>/instance-N/`, any use of `../` or absolute paths breaks isolation.
 
 ### What the orchestrator sees after parallel runs
 
@@ -188,8 +275,6 @@ After all instances complete, the orchestrator can read:
 - `parallel/run-<ts>/instance-N/summary.md` — each instance's structured output
 - `parallel/run-<ts>/consolidated_summary.md` — the consolidator's comparison (if 3+ instances ran)
 - Any other files the instances wrote (models, plots, cleaned data, etc.)
-
-The orchestrator reads these to make decisions about next steps (proceed, retry with different strategies, or stop).
 
 ### The consolidator
 
@@ -202,7 +287,7 @@ The consolidator is auto-generated from the `summarizer_prompt` in the parallel 
 
 ### Multiple parallel runs in one session
 
-The orchestrator can invoke `parallel-agents` multiple times (e.g., first for data preparation, then for modeling). Each invocation creates a new `parallel/run-<timestamp>/` directory. The orchestrator reads results from one run to plan the next.
+The orchestrator can invoke `parallel-agents` multiple times (e.g., first for data preparation, then for modeling). Each invocation creates a new `parallel/run-<timestamp>/` directory.
 
 ## Parallel agent YAML config
 
@@ -242,24 +327,33 @@ summarizer_model: "anthropic/claude-sonnet-4"
 
 ### Design decisions
 
-**`subagent_suffix_prompt`**: Define exact output structure. The consolidator compares across instances, so all summaries must have the same sections. Be specific about what metrics and tables to include. Also specify what to write when the task fails (diagnosis sections).
+**`subagent_suffix_prompt`**: Define exact output structure. The consolidator compares across instances, so all summaries must have the same sections. Include sections for both success and failure.
 
-**`summarizer_prompt`**: The consolidator compares, it does not decide. It has read-only permissions and cannot run code. Its job is to lay out the facts for the orchestrator.
+**`summarizer_prompt`**: The consolidator compares, it does not decide. It has read-only permissions and cannot run code.
 
 **`failure_behavior`**:
 - `continue` — independent tasks (different modeling approaches)
 - `fail_fast` — dependent tasks (if one fails, others are useless)
 - `retry` — flaky operations (API calls, cloud compute)
 
-**`instance_models`**: Different LLMs per instance gives diversity in analytical approach. Particularly useful for data preparation where different models notice different things.
+**`instance_models`**: Different LLMs per instance gives diversity in analytical approach.
 
-## Common mistakes
+---
 
-- Writing agent prompts with concrete example values that the agent copies instead of deriving from data
+# Common Mistakes
+
+- Writing prompts with concrete example values that agents copy instead of reasoning
+- Not including anti-fabrication rules in every agent prompt
 - Not including "when to stop" criteria in the orchestrator
 - Not specifying what subagents should write when they fail
 - Letting subagents autonomously retry instead of reporting back to the orchestrator
 - Using absolute paths in subagent prompts (breaks parallel isolation)
 - Specifying implementation details in orchestrator prompts that the subagent should decide
-- Recommending actions without quantifying uncertainty
+- Recommending actions without computing them (napkin math)
 - Adding caveats to unsupported recommendations instead of refusing to recommend
+- Presenting one "best" answer instead of multiple scenarios
+- Using minor parameter tweaks as "diverse" parallel strategies
+- Allowing try/except patterns that silently substitute values
+- Not including library-specific rules in subagent prompts
+- Suggesting vague experiments ("collect more data") instead of specific ones
+- Skipping the technical report
