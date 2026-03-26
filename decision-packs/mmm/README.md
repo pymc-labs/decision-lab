@@ -14,6 +14,51 @@ You give it marketing spend data and a business question. It runs an orchestrato
 
 The orchestrator retries up to 3 rounds if models don't converge, with increasingly simplified configurations. If even the simplest model fails, it reports that the data doesn't support inference and recommends experiments.
 
+```mermaid
+graph LR
+    subgraph Inputs
+        D[Data]
+        P[Prompt]
+    end
+
+    D --> E[Data\nExploration]
+    P --> E
+
+    E --> DP
+
+    subgraph DP[Data Preparation]
+        DP1[Agent 1]
+        DP2[Agent 2]
+    end
+
+    DP --> MP[Hypotheses\n& Planning]
+
+    MP --> M
+
+    subgraph M[Modeling]
+        M1[Agent 1]
+        M2[Agent 2]
+        M3[...]
+        MN[Agent N]
+    end
+
+    M --> J{Judgement}
+    J -->|conflicting\nor failed| MP
+    J -->|consistent| A[Analysis]
+
+    A --> O
+
+    subgraph Outputs
+        O[Reports\nFigures\nRecommendations]
+    end
+
+    style DP fill:#4285f4,color:#fff
+    style M fill:#4285f4,color:#fff
+    style J fill:#333,color:#fff
+```
+
+*Modeling retries up to 3 times with escalating simplification (Kim & Liu, [Towards a science of scaling agent systems](https://arxiv.org/abs/2503.00823), 2026).*
+
 ## Quick start
 
 An example dataset is included in `example-data/`:
