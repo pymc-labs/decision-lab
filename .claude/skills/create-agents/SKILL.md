@@ -7,7 +7,7 @@ description: Design agent system prompts, parallel architectures, and methodolog
 
 This skill covers how to write agent `.md` files and parallel-agent YAML configs for decision-packs that do data science work, AND the methodology that makes the difference between agents that produce useful analysis and agents that produce confident garbage.
 
-The principles here come from building and benchmarking the MMM (Marketing Mix Modeling) agent system. They apply to any data science domain where agents explore analytical decisions, fit models, and make recommendations.
+The principles here come from building and benchmarking the MMM (Marketing Mix Modeling) agent system. They should apply to most data science domains where agents explore analytical decisions, fit models, and make recommendations.
 
 ---
 
@@ -56,9 +56,9 @@ After Round 1 failure:
 
 **Round 2: Targeted fixes** based on Round 1 diagnosis.
 
-**Round 3: Aggressive simplification** (full pooling, grouping inputs, fewer parameters). Results from heavily simplified approaches have LIMITED value — they show directional patterns but cannot support specific recommendations. The report MUST explain what was lost.
+**Round 3: Aggressive simplification**. Results from heavily simplified approaches often have LIMITED value — they show directional patterns but cannot support specific recommendations. The report MUST explain what was lost and be EXTREMELY cautious on making recommendations.
 
-**After Round 3: STOP.** Non-negotiable. Write the report with whatever evidence was gathered.
+**After Round 3: STOP.** Non-negotiable. Write the report with whatever evidence was gathered. Refrain from making recommendations other than those that would lead to more/better data.
 
 Stop immediately without further rounds if the simplest possible approach was already tried and still failed.
 
@@ -115,14 +115,14 @@ Too many skills or poorly written skills DEGRADE performance. Skills are guardra
 
 **Model uncertainty** (from posterior/confidence intervals): "Factor X has effect 2.1 [1.7, 2.5]." Supports decision-making — wide intervals mean proceed with caution.
 
-**Structural uncertainty** (from model disagreement): "Different approaches give effect from 0.2 to 20." Does NOT support decision-making. You cannot choose between opposite conclusions by adding caveats.
+**Structural uncertainty** (from model disagreement): "Different approaches give effect from <STRICTLY NEGATIVE EFFECT> to <STRICTLY POSITIVE EFFECT>." Does NOT support decision-making. You cannot choose between opposite conclusions by adding caveats.
 
 ### Recommendation constraints
 
 - Never recommend actions you haven't computed or simulated
-- No napkin math — don't multiply a metric by a budget number; run the actual optimization
+- No napkin math — don't just multiply a metric by some number to obtain an action-recommendation; run an actual optimization if possible
 - Must discuss MULTIPLE scenarios at different constraint levels, not one "best" answer
-- Recommendations must be realistic and domain-sensible (don't suggest concentrating all resources in one area)
+- Recommendations must be realistic and domain-sensible (e.g. concentrating all resources in one area is nonsensical and will not be accepted by human decision makers)
 - Always report intervals, never point estimates alone
 - Base actionable recommendations on conservative scenarios, not unconstrained optimizations
 
@@ -138,9 +138,10 @@ A degenerate problem is one where multiple valid approaches give opposite conclu
 
 The agent must recommend SPECIFIC experiments:
 - Holdout tests: pause or vary one factor while others continue
-- Geographic experiments: vary factors across matched regions
+- Geographic/segment experiments: vary factors across matched regions or other domain-related segments
 - Controlled variation: randomly vary inputs by ±N% to create identifying variation
 - Time-based experiments: measure before/after a deliberate change
+- Be creative with regard to experiments, think what other experiments would make sense for the problem given
 
 These must be realistic for the domain — not experiments that would never be approved.
 
@@ -148,7 +149,7 @@ These must be realistic for the domain — not experiments that would never be a
 
 Parallel approaches must be STRUCTURALLY diverse: different model forms, different data prep, different priors. Minor parameter tweaks waste parallel capacity.
 
-Use different LLMs per instance for genuine diversity. The orchestrator can combine data prep diversity with modeling diversity (pipe different data prep outputs into different models).
+You may use different LLMs per instance for genuine diversity. The orchestrator can combine data prep diversity with modeling diversity (pipe different data prep outputs into different models). This is NOT a necessity however.
 
 Each instance runs in isolation — own data copy, own config, relative paths only.
 
