@@ -64,3 +64,6 @@ Thumbs.db
 
 # Test session artifacts (large binary files)
 sandbox/test-sessions/
+
+# A/B testing
+ab_testing/
