@@ -27,7 +27,7 @@ flowchart TD
     DP --> HP[Hypotheses & Planning]
     HP --> M
 
-    subgraph M [Modeling — parallel]
+    subgraph M [Modeling — parallel, up to 3 rounds]
         M1[Agent 1]
         M2[Agent 2]
         M3[Agent 3]
@@ -36,7 +36,7 @@ flowchart TD
 
     M --> J{Judgement}
     J -- consistent --> A[Analysis]
-    J -- conflicting / failed --> HP
+    J -- conflicting / failed --> STOP[Cannot recommend.\nPropose experiments.]
     A --> O[Reports · Figures · Recommendations]
 ```
 
