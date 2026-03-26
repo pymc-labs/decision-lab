@@ -15,7 +15,7 @@ You give it marketing spend data and a business question. It runs an orchestrato
 The orchestrator retries up to 3 rounds if models don't converge, with increasingly simplified configurations. If even the simplest model fails, it reports that the data doesn't support inference and recommends experiments.
 
 ```mermaid
-graph TD
+flowchart TD
     D[Data + Prompt] --> E[Data Exploration]
     E --> DP
 
