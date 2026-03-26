@@ -1,7 +1,3 @@
----
-name: Design data science agent systems
-description: Design agent system prompts, parallel architectures, and methodological guardrails for data science decision-packs. Use when creating orchestrator, subagent, or parallel agent systems for analytical workflows. Covers anti-fabrication rules, epistemic humility, when to stop, conflict detection, uncertainty reporting, retry protocols, prompt design principles, and the decision-lab runtime mechanics.
----
 
 # Designing Agent Systems for Data Science
 

@@ -1,7 +1,3 @@
----
-name: Create decision-pack Interactively
-description: Guide a human through creating a dlab decision-pack by asking questions and then calling generate_dpack(). Use this skill whenever the user wants to create, set up, or scaffold a new decision-pack, agent environment, or Docker-sandboxed config for dlab — even if they don't use the word "decision-pack" explicitly. Trigger on phrases like "set up a new agent", "create an environment for X", "I want to run opencode for Y", "scaffold a project", or "make a new config".
----
 
 # Create decision-pack Interactively
 

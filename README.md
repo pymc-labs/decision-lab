@@ -1,3 +1,5 @@
+<img src="docs/_static/dai.png" alt="decision-lab logo" width="200">
+
 # decision-lab
 
 Coding agents write good code. They make bad analytical decisions.

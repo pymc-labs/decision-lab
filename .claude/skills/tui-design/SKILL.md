@@ -47,7 +47,7 @@ Checkbox groups use a `.cb-group` wrapper with the same treatment:
 
 ## Checkboxes
 
-Use `FlavorCheckbox` (subclass of `Checkbox`) with custom glyphs:
+Use `DpackCheckbox` (subclass of `Checkbox`) with custom glyphs:
 - Unchecked: `▢`
 - Checked: `▣`
 - Override `BUTTON_LEFT = ""`, `BUTTON_RIGHT = ""`
@@ -73,7 +73,7 @@ These only fire when the focused widget doesn't consume the key (Input consumes 
 
 ### Tab Behavior
 - **Normal widgets**: Tab moves to next focusable element (default Textual behavior)
-- **Inside `.cb-group`**: Tab jumps OUT of the container to the next element outside. Implemented via `FlavorCheckbox.action_tab_out()` which walks ancestors to find the `.cb-group` parent, then focuses the first widget after it in `screen.focus_chain`
+- **Inside `.cb-group`**: Tab jumps OUT of the container to the next element outside. Implemented via `DpackCheckbox.action_tab_out()` which walks ancestors to find the `.cb-group` parent, then focuses the first widget after it in `screen.focus_chain`
 - **Selection widgets**: Show "Tab to continue" hint via `:focus-within`:
 ```css
 .option-hint { display: none; color: $text-muted; text-style: italic; height: 1; }
