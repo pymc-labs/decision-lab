@@ -17,26 +17,29 @@ The orchestrator retries up to 3 rounds if models don't converge, with increasin
 ```mermaid
 flowchart TD
     D[Data + Prompt] --> E[Data Exploration]
-    E --> DP
+    E --> DP1[Agent 1] & DP2[Agent 2]
 
-    subgraph DP [Data Preparation — parallel]
-        DP1[Agent 1]
-        DP2[Agent 2]
+    subgraph prep [Data Preparation — parallel]
+        DP1
+        DP2
     end
 
-    DP --> HP[Hypotheses & Planning]
-    HP --> M
+    DP1 & DP2 --> HP[Hypotheses & Planning]
 
-    subgraph M [Modeling — parallel, up to 3 rounds]
-        M1[Agent 1]
-        M2[Agent 2]
-        M3[Agent 3]
-        MN[Agent N]
+    HP --> MA1[Agent 1] & MA2[Agent 2] & MA3[Agent 3] & MAN[Agent N]
+
+    subgraph model [Modeling — parallel]
+        MA1
+        MA2
+        MA3
+        MAN
     end
 
-    M --> J{Judgement}
+    MA1 & MA2 & MA3 & MAN --> J{Judgement}
+
     J -- consistent --> A[Analysis]
-    J -- conflicting / failed --> STOP[Cannot recommend.\nPropose experiments.]
+    J -. "conflicting / failed\n(up to 3 rounds)" .-> HP
+
     A --> O[Reports · Figures · Recommendations]
 ```
 
