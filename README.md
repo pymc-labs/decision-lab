@@ -22,7 +22,7 @@ That's the behavior we want: an agent that knows when to stop.
 
 ## How it works
 
-You package everything an agent needs into a **decision-pack**: a frozen Docker environment, agent prompts, domain skills, and tools. The agent explores multiple approaches instead of committing to the first one that runs. A consolidator compares results across approaches and produces a single report with a convergence assessment.
+You package everything an agent needs into a **decision-pack**: agent prompts, domain skills, tools, and a Docker environment. The agent explores multiple approaches instead of committing to the first one that runs, and consolidates the results into a report.
 
 **Skills** constrain the agent to methodologically sound paths — mandatory diagnostics, preferred model structures, informative priors.
 
