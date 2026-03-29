@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from dlab.model_fallback import process_opencode_dir
 from dlab.parallel_tool import PARALLEL_AGENTS_SOURCE
 
 
@@ -165,12 +166,19 @@ def copy_hook_scripts(config: dict[str, Any], work_dir: str) -> None:
         shutil.copy2(src, hooks_dest / src.name)
 
 
-def setup_opencode_config(config_dir: str, work_dir: str) -> None:
+def setup_opencode_config(
+    config_dir: str,
+    work_dir: str,
+    orchestrator_model: str | None = None,
+    env_file: str | None = None,
+    no_sandboxing: bool = False,
+) -> list[str]:
     """
     Set up opencode configuration in work directory.
 
-    Copies the opencode config from decision-pack, generates parallel-agents.ts
-    if needed, and sets up package.json dependencies.
+    Copies the opencode config from decision-pack, validates model names,
+    applies provider fallback, generates parallel-agents.ts if needed,
+    and sets up package.json dependencies.
 
     Parameters
     ----------
@@ -178,11 +186,30 @@ def setup_opencode_config(config_dir: str, work_dir: str) -> None:
         Path to the decision-pack config directory.
     work_dir : str
         Path to the work directory.
+    orchestrator_model : str | None
+        The orchestrator's model. If provided, agent configs referencing
+        providers without API keys in env_file will be replaced with this.
+    env_file : str | None
+        Path to .env file for checking available provider keys.
+    no_sandboxing : bool
+        If True, also check os.environ for API keys.
+
+    Returns
+    -------
+    list[str]
+        Messages from model validation and fallback (warnings, replacements).
     """
     copy_opencode_config(config_dir, work_dir)
 
-    # Generate parallel-agents.ts if decision-pack has parallel_agents/ configs
+    # Validate model names and apply provider fallback
+    messages: list[str] = []
     opencode_dest: Path = Path(work_dir) / ".opencode"
+    if orchestrator_model:
+        messages = process_opencode_dir(
+            str(opencode_dest), orchestrator_model, env_file, no_sandboxing,
+        )
+
+    # Generate parallel-agents.ts if decision-pack has parallel_agents/ configs
     parallel_configs_dir: Path = opencode_dest / "parallel_agents"
     if parallel_configs_dir.exists() and any(parallel_configs_dir.glob("*.yaml")):
         tools_dir: Path = opencode_dest / "tools"
@@ -201,6 +228,8 @@ def setup_opencode_config(config_dir: str, work_dir: str) -> None:
         else:
             pkg = {"dependencies": {"yaml": "^2.0.0"}}
             package_json_path.write_text(json.dumps(pkg, indent=2))
+
+    return messages
 
 
 def save_state(work_dir: str, state: dict[str, Any]) -> None:
@@ -256,6 +285,9 @@ def create_session(
     data_dir: str | list[str] | None,
     work_dir: str | None = None,
     base_dir: str | None = None,
+    orchestrator_model: str | None = None,
+    env_file: str | None = None,
+    no_sandboxing: bool = False,
 ) -> dict[str, Any]:
     """
     Create a new session with work directory.
@@ -270,11 +302,18 @@ def create_session(
         Explicit work directory path. If None, auto-generates one.
     base_dir : str | None
         Base directory for auto-generated work dirs. Defaults to current directory.
+    orchestrator_model : str | None
+        The orchestrator's model for provider fallback.
+    env_file : str | None
+        Path to .env file for checking available provider keys.
+    no_sandboxing : bool
+        If True, also check os.environ for API keys.
 
     Returns
     -------
     dict[str, Any]
-        Session state including work_dir, config_dir, dpack_name, data_dir, status.
+        Session state including work_dir, config_dir, dpack_name, data_dir,
+        status, and model_fallback_messages.
 
     Raises
     ------
@@ -317,7 +356,10 @@ def create_session(
         else:
             copy_data_to_workdir(data_dir, str(work_path))
 
-    setup_opencode_config(config["config_dir"], str(work_path))
+    fallback_messages: list[str] = setup_opencode_config(
+        config["config_dir"], str(work_path), orchestrator_model, env_file,
+        no_sandboxing,
+    )
     copy_hook_scripts(config, str(work_path))
 
     data_dir_str: str = ""
@@ -333,6 +375,7 @@ def create_session(
         "dpack_name": config["name"],
         "data_dir": data_dir_str,
         "status": "created",
+        "model_fallback_messages": fallback_messages,
     }
 
     save_state(str(work_path), state)

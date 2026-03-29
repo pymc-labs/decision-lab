@@ -23,6 +23,7 @@ from rich.spinner import Spinner
 from rich.text import Text
 
 from dlab.config import load_dpack_config
+from dlab.model_fallback import preflight_check
 
 # Note: Console must be created per-call (not module-level) so pytest capsys
 # can capture output. Use _make_console() in command functions.
@@ -373,6 +374,19 @@ def cmd_run(args: argparse.Namespace) -> int:
     console: Console = _make_console()
 
     model: str = args.model if args.model else config["default_model"]
+    fallback_msgs: list[str] = []
+
+    # Pre-flight model validation (before any session/Docker work)
+    pf_errors, pf_warnings = preflight_check(
+        model, config["config_dir"], args.env_file, no_sandboxing,
+    )
+    if pf_errors:
+        for err in pf_errors:
+            console.print(f"[red]Error:[/red] {err}")
+        return 1
+    if pf_warnings:
+        for warn in pf_warnings:
+            console.print(f"[yellow]Model fallback:[/yellow] {warn}")
 
     if continue_mode:
         continue_dir = Path(args.continue_dir).resolve()
@@ -408,7 +422,10 @@ def cmd_run(args: argparse.Namespace) -> int:
                     ["sudo", "rm", "-rf", str(opencode_dir)],
                     check=True,
                 )
-        setup_opencode_config(config["config_dir"], work_dir)
+        fallback_msgs: list[str] = setup_opencode_config(
+            config["config_dir"], work_dir, model, args.env_file,
+            no_sandboxing,
+        )
 
         # Refresh hook scripts from decision-pack
         hooks_dest: Path = Path(work_dir) / "_hooks"
@@ -421,11 +438,15 @@ def cmd_run(args: argparse.Namespace) -> int:
                 config,
                 args.data,
                 work_dir=args.work_dir,
+                orchestrator_model=model,
+                env_file=args.env_file,
+                no_sandboxing=no_sandboxing,
             )
         except ValueError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
         work_dir = state["work_dir"]
+        fallback_msgs = state.get("model_fallback_messages", [])
     image_name: str = config["docker_image_name"]
     container_name: str = Path(work_dir).name  # Use session dir basename
 
