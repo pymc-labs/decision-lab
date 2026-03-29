@@ -10,8 +10,6 @@ Ask a coding agent to analyze your marketing data and it will fit a model, gener
 
 decision-lab runs your analysis multiple ways — different models, different assumptions — and checks whether they converge. If they converge on the same answer, you can trust it. If they don't, it tells you what it doesn't know and what experiments would resolve the uncertainty.
 
-Domain expertise is loaded through **decision-packs** — pluggable configurations that specialize the agent for a specific analytical domain. The first decision-pack targets Bayesian marketing mix modeling. Finance, forecasting, and other domains can be added by writing a new pack.
-
 <!-- TODO: Architecture diagram — orchestrator → parallel subagents → consolidator.
      Show: (1) single prompt + dataset enter the orchestrator,
      (2) fan-out to N parallel subagents, each with a different modeling approach,
@@ -33,6 +31,8 @@ You package everything an agent needs into a **decision-pack**: agent prompts, d
 **Parallel subagents** fan out with different approaches to the same problem (different priors, different data prep, different model structures). If results converge across approaches, you have evidence the conclusions are robust. If they diverge, the consolidator flags the disagreement and identifies what drives it. Supports running compute-heavy tasks on [Modal](https://modal.com).
 
 **Frozen environments** pin the Docker image so the agent codes against the right library versions. No "works on my laptop."
+
+Domain expertise is loaded through **decision-packs** — pluggable configurations that specialize the agent for a specific analytical domain. The first decision-pack targets Bayesian marketing mix modeling. Finance, forecasting, and other domains can be added by writing a new pack.
 
 ## Install
 
