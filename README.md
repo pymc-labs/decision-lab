@@ -2,11 +2,15 @@
 
 # decision-lab
 
+A harness for agentic data science.
+
 Coding agents write good code. They make bad analytical decisions.
 
 Ask a coding agent to analyze your marketing data and it will fit a model, generate charts, and recommend budget reallocations — all in clean code. The problem is the model might be wrong, the assumptions unchecked, and the recommendations unsupported. Nobody notices for months.
 
 decision-lab runs your analysis multiple ways — different models, different assumptions — and checks whether they converge. If they converge on the same answer, you can trust it. If they don't, it tells you what it doesn't know and what experiments would resolve the uncertainty.
+
+Domain expertise is loaded through **decision-packs** — pluggable configurations that specialize the agent for a specific analytical domain. The first decision-pack targets Bayesian marketing mix modeling. Finance, forecasting, and other domains can be added by writing a new pack.
 
 <!-- TODO: Architecture diagram — orchestrator → parallel subagents → consolidator.
      Show: (1) single prompt + dataset enter the orchestrator,
