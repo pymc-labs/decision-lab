@@ -12,6 +12,7 @@ import shutil
 import tempfile
 import zipfile
 from collections.abc import Callable
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -20,57 +21,15 @@ import httpx
 import yaml
 
 
-KNOWN_MODELS: list[str] = [
-    # OpenCode
-    "opencode/big-pickle",
-    # Anthropic
-    "anthropic/claude-sonnet-4-0",
-    "anthropic/claude-sonnet-4-5",
-    "anthropic/claude-sonnet-4-6",
-    "anthropic/claude-opus-4-0",
-    "anthropic/claude-opus-4-5",
-    "anthropic/claude-opus-4-6",
-    "anthropic/claude-haiku-4-5",
-    # OpenAI
-    "openai/gpt-4.1",
-    "openai/gpt-5",
-    "openai/gpt-5-mini",
-    "openai/gpt-5.1",
-    "openai/gpt-5.1-codex",
-    "openai/gpt-5.2",
-    "openai/gpt-5.2-codex",
-    # Google
-    "google/gemini-2.0-flash",
-    "google/gemini-2.0-flash-lite",
-    "google/gemini-2.5-flash",
-    "google/gemini-2.5-flash-lite",
-    "google/gemini-2.5-pro",
-    "google/gemini-3-flash-preview",
-    "google/gemini-3-pro-preview",
-    # DeepSeek
-    "deepseek/deepseek-chat",
-    "deepseek/deepseek-v3.2",
-    # Mistral
-    "mistralai/mistral-large-3-675b-instruct-2512",
-    "mistralai/devstral-small-2-24b-instruct-2512",
-    # Meta
-    "meta/llama-4-maverick-17b-128e-instruct",
-    "meta/llama-3.1-405b-instruct",
-]
+def _load_bundled_models() -> dict[str, Any]:
+    """Load the bundled models.dev fixture from package data."""
+    data_text: str = files("dlab.data").joinpath("models.json").read_text()
+    return json.loads(data_text)
 
-KNOWN_PROVIDER_ENVS: dict[str, list[str]] = {
-    "anthropic": ["ANTHROPIC_API_KEY"],
-    "openai": ["OPENAI_API_KEY"],
-    "opencode": ["OPENCODE_API_KEY"],
-    "google": ["GOOGLE_GENERATIVE_AI_API_KEY"],
-    "deepseek": ["DEEPSEEK_API_KEY"],
-    "mistralai": ["MISTRAL_API_KEY"],
-    "groq": ["GROQ_API_KEY"],
-    "xai": ["XAI_API_KEY"],
-    "fireworks-ai": ["FIREWORKS_API_KEY"],
-    "togetherai": ["TOGETHER_API_KEY"],
-    "openrouter": ["OPENROUTER_API_KEY"],
-}
+
+_BUNDLED: dict[str, Any] = _load_bundled_models()
+KNOWN_MODELS: list[str] = _BUNDLED["models"]
+KNOWN_PROVIDER_ENVS: dict[str, list[str]] = _BUNDLED["provider_envs"]
 
 CACHE_DIR: Path = Path.home() / ".cache" / "dlab"
 MODEL_CACHE_FILE: Path = CACHE_DIR / "models.json"

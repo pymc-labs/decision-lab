@@ -39,3 +39,6 @@ dlab = "dlab.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["dlab*"]
+
+[tool.setuptools.package-data]
+"dlab.data" = ["*.json"]

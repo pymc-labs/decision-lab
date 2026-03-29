@@ -169,10 +169,10 @@ class TestPreflightCheck:
         env_file.write_text("ANTHROPIC_API_KEY=sk-123\n")
 
         errors, warnings = preflight_check(
-            "anthropic/claude-sonnet-4", str(dpack), str(env_file),
+            "anthropic/claude-sonet-4", str(dpack), str(env_file),
         )
         assert len(errors) == 1
-        assert "anthropic/claude-sonnet-4" in errors[0]
+        assert "anthropic/claude-sonet-4" in errors[0]
         assert "did you mean" in errors[0]
 
     def test_missing_agent_key_is_warning_with_hint(self, tmp_path: Path) -> None:
