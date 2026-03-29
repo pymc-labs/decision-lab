@@ -17,7 +17,7 @@ import os
 import re
 from pathlib import Path
 
-from dlab.create_dpack import KNOWN_MODELS, KNOWN_PROVIDER_ENVS, get_provider_env_vars
+from dlab.create_dpack import KNOWN_PROVIDER_ENVS, get_model_list, get_provider_env_vars
 
 
 # Matches provider/model-name patterns (e.g. "anthropic/claude-sonnet-4-5")
@@ -178,6 +178,21 @@ def preflight_check(
     env_vars.update(parse_env_file(env_file))
     available: set[str] = get_available_providers(env_vars)
 
+    # Validate orchestrator model name
+    all_known: list[str] = get_model_list()
+    known: set[str] = set(all_known)
+    if orchestrator_model not in known:
+        suggestions: list[str] = difflib.get_close_matches(
+            orchestrator_model, all_known, n=1, cutoff=0.6,
+        )
+        if suggestions:
+            errors.append(
+                f"Unknown model {orchestrator_model} — did you mean {suggestions[0]}?"
+            )
+        else:
+            errors.append(f"Unknown model {orchestrator_model}")
+        return errors, warnings
+
     # Check orchestrator model's provider key
     orchestrator_provider: str = orchestrator_model.split("/")[0]
     if orchestrator_provider in KNOWN_PROVIDER_ENVS and orchestrator_provider not in available:
@@ -195,12 +210,11 @@ def preflight_check(
 
     all_models: list[str] = _collect_models_from_dir(opencode_dir)
 
-    # Validate model names exist in known list
-    known: set[str] = set(KNOWN_MODELS)
+    # Validate agent model names exist in known list
     for model in all_models:
         if model not in known:
             suggestions: list[str] = difflib.get_close_matches(
-                model, KNOWN_MODELS, n=1, cutoff=0.6,
+                model, all_known, n=1, cutoff=0.6,
             )
             if suggestions:
                 errors.append(
