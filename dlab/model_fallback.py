@@ -182,12 +182,13 @@ def preflight_check(
     all_known: list[str] = get_model_list()
     known: set[str] = set(all_known)
     if orchestrator_model not in known:
-        suggestions: list[str] = difflib.get_close_matches(
-            orchestrator_model, all_known, n=1, cutoff=0.6,
-        )
+        suggestions: list[str] = sorted(difflib.get_close_matches(
+            orchestrator_model, all_known, n=3, cutoff=0.6,
+        ))
         if suggestions:
+            alt: str = ", ".join(suggestions)
             errors.append(
-                f"Unknown model {orchestrator_model} — did you mean {suggestions[0]}?"
+                f"Unknown model {orchestrator_model} — did you mean: {alt}?"
             )
         else:
             errors.append(f"Unknown model {orchestrator_model}")
@@ -213,12 +214,13 @@ def preflight_check(
     # Validate agent model names exist in known list
     for model in all_models:
         if model not in known:
-            suggestions: list[str] = difflib.get_close_matches(
-                model, all_known, n=1, cutoff=0.6,
-            )
+            suggestions: list[str] = sorted(difflib.get_close_matches(
+                model, all_known, n=3, cutoff=0.6,
+            ))
             if suggestions:
+                alt: str = ", ".join(suggestions)
                 errors.append(
-                    f"Unknown model {model} — did you mean {suggestions[0]}?"
+                    f"Unknown model {model} — did you mean: {alt}?"
                 )
             else:
                 errors.append(f"Unknown model {model}")
