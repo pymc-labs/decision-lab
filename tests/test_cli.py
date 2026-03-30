@@ -58,9 +58,9 @@ class TestCreateParser:
             "--dpack", "/path/to/dpack",
             "--data", "/path/to/data",
             "--prompt", "test",
-            "--model", "anthropic/claude-opus-4",
+            "--model", "anthropic/claude-opus-4-0",
         ])
-        assert args.model == "anthropic/claude-opus-4"
+        assert args.model == "anthropic/claude-opus-4-0"
 
     def test_run_mode_with_prompt_file(self) -> None:
         """Parser should accept --prompt-file argument."""
@@ -310,7 +310,7 @@ class TestCmdRun:
         assert result == 0
 
         captured = capsys.readouterr()
-        assert "anthropic/claude-sonnet-4" in captured.out
+        assert "anthropic/claude-sonnet-4-0" in captured.out
 
     def test_run_uses_override_model(
         self, dpack_config_dir: Path, data_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -321,7 +321,7 @@ class TestCmdRun:
             "--dpack", str(dpack_config_dir),
             "--data", str(data_dir),
             "--prompt", "test",
-            "--model", "anthropic/claude-opus-4",
+            "--model", "anthropic/claude-opus-4-0",
             "--work-dir", str(tmp_path / "work"),
         ])
         result: int = cmd_run(args)
@@ -330,7 +330,11 @@ class TestCmdRun:
     def test_no_env_file_warning(
         self, dpack_config_dir: Path, data_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """Should warn when no --env-file and no .env in decision-pack."""
+        """Should error when no --env-file and no .env in decision-pack."""
+        # Remove .env so preflight catches missing orchestrator key
+        env_path: Path = dpack_config_dir / ".env"
+        if env_path.exists():
+            env_path.unlink()
         parser = create_parser()
         args = parser.parse_args([
             "--dpack", str(dpack_config_dir),
@@ -338,9 +342,10 @@ class TestCmdRun:
             "--prompt", "test",
             "--work-dir", str(tmp_path / "work"),
         ])
-        cmd_run(args)
+        result: int = cmd_run(args)
+        assert result == 1
         captured = capsys.readouterr()
-        assert "No --env-file provided" in captured.out
+        assert "requires an API key" in captured.out
 
     def test_env_file_autodetect_no_warning(
         self, dpack_config_dir: Path, data_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]

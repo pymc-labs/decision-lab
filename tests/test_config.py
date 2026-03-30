@@ -76,7 +76,7 @@ class TestLoadConfigYaml:
         assert config["name"] == "test-dpack"
         assert config["description"] == "Test decision-pack for unit tests"
         assert config["docker_image_name"] == "test-dpack-img"
-        assert config["default_model"] == "anthropic/claude-sonnet-4"
+        assert config["default_model"] == "anthropic/claude-sonnet-4-0"
 
     def test_invalid_yaml(self, tmp_path: Path) -> None:
         """Invalid YAML should raise ValueError."""
@@ -141,7 +141,7 @@ class TestLoadDpackConfig:
             "name": "test",
             "description": "test",
             "docker_image_name": "test-img",
-            "default_model": "anthropic/claude-sonnet-4",
+            "default_model": "anthropic/claude-sonnet-4-0",
             "opencode_version": "1.1.25",
         }
         with open(dpack / "config.yaml", "w") as f:
@@ -163,7 +163,7 @@ def _make_dpack_dir(tmp_path: Path, hooks_yaml: str = "") -> Path:
         "name: test\n"
         "description: test\n"
         "docker_image_name: test-img\n"
-        "default_model: anthropic/claude-sonnet-4\n"
+        "default_model: anthropic/claude-sonnet-4-0\n"
     )
     if hooks_yaml:
         config_yaml += hooks_yaml

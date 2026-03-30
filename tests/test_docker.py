@@ -245,20 +245,20 @@ class TestBuildRunnerScript:
 
     def test_basic_script(self) -> None:
         """Script should have opencode command and tee."""
-        script: str = build_runner_script("/.prompt.txt", "anthropic/claude-sonnet-4", "main")
+        script: str = build_runner_script("/.prompt.txt", "anthropic/claude-sonnet-4-0", "main")
 
         assert "#!/bin/bash" in script
         assert "set -o pipefail" in script
-        assert 'opencode run --format json --log-level DEBUG --model "anthropic/claude-sonnet-4"' in script
+        assert 'opencode run --format json --log-level DEBUG --model "anthropic/claude-sonnet-4-0"' in script
         assert "tee /_opencode_logs/main.log" in script
 
     def test_script_model_and_prefix(self) -> None:
         """Model and log prefix should appear correctly in script."""
         script: str = build_runner_script(
-            "/.prompt.txt", "anthropic/claude-opus-4", "instance-3",
+            "/.prompt.txt", "anthropic/claude-opus-4-0", "instance-3",
         )
 
-        assert '--model "anthropic/claude-opus-4"' in script
+        assert '--model "anthropic/claude-opus-4-0"' in script
         assert "tee /_opencode_logs/instance-3.log" in script
 
 

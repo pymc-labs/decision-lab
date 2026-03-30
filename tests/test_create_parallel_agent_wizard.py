@@ -25,7 +25,7 @@ def dpack(tmp_path: Path) -> Path:
         "name: test-dpack\n"
         "description: Test\n"
         "docker_image_name: test-img\n"
-        "default_model: anthropic/claude-sonnet-4\n"
+        "default_model: anthropic/claude-sonnet-4-0\n"
     )
     (tmp_path / "docker").mkdir()
     (tmp_path / "docker" / "Dockerfile").write_text("FROM python:3.11-slim\n")
@@ -186,4 +186,4 @@ class TestParallelAgentScreen:
         async with app.run_test(size=(120, 80)) as pilot:
             await pilot.pause(delay=PAUSE)
             model_val: str = app.screen.query_one("#summarizer-model-input").value
-            assert model_val == "anthropic/claude-sonnet-4"
+            assert model_val == "anthropic/claude-sonnet-4-0"

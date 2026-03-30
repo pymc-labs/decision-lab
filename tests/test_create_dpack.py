@@ -99,7 +99,7 @@ class TestGenerateDpack:
             "name": "my-project",
             "description": "My project description",
             "docker_image_name": "my-img",
-            "default_model": "anthropic/claude-opus-4",
+            "default_model": "anthropic/claude-opus-4-0",
         }
         generate_dpack(tmp_path, config)
 
@@ -109,7 +109,7 @@ class TestGenerateDpack:
         assert parsed["name"] == "my-project"
         assert parsed["description"] == "My project description"
         assert parsed["docker_image_name"] == "my-img"
-        assert parsed["default_model"] == "anthropic/claude-opus-4"
+        assert parsed["default_model"] == "anthropic/claude-opus-4-0"
         assert "# hooks:" in content
         assert "#   pre-run: setup.sh" in content
         assert "#   post-run: cleanup.sh" in content
@@ -813,7 +813,7 @@ class TestGetProviderEnvVars:
 
     def test_known_provider(self) -> None:
         from dlab.create_dpack import get_provider_env_vars
-        result: list[str] = get_provider_env_vars("anthropic/claude-sonnet-4")
+        result: list[str] = get_provider_env_vars("anthropic/claude-sonnet-4-0")
         assert "ANTHROPIC_API_KEY" in result
 
     def test_opencode_provider(self) -> None:
@@ -875,7 +875,7 @@ class TestEnvExample:
     """Tests for .env.example and .gitignore generation."""
 
     def test_env_example_generated(self, tmp_path: Path) -> None:
-        generate_dpack(tmp_path, {"name": "env-test", "default_model": "anthropic/claude-sonnet-4"})
+        generate_dpack(tmp_path, {"name": "env-test", "default_model": "anthropic/claude-sonnet-4-0"})
         env_file: Path = tmp_path / "env-test" / ".env.example"
         assert env_file.exists()
         content: str = env_file.read_text()
