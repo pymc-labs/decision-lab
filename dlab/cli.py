@@ -632,7 +632,16 @@ def cmd_run(args: argparse.Namespace) -> int:
         nonlocal container_stopped
         if not container_stopped:
             console.print(f"\n{I}[yellow]Interrupted. Stopping container...[/yellow]")
-            stop_container(container_name)
+            # Use docker kill for immediate stop (docker stop has a 10s grace period
+            # and sys.exit might not wait for it)
+            subprocess.run(
+                ["docker", "kill", container_name],
+                capture_output=True,
+            )
+            subprocess.run(
+                ["docker", "rm", container_name],
+                capture_output=True,
+            )
             container_stopped = True
         sys.exit(128 + signum)
 
