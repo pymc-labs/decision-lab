@@ -24,7 +24,10 @@ from textual.widgets import (
 )
 from textual.widgets.option_list import Option
 
+from textual import work
+
 from dlab.config import load_dpack_config
+from dlab.create_dpack import filter_models, get_model_list
 from dlab.create_dpack_wizard import DpackCheckbox, FormScroll
 
 
@@ -118,12 +121,21 @@ class ParallelAgentScreen(Screen):
     #new-agent-name-input {
         margin-left: 4;
     }
+    #model-selection-group {
+        display: none;
+    }
+    #summarizer-model-results {
+        height: auto;
+        max-height: 12;
+    }
     """
 
     def __init__(self) -> None:
         super().__init__()
         self._existing_agents: list[str] = []
         self._default_model: str = ""
+        self._models: list[str] = get_model_list()
+        self._programmatic_fill: bool = False
 
     def compose(self) -> ComposeResult:
         with FormScroll(id="pa-container"):
@@ -217,6 +229,9 @@ class ParallelAgentScreen(Screen):
                 classes="field-hint",
             )
             yield Input(id="summarizer-model-input", placeholder="(uses decision-pack default)")
+            with Vertical(classes="selection-group", id="model-selection-group"):
+                yield OptionList(id="summarizer-model-results")
+                yield Label("Tab to continue", classes="option-hint")
 
             # Errors + nav
             yield Label("", id="pa-error", classes="error-label")
@@ -226,7 +241,9 @@ class ParallelAgentScreen(Screen):
     def on_mount(self) -> None:
         app: CreateParallelAgentApp = self.app  # type: ignore[assignment]
         self._default_model = app.dpack_config.get("default_model", "")
+        self._programmatic_fill = True
         self.query_one("#summarizer-model-input", Input).value = self._default_model
+        self._refresh_models()
 
         # Discover existing agents (exclude default agent)
         config_dir: Path = Path(app.dpack_config["config_dir"])
@@ -290,6 +307,41 @@ class ParallelAgentScreen(Screen):
         self.query_one("#retries-input", Input).display = retry
         self.query_one("#retries-label", Label).display = retry
 
+    @work(thread=True)
+    def _refresh_models(self) -> None:
+        """Fetch models from API in background and refresh the list."""
+        from dlab.create_dpack import fetch_models_from_api, save_model_cache, _model_sort_key
+        try:
+            data: dict[str, Any] = fetch_models_from_api()
+            save_model_cache(data)
+            new_models: list[str] = sorted(
+                set(self._models) | set(data.get("models", [])),
+                key=_model_sort_key,
+            )
+            if new_models != self._models:
+                self._models = new_models
+                self.app.call_from_thread(self._rebuild_model_options, "")
+        except Exception:
+            pass
+
+    def _rebuild_model_options(self, query: str) -> None:
+        """Rebuild the model OptionList filtered by query."""
+        matches: list[str] = filter_models(query, self._models) if query else self._models
+        ol: OptionList = self.query_one("#summarizer-model-results", OptionList)
+        ol.clear_options()
+        for m in matches:
+            ol.add_option(Option(m, id=m))
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id != "summarizer-model-input":
+            return
+        if self._programmatic_fill:
+            self._programmatic_fill = False
+            return
+        group: Vertical = self.query_one("#model-selection-group", Vertical)
+        group.display = True
+        self._rebuild_model_options(event.value.strip())
+
     def _get_selected_agent(self) -> str | None:
         """Return the currently highlighted agent ID, or None."""
         ol: OptionList = self.query_one("#agent-select", OptionList)
@@ -303,6 +355,14 @@ class ParallelAgentScreen(Screen):
             return
         is_new: bool = str(event.option.id) == _NEW_AGENT_ID
         self._show_new_agent_fields(is_new)
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        if event.option_list.id != "summarizer-model-results":
+            return
+        self._programmatic_fill = True
+        self.query_one("#summarizer-model-input", Input).value = str(event.option.prompt)
+        self.query_one("#model-selection-group", Vertical).display = False
+        self.query_one("#create-btn", Button).focus()
 
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
         # Radio group for failure behavior
