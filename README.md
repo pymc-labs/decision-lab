@@ -12,7 +12,7 @@ decision-lab runs autonomous coding agents in frozen Docker environments with do
 
 There are many ways to analyze a dataset. Most of them are wrong. An unsupervised agent picks one path through the analytical space and commits to it. If that path happens to be wrong, you get a nice-looking report with bad conclusions. Nobody notices for months.
 
-We tested this on marketing mix modeling. We gave vanilla Claude Code and our MMM agent the same adversarial dataset where no valid inference was possible. Claude Code fit a model and recommended budget reallocations. Our agent tried 11 approaches, found that none of the models converged, said so, and recommended experiments to collect better data.
+We tested this on [marketing mix modeling](decision-packs/mmm/). We gave vanilla Claude Code and our MMM agent the same adversarial dataset where no valid inference was possible. Claude Code fit a model and recommended budget reallocations. Our agent tried 11 approaches, found that none of the models converged, said so, and recommended experiments to collect better data.
 
 decision-lab (`dlab`) is the framework we built to make agents behave like that.
 
@@ -142,7 +142,7 @@ Creates a wrapper script in `~/.local/bin/` so you can run a decision-pack by na
 
 ### Decision Hub integration
 
-decision-packs work with [Decision Hub](https://hub.decision.ai), a registry of validated skills for data science and AI. Agents can search and install skills from the hub at runtime, giving them access to domain knowledge they weren't originally packaged with.
+decision-packs work with [Decision Hub](https://github.com/pymc-labs/decision-hub) ([hub.decision.ai](https://hub.decision.ai)), a registry of validated skills for data science and AI. Agents can search and install skills from the hub at runtime, giving them access to domain knowledge they weren't originally packaged with.
 
 ```bash
 # Install the Decision Hub CLI as a skill in your decision-pack
