@@ -83,8 +83,8 @@ dlab --dpack decision-packs/poem --env-file .env --prompt "Write me a poem about
 
 1. dlab builds the Docker image from [`docker/Dockerfile`](decision-packs/poem/docker/Dockerfile) (cached after first run)
 2. The pre-run hook [`say_hi.sh`](decision-packs/poem/say_hi.sh) runs inside the container
-3. The orchestrator ([`literary-agent.md`](decision-packs/poem/opencode/agents/literary-agent.md)) starts and calls POPO the terrible poet ([`popo-poet.md`](decision-packs/poem/opencode/agents/popo-poet.md)) via the `task` tool
-4. The orchestrator reads POPO's poem, decides it's bad, and spawns 3 parallel poet instances ([`poet.md`](decision-packs/poem/opencode/agents/poet.md)) with different styles via the `parallel-agents` tool
+3. The orchestrator ([`literary-agent.md`](decision-packs/poem/opencode/agents/literary-agent.md)) starts and calls the terrible poet ([`popo-poet.md`](decision-packs/poem/opencode/agents/popo-poet.md)) via the `task` tool
+4. The orchestrator reads the terrible poet's attempt, decides it's bad, and spawns 3 parallel poet instances ([`poet.md`](decision-packs/poem/opencode/agents/poet.md)) with different styles via the `parallel-agents` tool
 5. Each instance writes `summary.md`. A consolidator (auto-generated from [`poet.yaml`](decision-packs/poem/opencode/parallel_agents/poet.yaml)) compares them
 6. The orchestrator picks the best poem and writes `final_poem.md`
 7. The post-run hook [`print_result.sh`](decision-packs/poem/print_result.sh) prints it to the terminal
@@ -109,7 +109,9 @@ dlab connect ./mmm-run
 
 A Textual TUI that shows live log events, agent status, cost tracking, and artifacts as the session runs. Browse between the orchestrator, parallel instances, and consolidator. Works with both running and completed sessions.
 
-<!-- ![dlab connect TUI screenshot](docs/assets/connect-tui.png) -->
+
+https://github.com/user-attachments/assets/24976838-3427-4cab-9351-2fc0b28e8f29
+
 
 ### Execution timeline
 
@@ -130,7 +132,9 @@ dlab create-parallel-agent     # Wizard to add parallel agent configs to an exis
 
 The decision-pack wizard walks through 8 screens: name, container setup (package manager + base image), features (Decision Hub, Modal, Python library), model selection, permissions, directory skeletons, skill search, and review. Supports conda, pip, uv, and pixi.
 
-<!-- ![dlab create-dpack wizard](docs/assets/create-dpack-wizard.png) -->
+
+https://github.com/user-attachments/assets/58c566f6-1d98-4825-aa7a-47dfd93bb2dc
+
 
 ### Install as shortcut
 
