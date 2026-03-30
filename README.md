@@ -37,6 +37,8 @@ pip install dlab-cli
 ## Quick start
 
 ```bash
+echo "ANTHROPIC_API_KEY=your-key-here" >> .env
+
 # Run the MMM decision-pack on the included example dataset
 dlab --dpack decision-packs/mmm \
   --data decision-packs/mmm/example-data/example_dataset.csv \
