@@ -61,8 +61,11 @@ def fetch_models_from_api() -> dict[str, Any]:
         for model_id, mdata in provider_models.items():
             if not isinstance(mdata, dict):
                 continue
-            # Use provider/model_id format if not already prefixed
-            full_id: str = model_id if "/" in model_id else f"{provider}/{model_id}"
+            # Skip cross-provider references (e.g. cloudflare listing
+            # "anthropic/claude-sonnet-4" — those are pass-through IDs)
+            if "/" in model_id:
+                continue
+            full_id: str = f"{provider}/{model_id}"
             if mdata.get("tool_call"):
                 models.append(full_id)
 
