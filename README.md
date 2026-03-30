@@ -20,7 +20,7 @@ decision-lab (`dlab`) is the framework we built to make agents behave like that.
 
 ## How it works
 
-**Skills.** decision-packs include domain-specific skills: mandatory diagnostics, preferred model structures, informative priors. These constrain the agent to methodologically sound paths.
+**Skills.** decision-packs include domain-specific skills: mandatory diagnostics, preferred model structures, informative priors. These constrain the agent to methodologically sound paths. Browse and install validated skills from [Decision Hub](https://github.com/pymc-labs/decision-hub).
 
 **Parallel subagents.** decision-lab lets the coding agent fan out multiple subagents with different approaches to the same problem (different priors, different data prep, different model structures) and consolidates their results. Structured exploration instead of a single random walk. Supports running compute-heavy tasks in the cloud on [Modal](https://modal.com).
 
