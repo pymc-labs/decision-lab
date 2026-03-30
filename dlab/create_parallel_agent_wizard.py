@@ -145,6 +145,7 @@ class ParallelAgentScreen(Screen):
             yield Label("New agent name", classes="field-label", id="new-agent-label")
             yield Label("Alphanumeric, hyphens, underscores", classes="field-hint")
             yield Input(id="pa-name-input", placeholder="my-worker")
+            yield Label("", id="pa-name-error", classes="error-label")
             yield Label(
                 "A worker agent .md will be created in opencode/agents/",
                 classes="field-hint",
@@ -317,6 +318,8 @@ class ParallelAgentScreen(Screen):
             return
 
         error_label: Label = self.query_one("#pa-error", Label)
+        name_error_label: Label = self.query_one("#pa-name-error", Label)
+        name_error_label.update("")
 
         # Determine agent name
         selected_agent: str | None = self._get_selected_agent()
@@ -326,10 +329,10 @@ class ParallelAgentScreen(Screen):
         if create_new_agent:
             agent_name = self.query_one("#pa-name-input", Input).value.strip()
             if not agent_name:
-                error_label.update("[red]Agent name is required[/red]")
+                name_error_label.update("[red]Agent name is required[/red]")
                 return
             if not agent_name.replace("_", "").replace("-", "").isalnum():
-                error_label.update("[red]Name must be alphanumeric (with - or _)[/red]")
+                name_error_label.update("[red]Must be alphanumeric (with - or _)[/red]")
                 return
         else:
             agent_name = selected_agent or ""
