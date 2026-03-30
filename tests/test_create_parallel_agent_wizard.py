@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 import yaml
 
-from textual.widgets import Checkbox
+from textual.widgets import Checkbox, Input, OptionList
 
 from dlab.create_parallel_agent_wizard import (
     CreateParallelAgentApp,
@@ -187,3 +187,45 @@ class TestParallelAgentScreen:
             await pilot.pause(delay=PAUSE)
             model_val: str = app.screen.query_one("#summarizer-model-input").value
             assert model_val == "anthropic/claude-sonnet-4-0"
+
+    @pytest.mark.asyncio
+    async def test_model_search_hidden_by_default(self, dpack: Path) -> None:
+        """Model results dropdown should be hidden initially."""
+        app = CreateParallelAgentApp(str(dpack))
+        async with app.run_test(size=(120, 80)) as pilot:
+            await pilot.pause(delay=PAUSE)
+            group = app.screen.query_one("#model-selection-group")
+            assert group.display is False
+
+    @pytest.mark.asyncio
+    async def test_model_search_shows_on_typing(self, dpack: Path) -> None:
+        """Typing in the model input should show filtered results."""
+        app = CreateParallelAgentApp(str(dpack))
+        async with app.run_test(size=(120, 80)) as pilot:
+            await pilot.pause(delay=PAUSE)
+            model_input: Input = app.screen.query_one("#summarizer-model-input", Input)
+            model_input.value = ""
+            await pilot.pause(delay=PAUSE)
+            model_input.value = "gemini"
+            await pilot.pause(delay=PAUSE)
+            group = app.screen.query_one("#model-selection-group")
+            assert group.display is True
+            ol: OptionList = app.screen.query_one("#summarizer-model-results", OptionList)
+            assert ol.option_count > 0
+
+    @pytest.mark.asyncio
+    async def test_model_search_filters(self, dpack: Path) -> None:
+        """Search should filter the model list."""
+        app = CreateParallelAgentApp(str(dpack))
+        async with app.run_test(size=(120, 80)) as pilot:
+            await pilot.pause(delay=PAUSE)
+            model_input: Input = app.screen.query_one("#summarizer-model-input", Input)
+            model_input.value = ""
+            await pilot.pause(delay=PAUSE)
+            model_input.value = "claude-opus"
+            await pilot.pause(delay=PAUSE)
+            ol: OptionList = app.screen.query_one("#summarizer-model-results", OptionList)
+            # All results should contain "claude-opus"
+            for i in range(ol.option_count):
+                option_text: str = str(ol.get_option_at_index(i).prompt)
+                assert "claude-opus" in option_text.lower()
