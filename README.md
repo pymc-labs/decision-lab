@@ -12,7 +12,7 @@ decision-lab runs autonomous coding agents in frozen Docker environments with do
 
 There are many ways to analyze a dataset. Most of them are wrong. An unsupervised agent picks one path through the analytical space and commits to it. If that path happens to be wrong, you get a nice-looking report with bad conclusions. Nobody notices for months.
 
-We tested this on [marketing mix modeling](decision-packs/mmm/). We gave vanilla Claude Code and our MMM agent the same adversarial dataset where no valid inference was possible. Claude Code fit a model and recommended budget reallocations. Our agent tried 11 approaches, found that none of the models converged, said so, and recommended experiments to collect better data.
+We [tested this on marketing mix modeling](https://www.youtube.com/watch?v=ess4qV8JKQc) ([decision-pack](decision-packs/mmm/)). We gave vanilla Claude Code and our MMM agent the same adversarial dataset where no valid inference was possible. Claude Code fit a model and recommended budget reallocations. Our agent tried 11 approaches, found that none of the models converged, said so, and recommended experiments to collect better data.
 
 decision-lab (`dlab`) is the framework we built to make agents behave like that.
 
