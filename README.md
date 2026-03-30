@@ -2,12 +2,19 @@
 
 # decision-lab
 
+A harness for agentic data science.
+
 Coding agents write good code. They make bad analytical decisions.
 
 Ask a coding agent to analyze your marketing data and it will fit a model, generate charts, and recommend budget reallocations — all in clean code. The problem is the model might be wrong, the assumptions unchecked, and the recommendations unsupported. Nobody notices for months.
 
-decision-lab runs multiple modeling approaches in parallel, checks whether they agree, and only recommends when results hold up across different assumptions. When they don't, it tells you what it doesn't know and what experiments would resolve the uncertainty.
+decision-lab runs your analysis multiple ways — different models, different assumptions — and checks whether they converge. If they converge on the same answer, you can trust it. If they don't, it tells you what it doesn't know and what experiments would resolve the uncertainty.
 
+<!-- TODO: Architecture diagram — orchestrator → parallel subagents → consolidator.
+     Show: (1) single prompt + dataset enter the orchestrator,
+     (2) fan-out to N parallel subagents, each with a different modeling approach,
+     (3) consolidator compares results, produces one report with convergence/divergence assessment.
+     Three stages, left to right. Keep it minimal. -->
 
 ## Why
 
@@ -17,13 +24,15 @@ That's the behavior we want: an agent that knows when to stop.
 
 ## How it works
 
-You package everything an agent needs into a **decision-pack**: a frozen Docker environment, agent prompts, domain skills, and tools. The agent explores multiple approaches instead of committing to the first one that runs, and consolidates the results into a report.
+You package everything an agent needs into a **decision-pack**: agent prompts, domain skills, tools, and a Docker environment. The agent explores multiple approaches instead of committing to the first one that runs, and consolidates the results into a report.
 
 **Skills** constrain the agent to methodologically sound paths — mandatory diagnostics, preferred model structures, informative priors.
 
-**Parallel subagents** fan out with different approaches to the same problem (different priors, different data prep, different model structures). If they converge, you can trust the result. If they diverge, the agent flags the disagreement. Supports running compute-heavy tasks on [Modal](https://modal.com).
+**Parallel subagents** fan out with different approaches to the same problem (different priors, different data prep, different model structures). If results converge across approaches, you have evidence the conclusions are robust. If they diverge, the consolidator flags the disagreement and identifies what drives it. Supports running compute-heavy tasks on [Modal](https://modal.com).
 
 **Frozen environments** pin the Docker image so the agent codes against the right library versions. No "works on my laptop."
+
+Domain expertise is loaded through **decision-packs** — pluggable configurations that specialize the agent for a specific analytical domain. The first decision-pack targets Bayesian marketing mix modeling. Finance, forecasting, and other domains can be added by writing a new pack.
 
 ## Install
 
