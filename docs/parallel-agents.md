@@ -66,7 +66,7 @@ summarizer_prompt: |
   Create a consolidated comparison highlighting key differences,
   agreements, and overall recommendations.
 
-summarizer_model: "anthropic/claude-sonnet-4"
+summarizer_model: "anthropic/claude-sonnet-4-5"
 ```
 
 You also need a corresponding agent `.md` file at `opencode/agents/modeler.md`.
@@ -168,7 +168,7 @@ summarizer_prompt: |
   Create a comparison table of all models and their metrics.
   Recommend the best approach for production use.
 
-summarizer_model: "anthropic/claude-sonnet-4"
+summarizer_model: "anthropic/claude-sonnet-4-5"
 ```
 
 ### Per-Instance Model Overrides

@@ -36,7 +36,7 @@ The package manager determines the base image automatically:
 
 Default is `opencode/big-pickle`. If they have a preference (Claude, GPT, Gemini, etc.), use the `provider/model-name` format. Common choices:
 
-- `anthropic/claude-sonnet-4` or `anthropic/claude-opus-4-6`
+- `anthropic/claude-sonnet-4-5` or `anthropic/claude-opus-4-6`
 - `openai/gpt-5` or `openai/gpt-5.1-codex`
 - `google/gemini-2.5-pro`
 - `deepseek/deepseek-chat`

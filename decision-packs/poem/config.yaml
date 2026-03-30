@@ -19,7 +19,7 @@ docker_image_name: dlab-poem
 
 # Default LLM model. The orchestrator and all agents use this unless
 # overridden with --model on the CLI or per-instance in parallel agent YAML.
-# Format: provider/model-name (e.g., anthropic/claude-sonnet-4, google/gemini-2.0-flash)
+# Format: provider/model-name (e.g., anthropic/claude-sonnet-4-5, google/gemini-2.0-flash)
 default_model: google/gemini-2.0-flash
 
 # When false, the --data flag is optional. This decision-pack doesn't need

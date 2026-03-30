@@ -62,7 +62,7 @@ def fetch_models_from_api() -> dict[str, Any]:
             if not isinstance(mdata, dict):
                 continue
             # Skip cross-provider references (e.g. cloudflare listing
-            # "anthropic/claude-sonnet-4" — those are pass-through IDs)
+            # "anthropic/claude-sonnet-4-5" — those are pass-through IDs)
             if "/" in model_id:
                 continue
             full_id: str = f"{provider}/{model_id}"
@@ -659,7 +659,7 @@ You can also override models per instance:
 {
   "agent": "example-worker",
   "prompts": ["...", "..."],
-  "models": ["anthropic/claude-sonnet-4", "google/gemini-2.5-pro"]
+  "models": ["anthropic/claude-sonnet-4-5", "google/gemini-2.5-pro"]
 }
 ```"""
     elif subagents:
@@ -703,7 +703,7 @@ timeout_minutes: 60
 failure_behavior: continue
 
 max_instances: 3
-default_model: "anthropic/claude-sonnet-4"
+default_model: "anthropic/claude-sonnet-4-5"
 
 subagent_suffix_prompt: |
   When you complete your task, write summary.md with:
@@ -716,7 +716,7 @@ summarizer_prompt: |
   Create a consolidated comparison of the different approaches.
   Present facts only — the orchestrator will make the final decision.
 
-summarizer_model: "anthropic/claude-sonnet-4"
+summarizer_model: "anthropic/claude-sonnet-4-5"
 """
 
 def _build_deploy_modal_sh() -> str:

@@ -1,0 +1,25 @@
+name: haha
+description: "Parallel agent: haha"
+timeout_minutes: 60
+failure_behavior: continue
+
+subagent_suffix_prompt: |
+  When you complete your task, write a summary.md file with:
+  
+  ## Approach
+  Describe your approach and key decisions.
+  
+  ## Results
+  Present your findings and outputs.
+  
+  ## Recommendations
+  Provide actionable recommendations based on your analysis.
+
+summarizer_prompt: |
+  Read all summary.md files from the parallel instances.
+  Create a consolidated comparison highlighting:
+  - Key differences in approaches
+  - Agreement and disagreement across instances
+  - Overall recommendations based on all results
+
+summarizer_model: "anthropic/claude-sonnet-4-0"

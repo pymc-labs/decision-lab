@@ -73,7 +73,7 @@ In config files:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4",
+  "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku",
   "default_agent": "build",
 
@@ -147,7 +147,7 @@ You are a code reviewer. Focus on:
 |----------|------|-------------|
 | `description` | string | **Required.** Short description for agent selection |
 | `mode` | string | `primary`, `subagent`, or `all` |
-| `model` | string | LLM model identifier (e.g., `anthropic/claude-sonnet-4`) |
+| `model` | string | LLM model identifier (e.g., `anthropic/claude-sonnet-4-5`) |
 | `temperature` | float | Response creativity (0.0-1.0) |
 | `maxSteps` | number | Maximum agentic iterations |
 | `disable` | boolean | Disable the agent |
@@ -164,7 +164,7 @@ You are a code reviewer. Focus on:
     "reviewer": {
       "description": "Reviews code for best practices",
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4",
+      "model": "anthropic/claude-sonnet-4-5",
       "tools": { "write": false },
       "permission": { "bash": "deny" }
     }

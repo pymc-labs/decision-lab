@@ -1,0 +1,12 @@
+name: test
+description: clustering
+docker_image_name: dlab-test
+default_model: anthropic/claude-sonnet-4-0
+requires_data: true
+requires_prompt: true
+cli_name: clustering
+
+# Scripts listed here run inside the container before/after the agent's run.
+hooks:
+  pre-run: deploy_modal.sh
+  # post-run: cleanup.sh

@@ -547,7 +547,7 @@ def run_opencode(
     prompt : str
         The prompt to send to opencode.
     model : str
-        The model to use (e.g., "anthropic/claude-sonnet-4").
+        The model to use (e.g., "anthropic/claude-sonnet-4-5").
     timeout : int | None
         Timeout in seconds. None means no timeout.
     log_prefix : str

@@ -323,7 +323,7 @@ summarizer_prompt: |
   present all approaches with their trade-offs so the
   orchestrator can decide.
 
-summarizer_model: "anthropic/claude-sonnet-4"
+summarizer_model: "anthropic/claude-sonnet-4-5"
 ```
 
 ### Design decisions
