@@ -67,3 +67,6 @@ sandbox/test-sessions/
 
 # A/B testing
 ab_testing/
+
+# Manual test decision-packs (not the tests/ directory)
+test/
