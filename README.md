@@ -16,6 +16,8 @@ We [tested this on marketing mix modeling](https://www.youtube.com/watch?v=ess4q
 
 decision-lab (`dlab`) is the framework we built to make agents behave like that.
 
+<img src="https://raw.githubusercontent.com/pymc-labs/decision-lab/main/docs/forking-paths-blog.svg" alt="Forking paths diagram">
+
 ## How it works
 
 **Skills.** decision-packs include domain-specific skills: mandatory diagnostics, preferred model structures, informative priors. These constrain the agent to methodologically sound paths.
