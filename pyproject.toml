@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dlab-cli"
 version = "0.1.0"
-description = "CLI wrapper that runs opencode in automated mode, sandboxed with Docker, and with parallel-agent capability"
+description = "A harness for agentic data science — run coding agents with domain skills, parallel subagents, and frozen Docker environments"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
