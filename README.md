@@ -32,7 +32,7 @@ You package everything an agent needs into a **decision-pack**: agent prompts, d
 
 **Skills** constrain the agent to methodologically sound paths — mandatory diagnostics, preferred model structures, sensible defaults. Browse and install validated data science skills from [Decision Hub](https://github.com/pymc-labs/decision-hub).
 
-**Parallel subagents** fan out with different approaches to the same problem (different priors, different data prep, different model structures). If results converge across approaches, you have evidence the conclusions are robust. If they diverge, the agent flags the disagreement and identifies what drives it. Supports running compute-heavy tasks on [Modal](https://modal.com).
+**Parallel subagents** fan out with different approaches to the same problem (different data prep, different model structures). If results converge across approaches, you have evidence the conclusions are robust. If they diverge, the agent flags the disagreement and identifies what drives it. Supports running compute-heavy tasks on [Modal](https://modal.com).
 
 **Locked environments.** Reproducibility matters. Library APIs change constantly, LLMs are trained on old versions, and skills are tuned to specific packages. decision-packs lock dependencies so the agent codes against the right API every time. By default, sessions run in a Docker container with pinned dependencies. Don't want Docker? The agent will set up the environment locally before running.
 
