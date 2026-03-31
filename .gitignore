@@ -1,0 +1,72 @@
+# Sandbox test sessions
+sandbox-test-sessions/*
+!sandbox-test-sessions/.gitkeep
+
+# Generated session directories (dlab-{dpack}-workdir-NNN/)
+dlab-*-workdir-[0-9][0-9][0-9]/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+
+# data files from runs
+*.nc
+*.pkl
+*.pickle
+
+# Exception: Allow test fixtures to be committed
+!decision-packs/*/tests/fixtures/*.pkl
+
+# Test session artifacts (large binary files)
+sandbox/test-sessions/
+
+# A/B testing
+ab_testing/
+
+# Manual test decision-packs (not the tests/ directory)
+test/

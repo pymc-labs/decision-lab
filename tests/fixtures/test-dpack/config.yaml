@@ -1,0 +1,5 @@
+# Test decision-pack configuration
+name: test-dpack
+description: Minimal test decision-pack for development
+docker_image_name: dlab-test
+default_model: anthropic/claude-sonnet-4

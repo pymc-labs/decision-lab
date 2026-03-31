@@ -1,0 +1,57 @@
+# =============================================================================
+# decision-pack configuration
+# =============================================================================
+# This is the main config file for a dlab decision-pack. dlab reads this to
+# know how to build the Docker image, which model to use, and what hooks to run.
+#
+# Full reference: docs/decision-packs.md
+
+# Unique name for this decision-pack. Used in CLI output and session state.
+name: poem
+
+# Human-readable description (shown in `dlab create-dpack` wizard review).
+description: Simple test decision-pack for parallel agents - poetry generation
+
+# Docker image name. dlab builds and tags the image with this name.
+# Two images are created: "dlab-poem-base" (from docker/Dockerfile) and
+# "dlab-poem" (adds opencode on top). Cached between runs.
+docker_image_name: dlab-poem
+
+# Default LLM model. The orchestrator and all agents use this unless
+# overridden with --model on the CLI or per-instance in parallel agent YAML.
+# Format: provider/model-name (e.g., anthropic/claude-sonnet-4-5, google/gemini-2.0-flash)
+default_model: google/gemini-2.0-flash
+
+# When false, the --data flag is optional. This decision-pack doesn't need
+# input data files — it just writes poems.
+# See also: requires_prompt (defaults to true if omitted)
+requires_data: false
+
+# Hook scripts run inside the Docker container before/after the agent session.
+# Scripts live in the decision-pack root (next to this file) and are copied
+# to _hooks/ in the work directory at session creation.
+#
+# Pre-run hooks run after the container starts but before the agent.
+# If any pre-run hook exits non-zero, the session aborts.
+#
+# Post-run hooks run after the agent finishes (even if it failed).
+# A non-zero exit prints a warning but doesn't change the session exit code.
+#
+# You can specify a single script or a list:
+#   pre-run: setup.sh                    # single script
+#   pre-run: [deploy.sh, validate.sh]    # multiple scripts, run in order
+#
+# See: say_hi.sh, print_result.sh (in this directory)
+hooks:
+  pre-run: say_hi.sh
+  post-run: print_result.sh
+
+# Other fields you can set here (not used in this decision-pack):
+#
+# requires_prompt: true          # If false, --prompt becomes optional
+# opencode_version: "1.2.10"    # Pin opencode version (default: latest)
+# cli_name: poem                 # Override command name for `dlab install`.
+#                                # `dlab install <dpack-path>` creates a wrapper
+#                                # script in ~/.local/bin/ so you can run
+#                                # `poem --data ... --prompt ...` directly
+#                                # instead of `dlab --dpack <path> ...`.

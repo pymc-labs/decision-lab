@@ -1,0 +1,10 @@
+name: modal-example
+description: Minimal example to show how to outsource tasks to modal
+docker_image_name: dlab-modal-example
+default_model: google/gemini-2.0-flash
+requires_data: false
+
+# Scripts listed here run inside the container before/after the agent's run.
+hooks:
+  pre-run: deploy_modal.sh
+  # post-run: cleanup.sh
