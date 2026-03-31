@@ -30,7 +30,7 @@ decision-lab (`dlab`) is the framework we built to make agents behave like that.
 
 You package everything an agent needs into a **decision-pack**: agent prompts, domain skills, tools, and a locked environment. The agent explores multiple approaches instead of committing to the first one that runs, and consolidates the results into a report.
 
-**Skills** constrain the agent to methodologically sound paths — mandatory diagnostics, preferred model structures, informative priors. Browse and install validated data science skills from [Decision Hub](https://github.com/pymc-labs/decision-hub).
+**Skills** constrain the agent to methodologically sound paths — mandatory diagnostics, preferred model structures, validated defaults. Browse and install validated data science skills from [Decision Hub](https://github.com/pymc-labs/decision-hub).
 
 **Parallel subagents** fan out with different approaches to the same problem (different priors, different data prep, different model structures). If results converge across approaches, you have evidence the conclusions are robust. If they diverge, the agent flags the disagreement and identifies what drives it. Supports running compute-heavy tasks on [Modal](https://modal.com).
 
