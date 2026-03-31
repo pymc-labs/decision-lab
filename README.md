@@ -28,13 +28,13 @@ decision-lab (`dlab`) is the framework we built to make agents behave like that.
 
 ## How it works
 
-You package everything an agent needs into a **decision-pack**: agent prompts, domain skills, tools, and a locked Docker environment. The agent explores multiple approaches instead of committing to the first one that runs, and consolidates the results into a report.
+You package everything an agent needs into a **decision-pack**: agent prompts, domain skills, tools, and a locked environment. The agent explores multiple approaches instead of committing to the first one that runs, and consolidates the results into a report.
 
 **Skills** constrain the agent to methodologically sound paths — mandatory diagnostics, preferred model structures, informative priors. Browse and install validated data science skills from [Decision Hub](https://github.com/pymc-labs/decision-hub).
 
 **Parallel subagents** fan out with different approaches to the same problem (different priors, different data prep, different model structures). If results converge across approaches, you have evidence the conclusions are robust. If they diverge, the agent flags the disagreement and identifies what drives it. Supports running compute-heavy tasks on [Modal](https://modal.com).
 
-**Locked environments.** Every session runs in a Docker image with locked dependencies — fully reproducible across runs. Library APIs change constantly and LLMs are trained on old versions. decision-packs lock the environment so the agent codes against the right API and skills stay tuned to the libraries they were written for.
+**Locked environments.** Reproducibility matters. Library APIs change constantly, LLMs are trained on old versions, and skills are tuned to specific packages. decision-packs lock dependencies so the agent codes against the right API every time. By default, sessions run in a Docker container with pinned dependencies. Don't want Docker? The agent will set up the environment locally before running.
 
 Domain expertise is loaded through **decision-packs** — pluggable configurations that specialize the agent for a specific analytical domain. The first decision-pack targets [Bayesian marketing mix modeling](decision-packs/mmm/). Finance, forecasting, and other domains can be added by writing a new pack.
 
