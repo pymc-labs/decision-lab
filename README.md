@@ -36,7 +36,7 @@ You package everything an agent needs into a **decision-pack**: agent prompts, d
 
 **Pinned environments.** Every session runs in a Docker image with locked dependencies. Library APIs change constantly and LLMs are trained on old versions. decision-packs pin the environment so the agent codes against the right API.
 
-Domain expertise is loaded through **decision-packs** — pluggable configurations that specialize the agent for a specific analytical domain. The first decision-pack targets Bayesian marketing mix modeling. Finance, forecasting, and other domains can be added by writing a new pack.
+Domain expertise is loaded through **decision-packs** — pluggable configurations that specialize the agent for a specific analytical domain. The first decision-pack targets [Bayesian marketing mix modeling](decision-packs/mmm/). Finance, forecasting, and other domains can be added by writing a new pack.
 
 ## Install
 
