@@ -2,11 +2,19 @@
 
 # decision-lab
 
+A harness for agentic data science.
+
 Coding agents write good code. They make bad analytical decisions. decision-lab gives you the tools to fix the second part.
 
-decision-lab runs autonomous coding agents in frozen Docker environments with domain-specific skills and parallel subagents. You package the environment, the prompts, and the skills into a **decision-pack**, point it at your data, and get back reports, figures, and recommendations that hold up to scrutiny.
+decision-lab runs your analysis multiple ways — different models, different assumptions — and checks whether they converge. If they converge on the same answer, you can trust it. If they don't, it tells you what it doesn't know and what experiments would resolve the uncertainty. You package the prompts, domain skills, and environment into a **decision-pack**, point it at your data, and get back reports, figures, and recommendations that hold up to scrutiny.
 
 <!-- demo gif here -->
+
+<!-- TODO: Architecture diagram — orchestrator → parallel subagents → consolidator.
+     Show: (1) single prompt + dataset enter the orchestrator,
+     (2) fan-out to N parallel subagents, each with a different modeling approach,
+     (3) consolidator compares results, produces one report with convergence/divergence assessment.
+     Three stages, left to right. Keep it minimal. -->
 
 ## Why
 
@@ -20,11 +28,15 @@ decision-lab (`dlab`) is the framework we built to make agents behave like that.
 
 ## How it works
 
-**Skills.** decision-packs include domain-specific skills: mandatory diagnostics, preferred model structures, informative priors. These constrain the agent to methodologically sound paths. Browse and install validated data science skills from [Decision Hub](https://github.com/pymc-labs/decision-hub).
+You package everything an agent needs into a **decision-pack**: agent prompts, domain skills, tools, and a Docker environment. The agent explores multiple approaches instead of committing to the first one that runs, and consolidates the results into a report.
 
-**Parallel subagents.** decision-lab lets the coding agent fan out multiple subagents with different approaches to the same problem (different priors, different data prep, different model structures) and consolidates their results. Structured exploration instead of a single random walk. Supports running compute-heavy tasks in the cloud on [Modal](https://modal.com).
+**Skills** constrain the agent to methodologically sound paths — mandatory diagnostics, preferred model structures, informative priors. Browse and install validated data science skills from [Decision Hub](https://github.com/pymc-labs/decision-hub).
 
-**Frozen environments.** Every session runs in a pinned Docker image. Library APIs change constantly and LLMs are trained on old versions. decision-packs lock the environment so the agent codes against the right API.
+**Parallel subagents** fan out with different approaches to the same problem (different priors, different data prep, different model structures). If results converge across approaches, you have evidence the conclusions are robust. If they diverge, the agent flags the disagreement and identifies what drives it. Supports running compute-heavy tasks on [Modal](https://modal.com).
+
+**Pinned environments.** Every session runs in a Docker image with locked dependencies. Library APIs change constantly and LLMs are trained on old versions. decision-packs pin the environment so the agent codes against the right API.
+
+Domain expertise is loaded through **decision-packs** — pluggable configurations that specialize the agent for a specific analytical domain. The first decision-pack targets Bayesian marketing mix modeling. Finance, forecasting, and other domains can be added by writing a new pack.
 
 ## Install
 
@@ -60,13 +72,13 @@ claude
 
 ## What's a decision-pack?
 
-A directory with everything an agent needs: frozen environment, system prompts, domain skills, tools, and permissions.
+A directory with everything an agent needs: system prompts, domain skills, tools, a pinned environment, and permissions.
 
 ```
 my-dpack/
   config.yaml           # Name, model, hooks
   docker/
-    Dockerfile          # Frozen environment
+    Dockerfile          # Pinned environment
     requirements.txt    # Pinned dependencies
   opencode/
     opencode.json       # Permissions
