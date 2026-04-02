@@ -1,6 +1,7 @@
 import { tool } from "@opencode-ai/plugin"
 import { readFileSync, mkdirSync, writeFileSync, existsSync, appendFileSync, readdirSync, copyFileSync, cpSync, statSync } from "fs"
-import yaml from "yaml"
+// Use require() for CJS package — ESM imports break under Bun's strict interop
+const yaml = require("yaml")
 import { join, basename } from "path"
 
 // Helper: Copy directory contents excluding certain paths
