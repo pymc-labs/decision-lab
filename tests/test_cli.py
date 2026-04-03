@@ -408,6 +408,195 @@ class TestErrorMessages:
         assert "rm -rf" in captured.out
 
 
+class TestContinueDir:
+    """Tests for --continue-dir functionality in both Docker and local modes."""
+
+    @pytest.fixture
+    def previous_session(
+        self, dpack_config_dir: Path, data_dir: Path, tmp_path: Path,
+    ) -> Path:
+        """Create a completed session to continue from."""
+        from dlab.config import load_dpack_config
+        from dlab.session import create_session
+
+        config: dict[str, Any] = load_dpack_config(str(dpack_config_dir))
+        state: dict[str, Any] = create_session(
+            config, str(data_dir), work_dir=str(tmp_path / "prev-session"),
+        )
+        return Path(state["work_dir"])
+
+    def _run_continue(
+        self,
+        dpack_dir: Path,
+        continue_dir: Path,
+        work_dir: Path | None = None,
+        prompt: str = "continue",
+        no_sandboxing: bool = False,
+        extra_args: list[str] | None = None,
+    ) -> int:
+        """Helper to run cmd_run in continue mode, mocking agent execution."""
+        parser = create_parser()
+        cmd: list[str] = [
+            "--dpack", str(dpack_dir),
+            "--continue-dir", str(continue_dir),
+            "--prompt", prompt,
+        ]
+        if work_dir:
+            cmd.extend(["--work-dir", str(work_dir)])
+        if no_sandboxing:
+            cmd.append("--no-sandboxing")
+        if extra_args:
+            cmd.extend(extra_args)
+        args = parser.parse_args(cmd)
+
+        # Mock agent execution so tests don't hang on real LLM calls
+        mock_return = (0, "", "")
+        with patch("dlab.cli.run_opencode", return_value=mock_return), \
+             patch("dlab.local.run_opencode_local", return_value=mock_return):
+            return cmd_run(args)
+
+    # --- Error handling (no mode needed, errors before execution) ---
+
+    def test_continue_nonexistent_dir(
+        self, dpack_config_dir: Path, capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Should error cleanly when continue-dir doesn't exist."""
+        result: int = self._run_continue(
+            dpack_config_dir, Path("/nonexistent/dir"),
+        )
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "not found" in captured.out
+
+    def test_continue_with_data_rejected(
+        self, dpack_config_dir: Path, data_dir: Path, previous_session: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Should reject --data combined with --continue-dir."""
+        parser = create_parser()
+        args = parser.parse_args([
+            "--dpack", str(dpack_config_dir),
+            "--continue-dir", str(previous_session),
+            "--data", str(data_dir),
+            "--prompt", "continue",
+        ])
+        result: int = cmd_run(args)
+        assert result == 1
+
+    def test_continue_workdir_exists_error(
+        self, dpack_config_dir: Path, previous_session: Path, tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Should error when --work-dir already exists in continue mode."""
+        existing: Path = tmp_path / "already-here"
+        existing.mkdir()
+        result: int = self._run_continue(
+            dpack_config_dir, previous_session,
+            work_dir=existing, no_sandboxing=True,
+        )
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "already exists" in captured.out
+
+    # --- Local mode (--no-sandboxing) ---
+
+    def test_local_continue_to_new_workdir(
+        self, dpack_config_dir: Path, previous_session: Path, tmp_path: Path,
+    ) -> None:
+        """Local: --continue-dir + --work-dir should copy session."""
+        new_dir: Path = tmp_path / "local-continued"
+        self._run_continue(
+            dpack_config_dir, previous_session,
+            work_dir=new_dir, no_sandboxing=True,
+        )
+        assert new_dir.exists()
+        assert (new_dir / "data").exists()
+        assert (new_dir / ".opencode").exists()
+        assert (new_dir / "_opencode_logs").exists()
+
+    def test_local_continue_refreshes_opencode(
+        self, dpack_config_dir: Path, previous_session: Path, tmp_path: Path,
+    ) -> None:
+        """Local: continue should refresh .opencode/ from decision-pack."""
+        new_dir: Path = tmp_path / "local-refreshed"
+        marker: Path = previous_session / ".opencode" / "STALE_MARKER"
+        marker.write_text("this should be gone after continue")
+
+        self._run_continue(
+            dpack_config_dir, previous_session,
+            work_dir=new_dir, no_sandboxing=True,
+        )
+        assert not (new_dir / ".opencode" / "STALE_MARKER").exists()
+        assert (new_dir / ".opencode").exists()
+
+    def test_local_continue_refreshes_hooks(
+        self, dpack_config_dir: Path, previous_session: Path, tmp_path: Path,
+    ) -> None:
+        """Local: continue should refresh hook scripts."""
+        new_dir: Path = tmp_path / "local-hooks"
+        hooks_dir: Path = previous_session / "_hooks"
+        hooks_dir.mkdir(exist_ok=True)
+        (hooks_dir / "old_hook.sh").write_text("stale")
+
+        self._run_continue(
+            dpack_config_dir, previous_session,
+            work_dir=new_dir, no_sandboxing=True,
+        )
+        assert not (new_dir / "_hooks" / "old_hook.sh").exists()
+
+    def test_local_continue_preserves_data(
+        self, dpack_config_dir: Path, previous_session: Path, tmp_path: Path,
+    ) -> None:
+        """Local: continue should preserve data from original session."""
+        new_dir: Path = tmp_path / "local-preserved"
+        self._run_continue(
+            dpack_config_dir, previous_session,
+            work_dir=new_dir, no_sandboxing=True,
+        )
+        assert (new_dir / "data" / "sample.csv").exists()
+        assert (new_dir / "data" / "subdir" / "nested.txt").exists()
+
+    # --- Docker mode ---
+
+    def test_docker_continue_to_new_workdir(
+        self, dpack_config_dir: Path, previous_session: Path, tmp_path: Path,
+    ) -> None:
+        """Docker: --continue-dir + --work-dir should copy session."""
+        new_dir: Path = tmp_path / "docker-continued"
+        self._run_continue(
+            dpack_config_dir, previous_session, work_dir=new_dir,
+        )
+        assert new_dir.exists()
+        assert (new_dir / "data").exists()
+        assert (new_dir / ".opencode").exists()
+        assert (new_dir / "_opencode_logs").exists()
+
+    def test_docker_continue_refreshes_opencode(
+        self, dpack_config_dir: Path, previous_session: Path, tmp_path: Path,
+    ) -> None:
+        """Docker: continue should refresh .opencode/ from decision-pack."""
+        new_dir: Path = tmp_path / "docker-refreshed"
+        marker: Path = previous_session / ".opencode" / "STALE_MARKER"
+        marker.write_text("this should be gone after continue")
+
+        self._run_continue(
+            dpack_config_dir, previous_session, work_dir=new_dir,
+        )
+        assert not (new_dir / ".opencode" / "STALE_MARKER").exists()
+        assert (new_dir / ".opencode").exists()
+
+    def test_docker_continue_preserves_data(
+        self, dpack_config_dir: Path, previous_session: Path, tmp_path: Path,
+    ) -> None:
+        """Docker: continue should preserve data from original session."""
+        new_dir: Path = tmp_path / "docker-preserved"
+        self._run_continue(
+            dpack_config_dir, previous_session, work_dir=new_dir,
+        )
+        assert (new_dir / "data" / "sample.csv").exists()
+        assert (new_dir / "data" / "subdir" / "nested.txt").exists()
+
+
 class TestCmdInstall:
     """Tests for cmd_install function."""
 

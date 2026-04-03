@@ -9,6 +9,8 @@ from typing import Any, Generator
 import pytest
 import yaml
 
+from dlab.create_dpack import EXAMPLE_TOOL_TS
+
 
 @pytest.fixture
 def temp_dir(tmp_path: Path) -> Path:
@@ -19,7 +21,10 @@ def temp_dir(tmp_path: Path) -> Path:
 @pytest.fixture
 def dpack_config_dir(tmp_path: Path) -> Path:
     """
-    Create a valid decision-pack config directory structure.
+    Create a valid decision-pack config directory matching wizard output.
+
+    Includes agents/orchestrator.md with example-tool reference and
+    tools/example-tool.ts — mirrors what `dlab create-dpack` generates.
 
     Returns the path to the decision-pack config directory.
     """
@@ -30,7 +35,29 @@ def dpack_config_dir(tmp_path: Path) -> Path:
     (dpack / "docker" / "Dockerfile").write_text(
         "FROM python:3.11-slim\nWORKDIR /workspace\nCMD [\"/bin/bash\"]\n"
     )
-    (dpack / "opencode").mkdir()
+
+    # opencode config
+    opencode: Path = dpack / "opencode"
+    opencode.mkdir()
+
+    # Agents with tool reference
+    agents: Path = opencode / "agents"
+    agents.mkdir()
+    (agents / "orchestrator.md").write_text(
+        "---\n"
+        "description: Test orchestrator\n"
+        "mode: primary\n"
+        "tools:\n"
+        "  read: true\n"
+        "  example-tool: true\n"
+        "---\n\n"
+        "You are a test assistant. Use the example-tool when asked.\n"
+    )
+
+    # Tools directory with example-tool.ts
+    tools: Path = opencode / "tools"
+    tools.mkdir()
+    (tools / "example-tool.ts").write_text(EXAMPLE_TOOL_TS)
 
     config: dict[str, Any] = {
         "name": "test-dpack",

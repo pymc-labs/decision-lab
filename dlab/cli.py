@@ -401,13 +401,18 @@ def cmd_run(args: argparse.Namespace) -> int:
     if continue_mode:
         continue_dir = Path(args.continue_dir).resolve()
         if not continue_dir.exists():
-            raise ValueError(f"Continue directory not found: {args.continue_dir}")
+            console.print(f"Oops, continue directory [bold]{args.continue_dir}[/bold] not found.")
+            return 1
 
         if args.work_dir:
             # Copy continue-dir to work-dir, then continue from there
             work_path = Path(args.work_dir).resolve()
             if work_path.exists():
-                raise ValueError(f"Work directory already exists: {args.work_dir}")
+                console.print(
+                    f"Oops, work directory [bold]{args.work_dir}[/bold] already exists.\n"
+                    f"You can remove it with: [cyan]rm -rf {args.work_dir}[/cyan]"
+                )
+                return 1
             shutil.copytree(continue_dir, work_path)
             work_dir = str(work_path)
             print(f"Copied {continue_dir} to {work_dir}")
@@ -423,10 +428,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         # Overwrite .opencode with latest from decision-pack (agent prompts may have changed)
         opencode_dir = Path(work_dir) / ".opencode"
         if opencode_dir.exists():
-            if no_sandboxing:
-                # Local mode: files are user-owned
+            try:
                 shutil.rmtree(opencode_dir)
-            else:
+            except PermissionError:
                 # Docker mode: files may be root-owned (e.g. node_modules/)
                 subprocess.run(
                     ["sudo", "rm", "-rf", str(opencode_dir)],
