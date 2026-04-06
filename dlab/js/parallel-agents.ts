@@ -269,8 +269,10 @@ CRITICAL OUTPUT RULES:
 `
       const fullPrompt = subagentContext + args.prompts[i] + "\n\n" + (config.subagent_suffix_prompt || "")
 
-      // Spawn - log file starts with JSON directly (no header)
       const logFile = join(logsDir, `instance-${i + 1}.log`)
+
+      // Write dlab_start event as first line (model, agent, prompt)
+      writeFileSync(logFile, JSON.stringify({type: "dlab_start", timestamp: Date.now(), model, agent: args.agent, prompt: fullPrompt}) + "\n")
 
       const proc = Bun.spawn(["opencode", "run", "--format", "json", "--log-level", "DEBUG", "--model", model, fullPrompt], {
         cwd: instanceDir,
@@ -354,6 +356,9 @@ RULES:
       setupConsolidator(runDir, join(cwd, ".opencode"), config.summarizer_prompt)
 
       const consLogFile = join(logsDir, "consolidator.log")
+
+      // Write dlab_start event as first line
+      writeFileSync(consLogFile, JSON.stringify({type: "dlab_start", timestamp: Date.now(), model: consolidatorModel, agent: "consolidator", prompt: consolidatorPrompt}) + "\n")
 
       const consProc = Bun.spawn(["opencode", "run", "--format", "json", "--log-level", "DEBUG", "--model", consolidatorModel, consolidatorPrompt], {
         cwd: runDir,

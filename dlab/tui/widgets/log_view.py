@@ -27,6 +27,7 @@ _FG: str = "#F8F8F2"
 
 # Color styles by event type
 EVENT_STYLES: dict[str, str] = {
+    "dlab_start": f"bold {_CYAN}",
     "step_start": _CYAN,
     "step_finish": _GREEN,
     "text": _FG,
@@ -200,7 +201,15 @@ class LogEventDescription(Static):
                     return Group(md, suffix)
                 return md
             else:
-                text = Text(desc, style=self._style)
+                # For multiline expanded text, only style the first line
+                # (e.g. dlab_start: header is bold, prompt is dim)
+                if not self._is_collapsed and "\n" in desc:
+                    first_line, rest = desc.split("\n", 1)
+                    text = Text(first_line, style=self._style)
+                    text.append("\n")
+                    text.append(rest, style="dim")
+                else:
+                    text = Text(desc, style=self._style)
                 if self._is_long:
                     text.append(" [-]", style="dim italic")
                 if self._duration_str:
@@ -248,7 +257,11 @@ class LogEventWidget(Horizontal):
         self.global_start_ts = global_start_ts
         self._start_expanded = start_expanded
         # Check if description has multiple lines or is long
-        self._is_long = len(event.description) > 100 or "\n" in event.description
+        self._is_long = (
+            len(event.description) > 100
+            or "\n" in event.description
+            or "\n" in event.full_description
+        )
 
         self._style = EVENT_STYLES.get(event.event_type, "white")
         self._time_str = format_relative_time(event.timestamp, global_start_ts)
