@@ -371,6 +371,7 @@ class LogView(VerticalScroll, can_focus=True):
         self._widgets: list[LogEventWidget] = []
         self._expand_all_mode: bool = False
         self._suppress_scroll: bool = False
+        self._arrow_navigating: bool = False
 
     def watch_selected_index(self, old_index: int, new_index: int) -> None:
         """Update selection visuals when index changes."""
@@ -447,7 +448,11 @@ class LogView(VerticalScroll, can_focus=True):
             self.scroll_end(animate=False)
 
     def _snap_selection_to_visible(self) -> None:
-        """If selected widget is off-screen, move selection to first visible."""
+        """If selected widget is off-screen, move selection to first visible.
+
+        When called from arrow keys (_arrow_navigating=True), just scrolls
+        to the current selection instead of snapping to a new one.
+        """
         if not self._widgets:
             return
         if 0 <= self.selected_index < len(self._widgets):
@@ -456,10 +461,22 @@ class LogView(VerticalScroll, can_focus=True):
             vp_bottom: int = vp_top + self.size.height
             try:
                 if w.virtual_region.y < vp_bottom and w.virtual_region.y + w.virtual_region.height > vp_top:
-                    return
+                    return  # Already visible
             except Exception:
                 return
-        # Snap — suppress scroll so we don't jump
+            # Off-screen: if arrow-navigating and just barely off edge, scroll to it
+            if self._arrow_navigating:
+                try:
+                    wy: int = w.virtual_region.y
+                    distance: int = min(abs(wy - vp_bottom), abs(wy - vp_top))
+                    # If within 3 line heights of viewport, just scroll (edge case)
+                    if distance < self.size.height // 2:
+                        self._widgets[self.selected_index].scroll_visible()
+                        return
+                except Exception:
+                    pass
+                # Far away — fall through to snap
+        # Snap to first visible — suppress scroll so we don't jump
         vp_top = self.scroll_offset.y
         self._suppress_scroll = True
         for i, widget in enumerate(self._widgets):
@@ -538,7 +555,9 @@ class LogView(VerticalScroll, can_focus=True):
         """Select the next event."""
         if not self._widgets:
             return
+        self._arrow_navigating = True
         self._snap_selection_to_visible()
+        self._arrow_navigating = False
         if self.selected_index < len(self._widgets) - 1:
             self.selected_index += 1
         elif self.selected_index == -1:
@@ -548,7 +567,9 @@ class LogView(VerticalScroll, can_focus=True):
         """Select the previous event."""
         if not self._widgets:
             return
+        self._arrow_navigating = True
         self._snap_selection_to_visible()
+        self._arrow_navigating = False
         if self.selected_index > 0:
             self.selected_index -= 1
         elif self.selected_index == -1:
