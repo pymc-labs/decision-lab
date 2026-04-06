@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from dlab.opencode_logparser import ms_to_datetime
+
 
 @dataclass
 class LogEvent:
@@ -53,6 +55,15 @@ class LogEvent:
         str
             Full description without any truncation.
         """
+        if self.event_type == "dlab_start":
+            model = self.raw.get("model", "unknown")
+            agent = self.raw.get("agent", "")
+            prompt = self.raw.get("prompt", "")
+            description = f"Session started · {model} · {agent}"
+            if prompt:
+                description += f"\n--- prompt ---\n{prompt}"
+            return description
+
         if self.event_type == "step_start":
             return "Step started"
 
@@ -180,7 +191,7 @@ class LogEvent:
             timestamp = 0  # Will be displayed specially
             dt = datetime.min  # Sentinel — no real timestamp, won't affect duration
         else:
-            dt = datetime.fromtimestamp(timestamp / 1000)
+            dt = ms_to_datetime(timestamp)
         event_type = raw.get("type", "unknown")
         part = raw.get("part", {})
 
@@ -189,7 +200,12 @@ class LogEvent:
         cost = 0.0
         duration_ms = None
 
-        if event_type == "additional_output":
+        if event_type == "dlab_start":
+            model = raw.get("model", part.get("model", "unknown"))
+            agent = raw.get("agent", part.get("agent", ""))
+            description = f"Session started · {model} · {agent}"
+
+        elif event_type == "additional_output":
             # Raw JSON output from tool/script (not a proper OpenCode event)
             raw_data = part.get("raw_data", {})
             description = f"[output] {json.dumps(raw_data)}"
@@ -405,7 +421,7 @@ class SessionState:
         if self.global_start_ts is None:
             return 0.0
 
-        start_dt = datetime.fromtimestamp(self.global_start_ts / 1000)
+        start_dt = ms_to_datetime(self.global_start_ts)
 
         # Find latest end time from all agents (from log timestamps only)
         end_times = [

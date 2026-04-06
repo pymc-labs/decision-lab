@@ -8,69 +8,18 @@ Supports both completed and running jobs - running jobs show agents
 with "RUNNING" status and extend to current time in the Gantt chart.
 """
 
-import json
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-
-def ms_to_datetime(timestamp_ms: int) -> datetime:
-    """Convert millisecond timestamp to datetime."""
-    return datetime.fromtimestamp(timestamp_ms / 1000)
-
-
-def is_log_complete(log_path: Path) -> bool:
-    """
-    Check if a log file represents a completed run.
-
-    A log is complete if:
-    - Its last step_finish event has reason: "stop" or "error", OR
-    - It contains an "error" event (job crashed/terminated)
-
-    Running logs have step_finish events with reason: "tool-calls".
-
-    Parameters
-    ----------
-    log_path : Path
-        Path to the log file.
-
-    Returns
-    -------
-    bool
-        True if the log shows a completed run, False if still running.
-    """
-    if not log_path.exists():
-        return False
-
-    last_step_finish: dict[str, Any] | None = None
-    has_error: bool = False
-
-    with open(log_path, "r") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("[STDERR]"):
-                continue
-            try:
-                data = json.loads(line)
-                event_type = data.get("type")
-                if event_type == "step_finish":
-                    last_step_finish = data
-                elif event_type == "error":
-                    has_error = True
-            except json.JSONDecodeError:
-                continue
-
-    # Error event means job terminated (crashed)
-    if has_error:
-        return True
-
-    if last_step_finish is None:
-        return False
-
-    reason = last_step_finish.get("part", {}).get("reason", "")
-    return reason in ("stop", "error")
+from dlab.opencode_logparser import (
+    LogEvent as ParsedEvent,
+    is_log_file_complete as is_log_complete,
+    ms_to_datetime,
+    parse_log_file as parse_log_events,
+)
 
 
 def natural_sort_key(name: str) -> tuple:
@@ -159,7 +108,10 @@ def format_duration(ms: int) -> str:
 
 def parse_log_file(log_path: Path) -> list[dict[str, Any]]:
     """
-    Parse a single log file and extract events.
+    Parse a single log file and extract timeline events.
+
+    Uses opencode_logparser for JSON parsing, then builds timeline-specific
+    event dicts with descriptions, idle periods, and task subagent info.
 
     Parameters
     ----------
@@ -171,110 +123,92 @@ def parse_log_file(log_path: Path) -> list[dict[str, Any]]:
     list[dict[str, Any]]
         List of parsed events with timestamp, type, and description.
     """
-    events = []
+    parsed: list[ParsedEvent] = parse_log_events(log_path)
+    events: list[dict[str, Any]] = []
 
-    with open(log_path, "r") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
+    for pe in parsed:
+        # Skip non-timestamped events (raw_text, additional_output)
+        if pe.timestamp is None:
+            continue
 
-            # Skip non-JSON lines (like [STDERR] prefixed lines)
-            if line.startswith("[STDERR]"):
-                continue
+        event: dict[str, Any] = {
+            "timestamp": pe.timestamp,
+            "datetime": ms_to_datetime(pe.timestamp),
+            "type": pe.event_type,
+            "source": log_path.stem,
+        }
 
-            try:
-                data = json.loads(line)
-            except json.JSONDecodeError:
-                continue
+        part: dict[str, Any] = pe.part
 
-            timestamp = data.get("timestamp")
-            event_type = data.get("type")
-            part = data.get("part", {})
+        if pe.event_type == "step_start":
+            event["description"] = "Step started"
 
-            if not timestamp or not event_type:
-                continue
+        elif pe.event_type == "step_finish":
+            event["description"] = f"Step finished ({part.get('reason', 'unknown')})"
+            cost = part.get("cost", 0)
+            tokens = part.get("tokens", {})
+            if cost:
+                event["cost"] = cost
+            if tokens:
+                event["tokens"] = tokens
 
-            event: dict[str, Any] = {
-                "timestamp": timestamp,
-                "datetime": ms_to_datetime(timestamp),
-                "type": event_type,
-                "source": log_path.stem,
-            }
+        elif pe.event_type == "text":
+            text = part.get("text", "")
+            if len(text) > 100:
+                text = text[:100] + "..."
+            event["description"] = f"Text: {text}"
 
-            # Extract relevant details based on event type
-            if event_type == "step_start":
-                event["description"] = "Step started"
+        elif pe.event_type == "tool_use":
+            tool = part.get("tool", "unknown")
+            state = part.get("state", {})
+            status = state.get("status", "unknown")
+            input_data = state.get("input", {})
 
-            elif event_type == "step_finish":
-                event["description"] = f"Step finished ({part.get('reason', 'unknown')})"
-                cost = part.get("cost", 0)
-                tokens = part.get("tokens", {})
-                if cost:
-                    event["cost"] = cost
-                if tokens:
-                    event["tokens"] = tokens
+            if tool == "bash":
+                cmd = input_data.get("command", "")
+                desc = input_data.get("description", "")
+                if len(cmd) > 50:
+                    cmd = cmd[:50] + "..."
+                event["description"] = f"Tool: {tool} ({status}) - {desc or cmd}"
+            elif tool == "read":
+                filepath = input_data.get("filePath", "")
+                event["description"] = f"Tool: {tool} ({status}) - {Path(filepath).name}"
+            elif tool == "write":
+                filepath = input_data.get("filePath", "")
+                event["description"] = f"Tool: {tool} ({status}) - {Path(filepath).name}"
+            elif tool == "task":
+                subagent = input_data.get("subagent_type", "")
+                desc = input_data.get("description", "")
+                event["description"] = f"Tool: {tool} ({status}) - {subagent}: {desc}"
+                if subagent and status == "completed":
+                    event["task_subagent"] = subagent
+                    event["task_output"] = state.get("output", "")
+                    task_time = state.get("time", {})
+                    if task_time:
+                        event["task_start_ts"] = task_time.get("start")
+                        event["task_end_ts"] = task_time.get("end")
+                        event["idle_period"] = (task_time.get("start"), task_time.get("end"))
+            elif tool == "parallel-agents":
+                agent = input_data.get("agent", "")
+                prompts = input_data.get("prompts", [])
+                event["description"] = f"Tool: {tool} ({status}) - {agent} x{len(prompts)}"
+                tool_time = state.get("time", {})
+                if tool_time and status == "completed":
+                    event["idle_period"] = (tool_time.get("start"), tool_time.get("end"))
+            else:
+                event["description"] = f"Tool: {tool} ({status})"
 
-            elif event_type == "text":
-                text = part.get("text", "")
-                # Truncate long text
-                if len(text) > 100:
-                    text = text[:100] + "..."
-                event["description"] = f"Text: {text}"
+            time_data = state.get("time", {})
+            if time_data:
+                start = time_data.get("start")
+                end = time_data.get("end")
+                if start and end:
+                    event["duration_ms"] = end - start
 
-            elif event_type == "tool_use":
-                tool = part.get("tool", "unknown")
-                state = part.get("state", {})
-                status = state.get("status", "unknown")
-                input_data = state.get("input", {})
+        else:
+            event["description"] = f"{pe.event_type}"
 
-                # Get tool-specific description
-                if tool == "bash":
-                    cmd = input_data.get("command", "")
-                    desc = input_data.get("description", "")
-                    if len(cmd) > 50:
-                        cmd = cmd[:50] + "..."
-                    event["description"] = f"Tool: {tool} ({status}) - {desc or cmd}"
-                elif tool == "read":
-                    filepath = input_data.get("filePath", "")
-                    event["description"] = f"Tool: {tool} ({status}) - {Path(filepath).name}"
-                elif tool == "write":
-                    filepath = input_data.get("filePath", "")
-                    event["description"] = f"Tool: {tool} ({status}) - {Path(filepath).name}"
-                elif tool == "task":
-                    subagent = input_data.get("subagent_type", "")
-                    desc = input_data.get("description", "")
-                    event["description"] = f"Tool: {tool} ({status}) - {subagent}: {desc}"
-                    # Store task subagent details for virtual agent creation
-                    if subagent and status == "completed":
-                        event["task_subagent"] = subagent
-                        event["task_output"] = state.get("output", "")
-                        task_time = state.get("time", {})
-                        if task_time:
-                            event["task_start_ts"] = task_time.get("start")
-                            event["task_end_ts"] = task_time.get("end")
-                            # Mark as idle period for the calling agent
-                            event["idle_period"] = (task_time.get("start"), task_time.get("end"))
-                elif tool == "parallel-agents":
-                    agent = input_data.get("agent", "")
-                    prompts = input_data.get("prompts", [])
-                    event["description"] = f"Tool: {tool} ({status}) - {agent} x{len(prompts)}"
-                    # Mark as idle period for the calling agent
-                    tool_time = state.get("time", {})
-                    if tool_time and status == "completed":
-                        event["idle_period"] = (tool_time.get("start"), tool_time.get("end"))
-                else:
-                    event["description"] = f"Tool: {tool} ({status})"
-
-                # Extract timing if available
-                time_data = state.get("time", {})
-                if time_data:
-                    start = time_data.get("start")
-                    end = time_data.get("end")
-                    if start and end:
-                        event["duration_ms"] = end - start
-
-            events.append(event)
+        events.append(event)
 
     return events
 

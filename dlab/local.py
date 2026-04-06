@@ -251,7 +251,8 @@ def run_opencode_local(
     runner_script: str = f'''#!/bin/bash
 set -o pipefail
 prompt=$(cat "{prompt_file}")
-opencode run --format json --log-level DEBUG --model "{model}" "$prompt" 2>&1 | tee "{log_path}"
+echo "$prompt" | python3 -c "import json,sys; print(json.dumps({{'type':'dlab_start','timestamp':int(__import__('time').time()*1000),'model':'{model}','agent':'{log_prefix}','prompt':sys.stdin.read().strip()}}))" > "{log_path}"
+opencode run --format json --log-level DEBUG --model "{model}" "$prompt" 2>&1 | tee -a "{log_path}"
 '''
     runner_file: Path = work_path / ".run_opencode.sh"
     runner_file.write_text(runner_script)

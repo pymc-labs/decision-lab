@@ -4,11 +4,12 @@ Log file watcher using simple polling.
 Tracks file positions and streams new log events as they are appended.
 """
 
-import json
 import threading
 from pathlib import Path
 from queue import Queue
 from typing import Any, Callable
+
+from dlab.opencode_logparser import LogEvent as ParsedEvent, parse_line
 
 
 class LogWatcher:
@@ -120,31 +121,25 @@ class LogWatcher:
                         raw_text_lines.clear()
 
                 for line in new_content.splitlines():
-                    line = line.strip()
-                    if not line:
+                    parsed: ParsedEvent | None = parse_line(line)
+                    if parsed is None:
                         continue
 
-                    # Try to parse as JSON
-                    if line.startswith("{"):
-                        try:
-                            event = json.loads(line)
-                            # Flush any accumulated raw text first
-                            flush_raw_text()
-                            # Handle raw JSON outputs (no type/timestamp) as "additional_output"
-                            if not event.get("type") or not event.get("timestamp"):
-                                # Create a synthetic event for raw output
-                                event = {
-                                    "type": "additional_output",
-                                    "timestamp": None,
-                                    "part": {"raw_data": event},
-                                }
-                            events.append((source, event))
-                        except json.JSONDecodeError:
-                            # JSON-like but malformed - treat as raw text
-                            raw_text_lines.append(line)
+                    if parsed.event_type == "raw_text":
+                        raw_text_lines.append(parsed.part.get("text", ""))
                     else:
-                        # Not JSON - accumulate as raw text
-                        raw_text_lines.append(line)
+                        flush_raw_text()
+                        # Convert ParsedEvent back to dict for the existing queue interface
+                        event: dict[str, Any] = {
+                            "type": parsed.event_type,
+                            "timestamp": parsed.timestamp,
+                            "sessionID": parsed.session_id,
+                            "part": parsed.part,
+                        }
+                        # Preserve full raw data for events that have it
+                        if parsed.raw:
+                            event = parsed.raw
+                        events.append((source, event))
 
                 # Flush any remaining raw text
                 flush_raw_text()
