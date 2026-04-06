@@ -331,6 +331,15 @@ class LogEventWidget(Horizontal):
         if self._is_long:
             self.is_collapsed = not self.is_collapsed
 
+    def on_click(self) -> None:
+        """Select this event when clicked."""
+        try:
+            log_view: LogView = self.screen.query_one("#log-view", LogView)
+            idx: int = log_view._widgets.index(self)
+            log_view.selected_index = idx
+        except Exception:
+            pass
+
 
 class LogView(VerticalScroll, can_focus=True):
     """
@@ -361,6 +370,7 @@ class LogView(VerticalScroll, can_focus=True):
         self._global_start_ts: int | None = None
         self._widgets: list[LogEventWidget] = []
         self._expand_all_mode: bool = False
+        self._suppress_scroll: bool = False
 
     def watch_selected_index(self, old_index: int, new_index: int) -> None:
         """Update selection visuals when index changes."""
@@ -368,7 +378,8 @@ class LogView(VerticalScroll, can_focus=True):
             self._widgets[old_index].is_selected = False
         if 0 <= new_index < len(self._widgets):
             self._widgets[new_index].is_selected = True
-            self._widgets[new_index].scroll_visible()
+            if not self._suppress_scroll:
+                self._widgets[new_index].scroll_visible()
 
     def on_focus(self) -> None:
         """Auto-select first event when focusing if none selected."""
@@ -435,23 +446,54 @@ class LogView(VerticalScroll, can_focus=True):
         if self.auto_scroll:
             self.scroll_end(animate=False)
 
+    def _snap_selection_to_visible(self) -> None:
+        """If selected widget is off-screen, move selection to first visible."""
+        if not self._widgets:
+            return
+        if 0 <= self.selected_index < len(self._widgets):
+            w = self._widgets[self.selected_index]
+            vp_top: int = self.scroll_offset.y
+            vp_bottom: int = vp_top + self.size.height
+            try:
+                if w.virtual_region.y < vp_bottom and w.virtual_region.y + w.virtual_region.height > vp_top:
+                    return
+            except Exception:
+                return
+        # Snap — suppress scroll so we don't jump
+        vp_top = self.scroll_offset.y
+        self._suppress_scroll = True
+        for i, widget in enumerate(self._widgets):
+            try:
+                if widget.virtual_region.y + widget.virtual_region.height > vp_top:
+                    self.selected_index = i
+                    break
+            except Exception:
+                pass
+        self._suppress_scroll = False
+
     def expand_all(self) -> None:
         """Expand all collapsible events."""
+        self._snap_selection_to_visible()
         self._expand_all_mode = True
         for widget in self._widgets:
             widget.is_collapsed = False
         self.refresh(layout=True)
         if 0 <= self.selected_index < len(self._widgets):
-            self._widgets[self.selected_index].scroll_visible()
+            self.call_after_refresh(
+                self._widgets[self.selected_index].scroll_visible
+            )
 
     def collapse_all(self) -> None:
         """Collapse all collapsible events."""
+        self._snap_selection_to_visible()
         self._expand_all_mode = False
         for widget in self._widgets:
             widget.is_collapsed = True
         self.refresh(layout=True)
         if 0 <= self.selected_index < len(self._widgets):
-            self._widgets[self.selected_index].scroll_visible()
+            self.call_after_refresh(
+                self._widgets[self.selected_index].scroll_visible
+            )
 
     def highlight_search(self, query: str) -> list[int]:
         """
@@ -496,6 +538,7 @@ class LogView(VerticalScroll, can_focus=True):
         """Select the next event."""
         if not self._widgets:
             return
+        self._snap_selection_to_visible()
         if self.selected_index < len(self._widgets) - 1:
             self.selected_index += 1
         elif self.selected_index == -1:
@@ -505,6 +548,7 @@ class LogView(VerticalScroll, can_focus=True):
         """Select the previous event."""
         if not self._widgets:
             return
+        self._snap_selection_to_visible()
         if self.selected_index > 0:
             self.selected_index -= 1
         elif self.selected_index == -1:
