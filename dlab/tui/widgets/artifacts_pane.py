@@ -182,8 +182,7 @@ class ArtifactItem(ListItem):
         else:
             display_path = self.file_path.name
 
-        # Sidebar is 28 wide - 2 padding = 26 cells. Tag is 3 chars + space = 4.
-        max_len: int = 22
+        max_len: int = 19
         if len(display_path) > max_len:
             display_path = display_path[:max_len - 1] + "…"
 
@@ -191,6 +190,21 @@ class ArtifactItem(ListItem):
         text.append(f"{tag:>3}", style="dim")
         text.append(f" {display_path}")
         yield Static(text)
+
+
+_ARTIFACT_TYPE_ORDER: dict[str, int] = {
+    ".md": 0, ".py": 1,
+    ".png": 2, ".jpg": 2, ".jpeg": 2,
+    ".csv": 3,
+}
+
+
+def _sort_artifacts(artifacts: list[Path]) -> list[Path]:
+    """Sort artifacts by type (md, py, img, csv, rest) then name."""
+    return sorted(
+        artifacts,
+        key=lambda p: (_ARTIFACT_TYPE_ORDER.get(p.suffix.lower(), 99), p.name.lower()),
+    )
 
 
 class ArtifactList(ListView):
@@ -234,6 +248,8 @@ class ArtifactList(ListView):
             self.append(ListItem(Static(Text("No files", style="dim italic"))))
             return
 
+        self._artifacts = _sort_artifacts(self._artifacts)
+
         for path in self._artifacts:
             self.append(ArtifactItem(path))
 
@@ -244,7 +260,7 @@ class ArtifactList(ListView):
 
         self._agent_dir = get_agent_directory(self._work_dir, self._agent_name)
         is_main = self._agent_name.startswith("main")
-        new_artifacts = discover_artifacts(self._work_dir, self._agent_dir, is_main=is_main)
+        new_artifacts = _sort_artifacts(discover_artifacts(self._work_dir, self._agent_dir, is_main=is_main))
 
         if new_artifacts != self._artifacts:
             self._artifacts = new_artifacts
