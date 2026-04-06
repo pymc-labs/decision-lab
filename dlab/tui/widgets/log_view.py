@@ -60,11 +60,19 @@ def format_relative_time(event_ts: int, global_start_ts: int | None) -> str:
     # Events with timestamp=0 have no time (additional_output events)
     # All returns must be exactly 10 chars for column alignment
     if event_ts == 0:
-        return "       ---"  # 10 chars
+        return "  ---"
     if global_start_ts is None:
-        return "   ????.?s"  # 10 chars
-    rel_seconds = (event_ts - global_start_ts) / 1000
-    return f"+{rel_seconds:8.1f}s"  # 10 chars
+        return "  ---"
+    rel_seconds: int = max(0, (event_ts - global_start_ts) // 1000)
+    if rel_seconds < 60:
+        return f"{rel_seconds:>3d}s"
+    minutes: int = rel_seconds // 60
+    s: int = rel_seconds % 60
+    if minutes < 60:
+        return f"{minutes}m{s:02d}s"
+    hours: int = minutes // 60
+    m: int = minutes % 60
+    return f"{hours}h{m:02d}m{s:02d}s"
 
 
 def format_duration(ms: int | None) -> str:
@@ -90,14 +98,27 @@ def format_duration(ms: int | None) -> str:
     return f"[{minutes:.1f}m]"
 
 
+# Display labels for event types (shorter, cleaner)
+_EVENT_TYPE_LABELS: dict[str, str] = {
+    "tool_use": "tool",
+    "raw_text": "raw",
+    "text": "",
+    "error": "err",
+    "dlab_start": "init",
+    "additional_output": "raw",
+    "step_start": "",
+    "step_finish": "",
+}
+
+
 class LogEventPrefix(Static):
     """Fixed-width prefix showing selection, time, and event type."""
 
     DEFAULT_CSS = """
     LogEventPrefix {
-        width: 27;
-        min-width: 27;
-        max-width: 27;
+        width: 17;
+        min-width: 17;
+        max-width: 17;
     }
     """
 
@@ -126,10 +147,10 @@ class LogEventPrefix(Static):
         else:
             text = Text("  ")
 
-        text.append(self._time_str, style="dim")
-        text.append("  ", style="dim")
-        text.append(f"{self._event_type:12}", style=self._style)
+        text.append(f"{self._time_str:>8}", style="dim")
         text.append(" ", style="dim")
+        label: str = _EVENT_TYPE_LABELS.get(self._event_type, self._event_type)
+        text.append(f"{label:<5}", style=self._style)
 
         return text
 
@@ -377,12 +398,12 @@ class LogView(VerticalScroll, can_focus=True):
 
     def _rebuild_widgets(self) -> None:
         """Rebuild all event widgets."""
-        # Clear existing
         self.remove_children()
         self._widgets = []
 
-        # Create new widgets
         for event in self._events:
+            if event.hidden:
+                continue
             widget = LogEventWidget(event, self._global_start_ts)
             self._widgets.append(widget)
             self.mount(widget)
@@ -400,6 +421,9 @@ class LogView(VerticalScroll, can_focus=True):
             Event to append.
         """
         self._events.append(event)
+        if event.hidden:
+            return
+
         widget = LogEventWidget(
             event,
             self._global_start_ts,

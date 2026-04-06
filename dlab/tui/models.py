@@ -44,6 +44,7 @@ class LogEvent:
     raw: dict[str, Any]
     cost: float = 0.0
     duration_ms: int | None = None
+    hidden: bool = False    # True for step_start/step_finish (not rendered)
 
     @property
     def full_description(self) -> str:
@@ -199,6 +200,7 @@ class LogEvent:
         description = ""
         cost = 0.0
         duration_ms = None
+        hidden = False
 
         if event_type == "dlab_start":
             model = raw.get("model", part.get("model", "unknown"))
@@ -215,11 +217,12 @@ class LogEvent:
             description = part.get("text", "")
 
         elif event_type == "step_start":
-            description = "Step started"
+            description = ""
+            hidden = True
 
         elif event_type == "step_finish":
-            reason = part.get("reason", "unknown")
-            description = f"Step finished ({reason})"
+            description = ""
+            hidden = True
             cost = part.get("cost", 0.0)
 
         elif event_type == "text":
@@ -316,6 +319,7 @@ class LogEvent:
             raw=raw,
             cost=cost,
             duration_ms=duration_ms,
+            hidden=hidden,
         )
 
 
