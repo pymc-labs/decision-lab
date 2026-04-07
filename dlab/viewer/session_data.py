@@ -1088,7 +1088,9 @@ def _build_agent_tree(
         })
 
     # Handle unlinked children (parent_event_index=None) — parallel work
-    # that wasn't triggered by a visible tool call in main.log
+    # that wasn't triggered by a visible tool call in main.log.
+    # Add as a parallel turn to the last existing todo (or create a
+    # minimal wrapper if no todos exist).
     unlinked: list[SessionNode] = children_by_idx.get(None, [])
     if unlinked:
         child_sessions: list[dict[str, Any]] = []
@@ -1103,23 +1105,27 @@ def _build_agent_tree(
             agent_name = child.agent_name
 
         if child_sessions:
-            todos.append({
-                "id": f"{agent_prefix}parallel-work",
-                "label": f"Parallel work ({agent_name})",
-                "status": "completed" if all(
-                    is_log_complete(c.events) for c in unlinked
-                ) else None,
-                "turns": [{
-                    "type": "parallel",
-                    "summary": f"{agent_name} x{len(child_sessions)}",
-                    "agent": agent_name,
-                    "children": child_sessions,
-                    "consolidator": None,
-                    "steps": [],
-                    "has_error": False,
-                }],
+            parallel_turn: dict[str, Any] = {
+                "type": "parallel",
+                "summary": f"{agent_name} x{len(child_sessions)}",
+                "agent": agent_name,
+                "children": child_sessions,
+                "consolidator": None,
+                "steps": [],
                 "has_error": False,
-            })
+            }
+            if todos:
+                # Append to the last todo's turns
+                todos[-1]["turns"].append(parallel_turn)
+            else:
+                # No todos at all — create a minimal one
+                todos.append({
+                    "id": f"{agent_prefix}phase-0",
+                    "label": "Free-form working",
+                    "status": None,
+                    "turns": [parallel_turn],
+                    "has_error": False,
+                })
 
     agent_label: str = node.name
     if node.agent_name and node.agent_name != node.name:
