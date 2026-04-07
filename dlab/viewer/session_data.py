@@ -904,27 +904,42 @@ def _segment_by_todowrite(
         end: int = boundaries[seg_idx + 1]
 
         if seg_idx == 0:
-            label = "Free-form working"
-            status = None
+            # Events before first todowrite — preamble, not a real todo
+            phases.append({
+                "id": f"phase-{seg_idx}",
+                "label": "",
+                "status": None,
+                "is_preamble": True,
+                "event_start": start,
+                "event_end": end,
+            })
+            continue
+
+        label = todo_labels[seg_idx - 1]
+        status = final_status_by_label.get(label, todo_statuses[seg_idx - 1])
+
+        # Merge duplicate labels (e.g. same todo appearing twice as
+        # in_progress then completed in consecutive todowrite calls)
+        if phases and not phases[-1].get("is_preamble") and phases[-1]["label"] == label:
+            phases[-1]["event_end"] = end
+            phases[-1]["status"] = status
         else:
-            label = todo_labels[seg_idx - 1]
-            # Use final status from last snapshot
-            status = final_status_by_label.get(label, todo_statuses[seg_idx - 1])
+            phases.append({
+                "id": f"phase-{seg_idx}",
+                "label": label,
+                "status": status,
+                "is_preamble": False,
+                "event_start": start,
+                "event_end": end,
+            })
 
-        phases.append({
-            "id": f"phase-{seg_idx}",
-            "label": label,
-            "status": status,
-            "event_start": start,
-            "event_end": end,
-        })
-
-    # If no todowrite at all, single free-form phase
+    # If no todowrite at all, single preamble phase
     if not phases:
         phases.append({
             "id": "phase-0",
-            "label": "Free-form working",
+            "label": "",
             "status": None,
+            "is_preamble": True,
             "event_start": 0,
             "event_end": len(events),
         })
@@ -1001,6 +1016,7 @@ def _build_agent_tree(
         children_by_idx[idx].append(child)
 
     todos: list[dict[str, Any]] = []
+    preamble_turns: list[dict[str, Any]] = []
 
     for phase_meta in phases_meta:
         phase_events: list[LogEvent] = node.events[phase_meta["event_start"]:phase_meta["event_end"]]
@@ -1076,16 +1092,21 @@ def _build_agent_tree(
                 "has_error": any(s["type"] == "error" for s in current_steps),
             })
 
-        label_raw: str = phase_meta["label"]
-        label: str = _clean_todo_label(label_raw) if label_raw != "Free-form working" else label_raw
+        # Preamble turns (before first todowrite) go directly on session,
+        # not wrapped in a fake todo
+        if phase_meta.get("is_preamble"):
+            preamble_turns.extend(turns)
+        else:
+            label_raw: str = phase_meta["label"]
+            label: str = _clean_todo_label(label_raw)
 
-        todos.append({
-            "id": f"{agent_prefix}{phase_meta['id']}",
-            "label": label,
-            "status": phase_meta["status"],
-            "turns": turns,
-            "has_error": has_error,
-        })
+            todos.append({
+                "id": f"{agent_prefix}{phase_meta['id']}",
+                "label": label,
+                "status": phase_meta["status"],
+                "turns": turns,
+                "has_error": has_error,
+            })
 
     # Handle unlinked children (parent_event_index=None) — parallel work
     # that wasn't triggered by a visible tool call in main.log.
@@ -1137,6 +1158,7 @@ def _build_agent_tree(
         "is_complete": is_log_complete(node.events),
         "is_consolidator": node.is_consolidator,
         "todos": todos,
+        "preamble_turns": preamble_turns,
     }
 
 

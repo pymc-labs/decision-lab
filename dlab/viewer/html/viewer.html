@@ -131,7 +131,7 @@ let artifactsData = [];
 
 const NODE_CONFIGS = {
   session:  { w: 200, h: 40, rx: 20, fill: '#0F1117', stroke: '#6C72FF', strokeW: 1.5 },
-  todo:     { w: 280, h: 40, rx: 6,  fill: '#0F1117', stroke: '#36B5A0', strokeW: 1 },
+  todo:     { w: 250, h: 40, rx: 6,  fill: '#0F1117', stroke: '#36B5A0', strokeW: 1 },
   thinking: { w: 160, h: 28, rx: 4,  fill: '#161922', stroke: '#2E3348', strokeW: 1 },
   parallel: { w: 180, h: 32, rx: 6,  fill: '#0F1117', stroke: '#D4A0FF', strokeW: 1 },
 };
@@ -157,8 +157,8 @@ function renderTree() {
   const root = d3.hierarchy(treeData, d => d.children);
 
   // Compute tree layout
-  const dx = 50;  // vertical spacing between nodes
-  const dy = 320; // horizontal: must exceed widest node (280px) + gap
+  const dx = 43;  // vertical spacing between nodes
+  const dy = 260; // horizontal: must exceed widest node (220px) + gap
   const tree = d3.tree()
     .nodeSize([dx, dy])
     .separation((a, b) => a.parent === b.parent ? 1 : 1.2);
@@ -184,7 +184,7 @@ function renderTree() {
     .append('g')
     .attr('transform', `translate(${-y0 + pad},${-x0 + pad})`);
 
-  // Links
+  // Links — offset to pill edges (outgoing: right side, incoming: left side)
   svg.selectAll('.link')
     .data(root.links())
     .join('path')
@@ -192,7 +192,23 @@ function renderTree() {
       if (d.source.data.type === 'parallel' || d.target.data.type === 'session') return 'link link-parallel';
       return 'link';
     })
-    .attr('d', d3.linkHorizontal().x(d => d.y).y(d => d.x));
+    .attr('d', d => {
+      const srcCfg = NODE_CONFIGS[d.source.data.type] || NODE_CONFIGS.thinking;
+      const tgtCfg = NODE_CONFIGS[d.target.data.type] || NODE_CONFIGS.thinking;
+      const maxW = NODE_CONFIGS.todo.w;           // widest pill
+      const srcOutFactor = d.source.data.type === 'parallel' ? 0.4 : 0.3;
+      const sy = d.source.y + srcCfg.w * srcOutFactor;  // outgoing: right side
+      const isInstance = d.target.data.type === 'session';
+      const fromTodo = d.source.data.type === 'todo';
+      const incomingW = isInstance ? tgtCfg.w : (fromTodo ? NODE_CONFIGS.parallel.w : maxW);
+      const ty = d.target.y - incomingW * 0.5;
+      const sx = d.source.x;
+      const tx = d.target.x;
+      const srcCy = d.source.y;  // source center
+      const tgtCy = d.target.y;  // target center
+      // source center → source right → curve → target left edge → target center
+      return `M${srcCy},${sx} L${sy},${sx} C${(sy+ty)/2},${sx} ${(sy+ty)/2},${tx} ${ty},${tx} L${tgtCy},${tx}`;
+    });
 
   // Nodes
   const node = svg.selectAll('.node')
@@ -231,21 +247,17 @@ function renderTree() {
       }
     } else if (type === 'todo') {
       const label = d.data.name || '';
-      const isComplete = d.data.status === 'completed';
-      // Use foreignObject for text wrapping
       const fo = g.append('foreignObject')
-        .attr('x', -cfg.w / 2 + 6).attr('y', -cfg.h / 2 + 4)
-        .attr('width', cfg.w - 12).attr('height', cfg.h - 8);
-      const div = fo.append('xhtml:div')
+        .attr('x', -cfg.w / 2).attr('y', -cfg.h / 2)
+        .attr('width', cfg.w).attr('height', cfg.h);
+      fo.append('xhtml:div')
         .style('font-size', '11px').style('line-height', '1.3')
         .style('color', '#EDEDEF').style('overflow', 'hidden')
-        .style('font-family', 'var(--font-sans)');
-      if (isComplete) {
-        div.append('xhtml:span')
-          .style('color', '#36B5A0').style('margin-right', '4px')
-          .text('\u2713');
-      }
-      div.append('xhtml:span').text(label);
+        .style('font-family', 'var(--font-sans)')
+        .style('padding', '0 14px')
+        .style('height', '100%')
+        .style('display', 'flex').style('align-items', 'center')
+        .text(label);
     } else if (type === 'parallel') {
       g.append('text').attr('class', 'node-label')
         .attr('text-anchor', 'middle').attr('dy', '4')
