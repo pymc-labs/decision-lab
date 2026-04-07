@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>dlab session viewer</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <style>
 :root {
   --bg-primary: #0F1117;
@@ -32,9 +37,9 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: v
 
 #header { display: flex; align-items: baseline; gap: 14px; padding: 10px 20px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); flex-shrink: 0; }
 #header .logo { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--node-session); letter-spacing: -0.3px; }
-#header .sep { color: var(--text-tertiary); }
-#header .dpack-name { font-weight: 500; font-size: 13px; }
-.hdr-stat { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); }
+#header .sep { color: var(--text-tertiary); position: relative; top: -1px; }
+#header .dpack-name { font-weight: 500; font-size: 13px; position: relative; top: -1px; }
+.hdr-stat { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); position: relative; top: -1px; }
 .hdr-stat .val { color: var(--text-secondary); }
 
 #main { display: flex; flex: 1; overflow: hidden; }
@@ -61,7 +66,7 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: v
 .step-item { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--border-subtle); cursor: pointer; transition: background 0.1s; }
 .step-item:hover { background: var(--bg-tertiary); }
 .step-item.expanded { background: var(--bg-tertiary); }
-.step-icon { width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; line-height: 1; }
+.step-icon { width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; font-family: var(--font-mono); font-size: 9px; font-weight: 700; flex-shrink: 0; line-height: 1; }
 .step-icon.tool { background: rgba(108,114,255,0.15); color: var(--node-session); }
 .step-icon.text { background: rgba(139,143,163,0.1); color: var(--text-tertiary); }
 .step-icon.error { background: rgba(232,88,90,0.15); color: var(--node-error); }
@@ -95,6 +100,22 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: v
 #artifact-viewer table { border-collapse: collapse; font-family: var(--font-mono); font-size: 11px; width: 100%; }
 #artifact-viewer th, #artifact-viewer td { border: 1px solid var(--border-default); padding: 4px 8px; text-align: left; }
 #artifact-viewer th { background: var(--bg-tertiary); color: var(--text-tertiary); font-weight: 600; }
+#artifact-viewer .md { color: var(--text-primary); line-height: 1.7; font-size: 13px; }
+#artifact-viewer .md h1 { font-size: 20px; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border-default); }
+#artifact-viewer .md h2 { font-size: 16px; margin: 16px 0 6px; }
+#artifact-viewer .md h3 { font-size: 14px; margin: 12px 0 4px; }
+#artifact-viewer .md p { margin: 8px 0; }
+#artifact-viewer .md ul, #artifact-viewer .md ol { margin: 8px 0; padding-left: 24px; }
+#artifact-viewer .md li { margin: 4px 0; }
+#artifact-viewer .md code { font-family: var(--font-mono); background: var(--bg-elevated); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+#artifact-viewer .md pre { background: var(--bg-elevated); border-radius: 6px; padding: 12px; margin: 8px 0; overflow-x: auto; }
+#artifact-viewer .md pre code { padding: 0; background: none; }
+#artifact-viewer .md strong { color: var(--text-primary); }
+#artifact-viewer .md blockquote { border-left: 3px solid var(--border-emphasis); padding-left: 12px; color: var(--text-secondary); margin: 8px 0; }
+#artifact-viewer .md a { color: #6C72FF; }
+#artifact-viewer .md table { border-collapse: collapse; margin: 8px 0; width: 100%; }
+#artifact-viewer .md th, #artifact-viewer .md td { border: 1px solid var(--border-default); padding: 6px 10px; font-size: 12px; }
+#artifact-viewer .md th { background: var(--bg-tertiary); }
 .artifacts-btn { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: 4px; color: var(--text-secondary); font-size: 11px; padding: 3px 8px; cursor: pointer; font-family: var(--font-mono); margin-top: 4px; }
 .artifacts-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
 </style>
@@ -314,7 +335,7 @@ function selectNode(d) {
   // Prompt (session nodes only)
   if (type === 'session' && d.data.prompt) {
     html += '<div style="padding:8px 16px;color:var(--text-tertiary);font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-top:4px">Prompt</div>';
-    html += `<div style="padding:0 16px"><div style="background:var(--bg-elevated);border-radius:4px;padding:10px 12px;font-family:var(--font-mono);font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-word;color:var(--text-secondary);max-height:300px;overflow-y:auto">${esc(d.data.prompt)}</div></div>`;
+    html += `<div style="padding:0 16px"><div style="background:var(--bg-elevated);border-radius:4px;padding:10px 12px;font-family:var(--font-mono);font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-word;color:var(--text-secondary);max-height:450px;overflow-y:auto">${esc(d.data.prompt)}</div></div>`;
   }
 
   // Steps (for thinking and parallel nodes)
@@ -341,7 +362,7 @@ function selectNode(d) {
 function renderStepItem(step, idx) {
   const type = step.type;
   const iconClass = type === 'error' ? 'error' : type === 'tool' || type === 'parallel-agents' ? 'tool' : type === 'raw' ? 'raw' : 'text';
-  const icons = { tool: '\u2699', text: '\u2261', error: '\u26a0', raw: '\u00b7', 'parallel-agents': '\u2693' };
+  const icons = { tool: 'T', text: '\u2261', error: '!', raw: '\u00b7', 'parallel-agents': 'P' };
   const icon = icons[type] || '\u00b7';
 
   // Mono class for tool and raw steps
@@ -442,7 +463,15 @@ async function loadArtifact(idx) {
   try {
     const res = await fetch(`/api/file/${encodeURIComponent(a.path)}`);
     const text = await res.text();
-    if (a.type === 'csv') {
+    if (a.type === 'md') {
+      marked.setOptions({ breaks: true, gfm: true });
+      viewer.innerHTML = `<div class="md">${marked.parse(text)}</div>`;
+      // Highlight code blocks inside markdown
+      viewer.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+    } else if (a.type === 'py') {
+      viewer.innerHTML = `<pre><code class="language-python">${esc(text)}</code></pre>`;
+      viewer.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+    } else if (a.type === 'csv') {
       const lines = text.trim().split('\n');
       let h = '<table>';
       for (let i = 0; i < Math.min(lines.length, 200); i++) {
