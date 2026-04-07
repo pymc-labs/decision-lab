@@ -383,175 +383,13 @@ def _format_time_label(ms: int) -> str:
     return f"+{minutes}m{remaining_seconds}s"
 
 
-# ---------------------------------------------------------------------------
-# Process tree layout (v2 — column-based vertical)
-# ---------------------------------------------------------------------------
-
-# Process tree constants
-PT_MARGIN: int = 30
-PT_PHASE_HEADER_H: int = 48
-PT_PHASE_COL_WIDTH: int = 180
-PT_PHASE_GAP: int = 20
-PT_STEP_HEIGHT: int = 26
-PT_STEP_GAP: int = 3
-PT_STEP_INSET: int = 8      # left/right inset within phase column
-PT_CHILD_GAP: int = 12      # gap between parallel child columns
-PT_FANOUT_PAD_Y: int = 16   # vertical padding before/after fan-out
-
-
-def _layout_agent_phases(
-    tree: dict[str, Any],
-    x_offset: int,
-    y_offset: int,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int, int]:
-    """
-    Lay out an agent's phases as horizontal columns with vertical steps.
-
-    Parameters
-    ----------
-    tree : dict[str, Any]
-        Agent tree from extract_process_tree().
-    x_offset : int
-        Starting x position.
-    y_offset : int
-        Starting y position.
-
-    Returns
-    -------
-    tuple[list[dict], list[dict], int, int]
-        (laid_out_nodes, edges, total_width, total_height)
-    """
-    nodes: list[dict[str, Any]] = []
-    edges: list[dict[str, Any]] = []
-    phase_x: int = x_offset
-    max_height: int = 0
-
-    for phase in tree.get("phases", []):
-        # Phase header node
-        phase_node: dict[str, Any] = {
-            "id": phase["id"],
-            "type": "phase-header",
-            "label": phase["label"],
-            "status": phase.get("status"),
-            "cost": phase.get("cost", 0),
-            "x": phase_x,
-            "y": y_offset,
-            "width": PT_PHASE_COL_WIDTH,
-            "height": PT_PHASE_HEADER_H,
-        }
-        nodes.append(phase_node)
-
-        # Steps within this phase
-        step_y: int = y_offset + PT_PHASE_HEADER_H + PT_STEP_GAP
-        step_x: int = phase_x + PT_STEP_INSET
-        step_w: int = PT_PHASE_COL_WIDTH - 2 * PT_STEP_INSET
-
-        for step_idx, step in enumerate(phase.get("steps", [])):
-            step_id: str = f"{phase['id']}-step-{step_idx}"
-
-            if step["type"] == "parallel-agents" and step.get("children"):
-                # Draw the parallel-agents node itself
-                pa_node: dict[str, Any] = {
-                    "id": step_id,
-                    "type": "parallel-agents",
-                    "label": step["summary"],
-                    "status": step.get("status"),
-                    "tool": step.get("tool"),
-                    "has_error": step.get("has_error", False),
-                    "x": step_x,
-                    "y": step_y,
-                    "width": step_w,
-                    "height": PT_STEP_HEIGHT,
-                    "raw": step.get("raw"),
-                }
-                nodes.append(pa_node)
-
-                # Fan out children below
-                fan_y: int = step_y + PT_STEP_HEIGHT + PT_FANOUT_PAD_Y
-                child_x: int = phase_x
-                child_max_bottom: int = fan_y
-
-                children: list[dict[str, Any]] = step.get("children", [])
-                consolidator: dict[str, Any] | None = step.get("consolidator")
-
-                # Compute total children width to see if we need to expand
-                n_cols: int = len(children) + (1 if consolidator else 0)
-                needed_width: int = n_cols * PT_PHASE_COL_WIDTH + (n_cols - 1) * PT_CHILD_GAP
-
-                for child_idx, child_tree in enumerate(children):
-                    child_nodes, child_edges, cw, ch = _layout_agent_phases(
-                        child_tree, child_x, fan_y,
-                    )
-                    nodes.extend(child_nodes)
-                    edges.extend(child_edges)
-
-                    # Edge from parallel-agents node to child
-                    if child_nodes:
-                        edges.append({
-                            "source_id": step_id,
-                            "target_id": child_nodes[0]["id"],
-                            "type": "spawn",
-                        })
-
-                    child_bottom: int = fan_y + ch
-                    child_max_bottom = max(child_max_bottom, child_bottom)
-                    child_x += cw + PT_CHILD_GAP
-
-                # Consolidator
-                if consolidator:
-                    cons_nodes, cons_edges, cw, ch = _layout_agent_phases(
-                        consolidator, child_x, fan_y,
-                    )
-                    nodes.extend(cons_nodes)
-                    edges.extend(cons_edges)
-
-                    # Edges from each child's last phase to consolidator
-                    if cons_nodes:
-                        for child_tree_data in children:
-                            last_phase_id: str = child_tree_data["phases"][-1]["id"] if child_tree_data.get("phases") else ""
-                            if last_phase_id:
-                                edges.append({
-                                    "source_id": last_phase_id,
-                                    "target_id": cons_nodes[0]["id"],
-                                    "type": "consolidate",
-                                })
-
-                    child_bottom = fan_y + ch
-                    child_max_bottom = max(child_max_bottom, child_bottom)
-                    child_x += cw + PT_CHILD_GAP
-
-                step_y = child_max_bottom + PT_FANOUT_PAD_Y
-            else:
-                # Regular step node
-                step_node: dict[str, Any] = {
-                    "id": step_id,
-                    "type": step["type"],
-                    "label": step["summary"],
-                    "tool": step.get("tool"),
-                    "status": step.get("status"),
-                    "has_error": step.get("has_error", False),
-                    "duration_ms": step.get("duration_ms"),
-                    "cost": step.get("cost", 0),
-                    "x": step_x,
-                    "y": step_y,
-                    "width": step_w,
-                    "height": PT_STEP_HEIGHT,
-                    "raw": step.get("raw"),
-                }
-                nodes.append(step_node)
-                step_y += PT_STEP_HEIGHT + PT_STEP_GAP
-
-        col_height: int = step_y - y_offset
-        max_height = max(max_height, col_height)
-        phase_x += PT_PHASE_COL_WIDTH + PT_PHASE_GAP
-
-    total_width: int = phase_x - x_offset - PT_PHASE_GAP if tree.get("phases") else PT_PHASE_COL_WIDTH
-    return nodes, edges, total_width, max_height
-
-
 def compute_process_layout(tree: dict[str, Any]) -> dict[str, Any]:
     """
-    Compute layout for a process tree.
+    Convert process tree to d3-hierarchy JSON format.
+
+    The actual layout is computed client-side using d3.tree().
+    This function just converts the Python tree to a nested
+    {name, children, data} structure that d3 can consume.
 
     Parameters
     ----------
@@ -561,27 +399,73 @@ def compute_process_layout(tree: dict[str, Any]) -> dict[str, Any]:
     Returns
     -------
     dict[str, Any]
-        {
-            "nodes": list of positioned node dicts,
-            "edges": list of edge dicts with source_id/target_id,
-            "canvas_width": int,
-            "canvas_height": int,
-        }
+        d3-compatible hierarchy with {name, children, data}.
     """
-    nodes, edges, width, height = _layout_agent_phases(
-        tree, PT_MARGIN, PT_MARGIN,
-    )
+    return _tree_to_d3(tree)
 
-    canvas_width: int = width + 2 * PT_MARGIN
-    canvas_height: int = height + 2 * PT_MARGIN
 
-    # Ensure minimum canvas size
-    canvas_width = max(canvas_width, 600)
-    canvas_height = max(canvas_height, 400)
+def _tree_to_d3(agent_tree: dict[str, Any]) -> dict[str, Any]:
+    """
+    Recursively convert an agent tree to d3 hierarchy format.
+
+    Structure: session root → todo nodes → turn nodes.
+    Parallel turns get child session sub-trees.
+
+    Parameters
+    ----------
+    agent_tree : dict[str, Any]
+        Agent tree with "todos" list.
+
+    Returns
+    -------
+    dict[str, Any]
+        d3 hierarchy node.
+    """
+    children: list[dict[str, Any]] = []
+
+    for todo in agent_tree.get("todos", []):
+        todo_children: list[dict[str, Any]] = []
+
+        for i, turn in enumerate(todo.get("turns", [])):
+            if turn["type"] == "parallel":
+                # Parallel turn → child sessions as sub-trees
+                parallel_children: list[dict[str, Any]] = []
+                for child_tree in turn.get("children", []):
+                    parallel_children.append(_tree_to_d3(child_tree))
+
+                consolidator: dict[str, Any] | None = turn.get("consolidator")
+                if consolidator:
+                    parallel_children.append(_tree_to_d3(consolidator))
+
+                todo_children.append({
+                    "name": turn.get("summary", "parallel"),
+                    "type": "parallel",
+                    "has_error": turn.get("has_error", False),
+                    "steps": turn.get("steps", []),
+                    "children": parallel_children,
+                })
+            else:
+                # Thinking turn — leaf node (steps in detail panel)
+                todo_children.append({
+                    "name": turn.get("summary", "working"),
+                    "type": "thinking",
+                    "has_error": turn.get("has_error", False),
+                    "steps": turn.get("steps", []),
+                })
+
+        children.append({
+            "name": todo["label"],
+            "type": "todo",
+            "status": todo.get("status"),
+            "has_error": todo.get("has_error", False),
+            "children": todo_children if todo_children else None,
+        })
 
     return {
-        "nodes": nodes,
-        "edges": edges,
-        "canvas_width": canvas_width,
-        "canvas_height": canvas_height,
+        "name": agent_tree.get("agent", "agent"),
+        "type": "session",
+        "model": agent_tree.get("model"),
+        "is_complete": agent_tree.get("is_complete", False),
+        "is_consolidator": agent_tree.get("is_consolidator", False),
+        "children": children if children else None,
     }

@@ -4,148 +4,76 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>dlab session viewer</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
-/* Catppuccin Mocha palette — https://catppuccin.com/palette */
 :root {
-  --ctp-base: #1e1e2e;
-  --ctp-mantle: #181825;
-  --ctp-crust: #11111b;
-  --ctp-surface0: #313244;
-  --ctp-surface1: #45475a;
-  --ctp-surface2: #585b70;
-  --ctp-overlay0: #6c7086;
-  --ctp-overlay1: #7f849c;
-  --ctp-overlay2: #9399b2;
-  --ctp-subtext0: #a6adc8;
-  --ctp-subtext1: #bac2de;
-  --ctp-text: #cdd6f4;
-  --ctp-lavender: #b4befe;
-  --ctp-blue: #89b4fa;
-  --ctp-sapphire: #74c7ec;
-  --ctp-sky: #89dceb;
-  --ctp-teal: #94e2d5;
-  --ctp-green: #a6e3a1;
-  --ctp-yellow: #f9e2af;
-  --ctp-peach: #fab387;
-  --ctp-maroon: #eba0ac;
-  --ctp-red: #f38ba8;
-  --ctp-mauve: #cba6f7;
-  --ctp-pink: #f5c2e7;
-  --ctp-flamingo: #f2cdcd;
-  --ctp-rosewater: #f5e0dc;
-
+  --bg-primary: #0F1117;
+  --bg-secondary: #161922;
+  --bg-tertiary: #1C1F2E;
+  --bg-elevated: #232738;
+  --border-subtle: #232738;
+  --border-default: #2E3348;
+  --border-emphasis: #3D4260;
+  --text-primary: #EDEDEF;
+  --text-secondary: #8B8FA3;
+  --text-tertiary: #565B73;
+  --node-session: #6C72FF;
+  --node-todo: #36B5A0;
+  --node-thinking: #565B73;
+  --node-parallel: #D4A0FF;
+  --node-error: #E8585A;
+  --node-complete: #36B5A0;
+  --node-active: #F0C246;
   --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
 }
-
 * { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-sans); font-size: 13px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-body {
-  background: var(--ctp-base);
-  color: var(--ctp-text);
-  font-family: var(--font-sans);
-  font-size: 14px;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
+#header { display: flex; align-items: center; gap: 14px; padding: 10px 20px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); flex-shrink: 0; }
+#header .logo { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--node-session); letter-spacing: -0.3px; }
+#header .sep { color: var(--text-tertiary); }
+#header .dpack-name { font-weight: 500; font-size: 13px; }
+.hdr-stat { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); }
+.hdr-stat .val { color: var(--text-secondary); }
 
-/* Header */
-#header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 10px 20px;
-  background: var(--ctp-mantle);
-  border-bottom: 1px solid var(--ctp-surface0);
-  flex-shrink: 0;
-}
-#header .logo { font-family: var(--font-mono); font-size: 15px; font-weight: 600; color: var(--ctp-peach); }
-#header .sep { color: var(--ctp-surface2); }
-#header .dpack-name { font-weight: 600; }
-.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-.badge-completed { background: rgba(166,227,161,0.12); color: var(--ctp-green); }
-.badge-error { background: rgba(243,139,168,0.12); color: var(--ctp-red); }
-.badge-running { background: rgba(249,226,175,0.12); color: var(--ctp-yellow); }
-.badge-unknown { background: rgba(147,153,178,0.12); color: var(--ctp-overlay2); }
-.stat { font-family: var(--font-mono); font-size: 12px; color: var(--ctp-overlay2); }
-.stat .val { color: var(--ctp-text); font-weight: 600; }
-
-/* Main layout */
 #main { display: flex; flex: 1; overflow: hidden; }
 
-/* Tree panel */
-#tree-panel { flex: 1; overflow: auto; padding: 0; }
-#tree-svg { display: block; }
+#tree-panel { flex: 1; overflow: auto; cursor: grab; }
+#tree-panel:active { cursor: grabbing; }
+#tree-panel svg { display: block; }
+.link { fill: none; stroke: var(--border-default); stroke-width: 1.2; }
+.link-parallel { stroke: var(--node-parallel); opacity: 0.4; }
+.node { cursor: pointer; }
+.node:hover .node-bg { filter: brightness(1.2); }
+.node.selected .node-bg { stroke-width: 2; stroke: var(--text-primary) !important; }
+.node-bg { transition: filter 0.12s; }
+.node-label { font-family: var(--font-sans); fill: var(--text-primary); pointer-events: none; }
+.node-sublabel { font-family: var(--font-mono); fill: var(--text-tertiary); pointer-events: none; }
 
-/* Detail panel */
-#detail-panel {
-  width: 400px; min-width: 400px;
-  border-left: 1px solid var(--ctp-surface0);
-  background: var(--ctp-mantle);
-  display: flex; flex-direction: column; overflow: hidden;
-}
-#detail-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--ctp-surface0);
-  font-weight: 600; font-size: 13px;
-}
-#detail-header .step-type { color: var(--ctp-sapphire); }
-#detail-header .step-tool { color: var(--ctp-peach); font-family: var(--font-mono); font-size: 12px; }
-#detail-content { flex: 1; overflow-y: auto; padding: 16px; }
-#detail-placeholder {
-  display: flex; align-items: center; justify-content: center;
-  height: 100%; color: var(--ctp-overlay0); font-size: 13px;
-}
-#detail-content pre {
-  font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
-  white-space: pre-wrap; word-break: break-word; color: var(--ctp-subtext1);
-}
-#detail-content .section-label {
-  font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
-  color: var(--ctp-overlay1); margin: 12px 0 4px; font-weight: 600;
-}
-#detail-content .section-label:first-child { margin-top: 0; }
-#detail-content .detail-value {
-  background: var(--ctp-surface0); border-radius: 6px; padding: 10px 12px;
-  font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
-  white-space: pre-wrap; word-break: break-word; color: var(--ctp-text);
-  max-height: 300px; overflow-y: auto; margin-bottom: 8px;
-}
-#detail-content .detail-value.error { border-left: 3px solid var(--ctp-red); }
+#detail-panel { width: 380px; min-width: 380px; border-left: 1px solid var(--border-default); background: var(--bg-secondary); display: flex; flex-direction: column; overflow: hidden; }
+#detail-header { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); min-height: 44px; display: flex; align-items: center; gap: 8px; }
+#detail-header .node-type { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 6px; border-radius: 3px; font-weight: 600; }
+#detail-header .node-title { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+#detail-content { flex: 1; overflow-y: auto; }
+#detail-placeholder { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-tertiary); font-size: 12px; }
 
-/* SVG styles */
-.phase-header-rect {
-  cursor: default;
-  transition: filter 0.15s;
-}
-.phase-header-rect:hover { filter: brightness(1.15); }
-.phase-header-label {
-  font-family: var(--font-sans); font-size: 11px; font-weight: 600;
-  pointer-events: none;
-}
-.phase-status-icon {
-  font-size: 11px; pointer-events: none;
-}
-.step-rect {
-  cursor: pointer;
-  transition: filter 0.12s, stroke-width 0.12s;
-}
-.step-rect:hover { filter: brightness(1.25); }
-.step-group.selected .step-rect { stroke-width: 2; stroke: var(--ctp-lavender); }
-.step-label {
-  font-family: var(--font-mono); font-size: 10px;
-  pointer-events: none;
-}
-.edge-line {
-  fill: none; stroke-width: 1.5; opacity: 0.5;
-}
-.edge-line.spawn { stroke: var(--ctp-blue); }
-.edge-line.consolidate { stroke: var(--ctp-mauve); }
-.phase-connector {
-  stroke: var(--ctp-surface2); stroke-width: 1; stroke-dasharray: 4,3; opacity: 0.4;
-}
+.step-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--border-subtle); cursor: pointer; transition: background 0.1s; }
+.step-item:hover { background: var(--bg-tertiary); }
+.step-item.expanded { background: var(--bg-tertiary); }
+.step-icon { width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; margin-top: 1px; }
+.step-icon.tool { background: rgba(108,114,255,0.15); color: var(--node-session); }
+.step-icon.text { background: rgba(139,143,163,0.1); color: var(--text-tertiary); }
+.step-icon.error { background: rgba(232,88,90,0.15); color: var(--node-error); }
+.step-icon.raw { background: rgba(86,91,115,0.1); color: var(--text-tertiary); }
+.step-summary { font-size: 12px; color: var(--text-secondary); line-height: 1.4; flex: 1; }
+.step-summary .tool-name { color: var(--text-primary); font-family: var(--font-mono); font-size: 11px; }
+.step-detail { margin: 6px 0 4px 26px; padding: 8px 10px; background: var(--bg-elevated); border-radius: 4px; font-family: var(--font-mono); font-size: 11px; line-height: 1.5; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow-y: auto; }
+.step-detail.error-detail { border-left: 2px solid var(--node-error); }
+
+.info-row { display: flex; justify-content: space-between; padding: 8px 16px; font-size: 12px; border-bottom: 1px solid var(--border-subtle); }
+.info-label { color: var(--text-tertiary); }
+.info-value { color: var(--text-secondary); font-family: var(--font-mono); font-size: 11px; }
 </style>
 </head>
 <body>
@@ -154,248 +82,250 @@ body {
   <span class="logo">dlab</span>
   <span class="sep">/</span>
   <span class="dpack-name" id="dpack-name">loading...</span>
-  <span class="badge badge-unknown" id="status-badge">...</span>
-  <span class="stat"><span class="val" id="stat-duration">--</span> duration</span>
-  <span class="stat"><span class="val" id="stat-cost">--</span> cost</span>
+  <span class="hdr-stat"><span class="val" id="stat-duration">--</span></span>
 </div>
 
 <div id="main">
-  <div id="tree-panel">
-    <svg id="tree-svg"></svg>
-  </div>
+  <div id="tree-panel"></div>
   <div id="detail-panel">
-    <div id="detail-header">
-      <span id="detail-placeholder">Click a step to view details</span>
-    </div>
+    <div id="detail-header"><span id="detail-placeholder">Click a node to view details</span></div>
     <div id="detail-content"></div>
   </div>
 </div>
 
 <script>
-let layoutData = null;
-let sessionData = null;
-let selectedStepId = null;
+let treeData = null;
+let sessionMeta = null;
+let selectedNode = null;
 
-// Color mapping for step types (Catppuccin Mocha)
-const STEP_COLORS = {
-  'text':            { fill: '#313244', stroke: '#585b70', text: '#bac2de' },
-  'tool':            { fill: '#1e3a4a', stroke: '#74c7ec', text: '#74c7ec' },
-  'error':           { fill: '#3e1a28', stroke: '#f38ba8', text: '#f38ba8' },
-  'raw':             { fill: '#2a2a3a', stroke: '#45475a', text: '#7f849c' },
-  'parallel-agents': { fill: '#2a1e4a', stroke: '#cba6f7', text: '#cba6f7' },
+const NODE_CONFIGS = {
+  session:  { w: 180, h: 36, rx: 18, fill: '#0F1117', stroke: '#6C72FF', strokeW: 1.5 },
+  todo:     { w: 200, h: 30, rx: 6,  fill: '#0F1117', stroke: '#36B5A0', strokeW: 1 },
+  thinking: { w: 120, h: 24, rx: 4,  fill: '#161922', stroke: '#2E3348', strokeW: 1 },
+  parallel: { w: 150, h: 28, rx: 6,  fill: '#0F1117', stroke: '#D4A0FF', strokeW: 1 },
 };
-const PHASE_FILL = '#181825';
-const PHASE_STROKE = '#45475a';
-const PHASE_COMPLETE_ACCENT = '#a6e3a1';
-const PHASE_ACTIVE_ACCENT = '#f9e2af';
 
 async function init() {
-  try {
-    const res = await fetch('/api/session');
-    const data = await res.json();
-    sessionData = data.session;
-    layoutData = data.layout;
-    renderHeader();
-    renderTree();
-  } catch (err) {
-    document.getElementById('dpack-name').textContent = 'Error loading session';
-    console.error(err);
-  }
+  const res = await fetch('/api/session');
+  const data = await res.json();
+  treeData = data.layout;
+  sessionMeta = data.session.meta;
+  renderHeader();
+  renderTree();
 }
 
 function renderHeader() {
-  const m = sessionData.meta;
-  document.getElementById('dpack-name').textContent = m.dpack_name || 'session';
-  document.title = `dlab / ${m.dpack_name || 'session'}`;
-  const badge = document.getElementById('status-badge');
-  badge.textContent = m.status || 'unknown';
-  badge.className = 'badge badge-' + (m.status || 'unknown');
-  document.getElementById('stat-duration').textContent = fmtDuration(m.total_duration_ms);
-  document.getElementById('stat-cost').textContent = fmtCost(m.total_cost);
+  document.getElementById('dpack-name').textContent = sessionMeta.dpack_name || 'session';
+  document.title = `dlab / ${sessionMeta.dpack_name || 'session'}`;
+  document.getElementById('stat-duration').textContent = fmtDuration(sessionMeta.total_duration_ms);
 }
 
 function renderTree() {
-  const svg = document.getElementById('tree-svg');
-  const cw = layoutData.canvas_width;
-  const ch = layoutData.canvas_height;
-  svg.setAttribute('viewBox', `0 0 ${cw} ${ch}`);
-  svg.setAttribute('width', cw);
-  svg.setAttribute('height', ch);
+  const panel = document.getElementById('tree-panel');
+  const root = d3.hierarchy(treeData, d => d.children);
+
+  // Compute tree layout
+  const dx = 60;  // vertical spacing between nodes
+  const dy = 220; // horizontal spacing between siblings
+  const tree = d3.tree().nodeSize([dx, dy]);
+  tree(root);
+
+  // Compute bounds
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  root.each(d => {
+    const cfg = NODE_CONFIGS[d.data.type] || NODE_CONFIGS.thinking;
+    x0 = Math.min(x0, d.x - cfg.h / 2);
+    x1 = Math.max(x1, d.x + cfg.h / 2);
+    y0 = Math.min(y0, d.y - cfg.w / 2);
+    y1 = Math.max(y1, d.y + cfg.w / 2);
+  });
+
+  const pad = 40;
+  const width = y1 - y0 + pad * 2;
+  const height = x1 - x0 + pad * 2;
+
+  const svg = d3.select(panel).append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${-y0 + pad},${-x0 + pad})`);
+
+  // Links
+  svg.selectAll('.link')
+    .data(root.links())
+    .join('path')
+    .attr('class', d => {
+      if (d.source.data.type === 'parallel' || d.target.data.type === 'session') return 'link link-parallel';
+      return 'link';
+    })
+    .attr('d', d3.linkHorizontal().x(d => d.y).y(d => d.x));
+
+  // Nodes
+  const node = svg.selectAll('.node')
+    .data(root.descendants())
+    .join('g')
+    .attr('class', 'node')
+    .attr('transform', d => `translate(${d.y},${d.x})`)
+    .on('click', (ev, d) => selectNode(d));
+
+  // Node backgrounds
+  node.each(function(d) {
+    const g = d3.select(this);
+    const cfg = NODE_CONFIGS[d.data.type] || NODE_CONFIGS.thinking;
+    let fill = cfg.fill;
+    let stroke = cfg.stroke;
+    if (d.data.has_error) { stroke = '#E8585A'; fill = '#1a0f0f'; }
+
+    g.append('rect')
+      .attr('class', 'node-bg')
+      .attr('x', -cfg.w / 2).attr('y', -cfg.h / 2)
+      .attr('width', cfg.w).attr('height', cfg.h)
+      .attr('rx', cfg.rx)
+      .attr('fill', fill).attr('stroke', stroke).attr('stroke-width', cfg.strokeW);
+
+    // Labels
+    const type = d.data.type;
+    if (type === 'session') {
+      const name = d.data.name || 'agent';
+      const model = d.data.model ? d.data.model.split('/').pop() : '';
+      g.append('text').attr('class', 'node-label')
+        .attr('text-anchor', 'middle').attr('dy', model ? '-2' : '4')
+        .attr('font-size', '11px').text(truncate(name, 22));
+      if (model) {
+        g.append('text').attr('class', 'node-sublabel')
+          .attr('text-anchor', 'middle').attr('dy', '12')
+          .attr('font-size', '9px').text(truncate(model, 24));
+      }
+    } else if (type === 'todo') {
+      const label = d.data.name || '';
+      const statusIcon = d.data.status === 'completed' ? '\u2713 ' : d.data.status === 'in_progress' ? '\u25cb ' : '';
+      const statusColor = d.data.status === 'completed' ? '#36B5A0' : d.data.status === 'in_progress' ? '#F0C246' : '#565B73';
+      if (statusIcon) {
+        g.append('text').attr('class', 'node-label')
+          .attr('x', -cfg.w / 2 + 8).attr('dy', '4')
+          .attr('font-size', '11px').attr('fill', statusColor).text(statusIcon);
+      }
+      g.append('text').attr('class', 'node-label')
+        .attr('x', -cfg.w / 2 + (statusIcon ? 22 : 8)).attr('dy', '4')
+        .attr('font-size', '11px').text(truncate(label, 24));
+    } else if (type === 'parallel') {
+      g.append('text').attr('class', 'node-label')
+        .attr('text-anchor', 'middle').attr('dy', '4')
+        .attr('font-size', '10px').attr('fill', '#D4A0FF')
+        .text(d.data.name || 'parallel');
+    } else {
+      // thinking
+      g.append('text').attr('class', 'node-label')
+        .attr('text-anchor', 'middle').attr('dy', '4')
+        .attr('font-size', '10px').attr('fill', d.data.has_error ? '#E8585A' : '#8B8FA3')
+        .text(d.data.name || 'working');
+    }
+  });
+}
+
+function selectNode(d) {
+  selectedNode = d;
+  d3.selectAll('.node').classed('selected', false);
+  d3.selectAll('.node').filter(n => n === d).classed('selected', true);
+
+  const hdr = document.getElementById('detail-header');
+  const content = document.getElementById('detail-content');
+  const type = d.data.type;
+  const typeColors = { session: '#6C72FF', todo: '#36B5A0', thinking: '#8B8FA3', parallel: '#D4A0FF' };
+  const color = d.data.has_error ? '#E8585A' : (typeColors[type] || '#8B8FA3');
+
+  hdr.innerHTML = `<span class="node-type" style="background:${color}22;color:${color}">${type}</span>` +
+    `<span class="node-title">${esc(d.data.name || '')}</span>`;
 
   let html = '';
 
-  // Defs
-  html += `<defs>
-    <marker id="arr-spawn" viewBox="0 0 8 6" refX="8" refY="3" markerWidth="6" markerHeight="5" orient="auto-start-reverse">
-      <path d="M0 0 L8 3 L0 6z" fill="#89b4fa" opacity="0.5"/>
-    </marker>
-    <marker id="arr-cons" viewBox="0 0 8 6" refX="8" refY="3" markerWidth="6" markerHeight="5" orient="auto-start-reverse">
-      <path d="M0 0 L8 3 L0 6z" fill="#cba6f7" opacity="0.5"/>
-    </marker>
-  </defs>`;
-
-  // Edges first (behind nodes)
-  for (const edge of layoutData.edges) {
-    const src = layoutData.nodes.find(n => n.id === edge.source_id);
-    const tgt = layoutData.nodes.find(n => n.id === edge.target_id);
-    if (!src || !tgt) continue;
-
-    const sx = src.x + src.width / 2;
-    const sy = src.y + src.height;
-    const tx = tgt.x + tgt.width / 2;
-    const ty = tgt.y;
-    const my = (sy + ty) / 2;
-    const marker = edge.type === 'consolidate' ? 'url(#arr-cons)' : 'url(#arr-spawn)';
-    html += `<path class="edge-line ${edge.type}" d="M${sx} ${sy} C${sx} ${my} ${tx} ${my} ${tx} ${ty}" marker-end="${marker}"/>`;
+  if (type === 'session') {
+    if (d.data.model) html += infoRow('Model', d.data.model);
+    html += infoRow('Status', d.data.is_complete ? 'Complete' : 'Running');
+    const nTodos = (d.data.children || []).length;
+    html += infoRow('Todos', nTodos);
+  } else if (type === 'todo') {
+    if (d.data.status) html += infoRow('Status', d.data.status);
+    const nTurns = (d.data.children || []).length;
+    html += infoRow('Turns', nTurns);
+  } else if (type === 'parallel') {
+    html += infoRow('Agent', d.data.name);
+    const nChildren = (d.data.children || []).length;
+    html += infoRow('Instances', nChildren);
   }
 
-  // Nodes
-  for (const node of layoutData.nodes) {
-    if (node.type === 'phase-header') {
-      html += renderPhaseHeader(node);
-    } else {
-      html += renderStepNode(node);
+  // Steps (for thinking and parallel nodes)
+  const steps = d.data.steps || [];
+  if (steps.length > 0) {
+    html += '<div style="padding:8px 16px;color:var(--text-tertiary);font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-top:4px">Event stream</div>';
+    for (let i = 0; i < steps.length; i++) {
+      html += renderStepItem(steps[i], i);
     }
   }
 
-  svg.innerHTML = html;
+  content.innerHTML = html;
+
+  // Attach expand listeners
+  content.querySelectorAll('.step-item').forEach(el => {
+    el.addEventListener('click', () => {
+      el.classList.toggle('expanded');
+      const detail = el.querySelector('.step-detail');
+      if (detail) detail.style.display = detail.style.display === 'none' ? 'block' : 'none';
+    });
+  });
 }
 
-function renderPhaseHeader(node) {
-  const isComplete = node.status === 'completed' || node.status === 'in_progress';
-  const accent = node.status === 'completed' ? PHASE_COMPLETE_ACCENT
-    : node.status === 'in_progress' ? PHASE_ACTIVE_ACCENT
-    : PHASE_STROKE;
+function renderStepItem(step, idx) {
+  const type = step.type;
+  const iconClass = type === 'error' ? 'error' : type === 'tool' || type === 'parallel-agents' ? 'tool' : type === 'raw' ? 'raw' : 'text';
+  const icons = { tool: '\u2699', text: '\u2261', error: '\u26a0', raw: '\u00b7', 'parallel-agents': '\u2693' };
+  const icon = icons[type] || '\u00b7';
 
-  // Truncate label
-  let label = node.label || '';
-  if (label.length > 24) label = label.slice(0, 22) + '...';
-
-  // Status icon
-  const icon = node.status === 'completed' ? '\u2713'
-    : node.status === 'in_progress' ? '\u25cb'
-    : '';
-
-  let h = '';
-  h += `<g>`;
-  h += `<rect class="phase-header-rect" x="${node.x}" y="${node.y}" width="${node.width}" height="${node.height}" rx="8" fill="${PHASE_FILL}" stroke="${accent}" stroke-width="1.5"/>`;
-  // Status icon
-  if (icon) {
-    h += `<text class="phase-status-icon" x="${node.x + 10}" y="${node.y + 20}" fill="${accent}">${icon}</text>`;
-  }
-  // Label (wrap to 2 lines if needed)
-  const lx = node.x + (icon ? 24 : 10);
-  h += `<text class="phase-header-label" x="${lx}" y="${node.y + 20}" fill="${esc(getComputedStyle(document.documentElement).getPropertyValue('--ctp-text').trim()) || '#cdd6f4'}">${esc(label)}</text>`;
-  // Cost
-  if (node.cost > 0) {
-    h += `<text class="phase-header-label" x="${node.x + 10}" y="${node.y + 36}" fill="${accent}" font-size="10" opacity="0.7">$${node.cost.toFixed(4)}</text>`;
-  }
-  h += `</g>`;
-  return h;
-}
-
-function renderStepNode(node) {
-  const colors = STEP_COLORS[node.type] || STEP_COLORS['text'];
-  const fill = node.has_error ? STEP_COLORS['error'].fill : colors.fill;
-  const stroke = node.has_error ? STEP_COLORS['error'].stroke : colors.stroke;
-  const textColor = node.has_error ? STEP_COLORS['error'].text : colors.text;
-
-  let label = node.label || '';
-  if (label.length > 22) label = label.slice(0, 20) + '..';
-
-  let h = '';
-  h += `<g class="step-group" data-id="${esc(node.id)}" onclick="selectStep('${esc(node.id)}')">`;
-  h += `<rect class="step-rect" x="${node.x}" y="${node.y}" width="${node.width}" height="${node.height}" rx="4" fill="${fill}" stroke="${stroke}" stroke-width="1"/>`;
-  h += `<text class="step-label" x="${node.x + 6}" y="${node.y + 16}" fill="${textColor}">${esc(label)}</text>`;
-  h += `</g>`;
-  return h;
-}
-
-// Step selection + detail panel
-function selectStep(stepId) {
-  selectedStepId = stepId;
-  document.querySelectorAll('.step-group').forEach(g => g.classList.remove('selected'));
-  const el = document.querySelector(`.step-group[data-id="${CSS.escape(stepId)}"]`);
-  if (el) el.classList.add('selected');
-
-  const node = layoutData.nodes.find(n => n.id === stepId);
-  if (!node || !node.raw) {
-    document.getElementById('detail-header').innerHTML = '<span id="detail-placeholder">No detail available</span>';
-    document.getElementById('detail-content').innerHTML = '';
-    return;
+  let summary = '';
+  if (type === 'tool' || type === 'parallel-agents') {
+    summary = `<span class="tool-name">${esc(step.tool || '')}</span> ${esc(step.summary.replace(step.tool + ': ', '') || '')}`;
+  } else {
+    summary = esc(step.summary || '');
   }
 
-  renderDetail(node);
-}
-
-function renderDetail(node) {
-  const hdr = document.getElementById('detail-header');
-  const typeBadge = node.type === 'error' ? '<span style="color:var(--ctp-red)">error</span>'
-    : node.type === 'parallel-agents' ? '<span style="color:var(--ctp-mauve)">parallel</span>'
-    : `<span class="step-type">${esc(node.type)}</span>`;
-  const toolStr = node.tool ? ` <span class="step-tool">${esc(node.tool)}</span>` : '';
-  hdr.innerHTML = typeBadge + toolStr;
-
-  const raw = node.raw || {};
+  // Expandable detail
+  let detail = '';
+  const raw = step.raw || {};
   const part = raw.part || {};
   const state = part.state || {};
-  let content = '';
 
-  // Duration
-  if (node.duration_ms) {
-    content += `<div class="section-label">Duration</div><div class="detail-value">${fmtDuration(node.duration_ms)}</div>`;
-  }
-
-  if (node.type === 'text' || node.type === 'raw') {
-    const text = part.text || '';
-    content += `<div class="section-label">Content</div><div class="detail-value">${esc(text)}</div>`;
-  } else if (node.type === 'error') {
+  if (type === 'error') {
     const err = raw.error || part.error || {};
-    const errMsg = typeof err === 'object' ? (err.data?.message || err.name || JSON.stringify(err, null, 2)) : String(err);
-    content += `<div class="section-label">Error</div><div class="detail-value error">${esc(errMsg)}</div>`;
-  } else if (node.type === 'tool' || node.type === 'parallel-agents') {
-    // Input
-    const input = state.input;
-    if (input) {
-      const inputStr = typeof input === 'object' ? JSON.stringify(input, null, 2) : String(input);
-      content += `<div class="section-label">Input</div><div class="detail-value">${esc(inputStr)}</div>`;
-    }
-    // Output
-    const output = state.output;
-    if (output) {
-      const outputStr = typeof output === 'string' ? output : JSON.stringify(output, null, 2);
-      content += `<div class="section-label">Output</div><div class="detail-value">${esc(outputStr)}</div>`;
-    }
-    // Error
-    const error = state.error;
-    if (error) {
-      content += `<div class="section-label">Error</div><div class="detail-value error">${esc(String(error))}</div>`;
-    }
+    const msg = typeof err === 'object' ? (err.data?.message || err.name || JSON.stringify(err, null, 2)) : String(err);
+    detail = `<div class="step-detail error-detail" style="display:none">${esc(msg)}</div>`;
+  } else if (type === 'tool' || type === 'parallel-agents') {
+    let parts = [];
+    if (state.input) parts.push('INPUT:\n' + (typeof state.input === 'object' ? JSON.stringify(state.input, null, 2) : String(state.input)));
+    if (state.output) parts.push('OUTPUT:\n' + String(state.output));
+    if (state.error) parts.push('ERROR:\n' + String(state.error));
+    if (parts.length) detail = `<div class="step-detail" style="display:none">${esc(parts.join('\n\n'))}</div>`;
+  } else if (type === 'text' || type === 'raw') {
+    const text = part.text || '';
+    if (text.length > 60) detail = `<div class="step-detail" style="display:none">${esc(text)}</div>`;
   }
 
-  document.getElementById('detail-content').innerHTML = content;
+  return `<div class="step-item"><span class="step-icon ${iconClass}">${icon}</span><div class="step-summary">${summary}${detail}</div></div>`;
 }
 
-// Helpers
+function infoRow(label, value) {
+  return `<div class="info-row"><span class="info-label">${esc(label)}</span><span class="info-value">${esc(String(value))}</span></div>`;
+}
+
 function fmtDuration(ms) {
-  if (!ms || ms <= 0) return '--';
+  if (!ms || ms <= 0) return '';
   const s = ms / 1000;
-  if (s < 60) return s.toFixed(1) + 's';
+  if (s < 60) return s.toFixed(0) + 's';
   const m = Math.floor(s / 60);
   const rs = Math.round(s % 60);
-  if (rs === 0) return m + 'm';
-  return m + 'm' + rs + 's';
+  return rs ? m + 'm' + rs + 's' : m + 'm';
 }
-function fmtCost(c) {
-  if (!c || c <= 0) return '--';
-  return c < 0.01 ? '$' + c.toFixed(4) : '$' + c.toFixed(2);
-}
-function esc(s) {
-  if (!s) return '';
-  const d = document.createElement('div');
-  d.textContent = String(s);
-  return d.innerHTML;
-}
+function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '\u2026' : s; }
+function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
 
 init();
 </script>
