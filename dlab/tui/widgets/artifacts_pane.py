@@ -276,6 +276,11 @@ class ArtifactList(ListView):
         base = self._agent_dir if self._agent_dir else self._work_dir
         return base / rel_path
 
+    def on_focus(self) -> None:
+        """Auto-highlight first item when focused."""
+        if self.index is None and self.children:
+            self.index = 0
+
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle selection (Enter key)."""
         if isinstance(event.item, ArtifactItem):
