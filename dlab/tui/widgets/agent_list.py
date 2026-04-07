@@ -72,16 +72,24 @@ class AgentListItem(ListItem):
 
     def compose(self):
         """Compose the widget."""
+        self._display_name = shorten_agent_name(self.agent_name)
+        yield Static(self._build_text(False), id="agent-label")
+
+    def _build_text(self, highlighted: bool) -> Text:
         if self.agent_running:
             indicator = Text("● ", style="bold #A6E22E")
+            name_style = "black" if highlighted else ""
         else:
             indicator = Text("○ ", style="#75715E")
+            name_style = "black" if highlighted else "#75715E"
+        return indicator + Text(self._display_name, style=name_style)
 
-        name_style = "" if self.agent_running else "#75715E"
-        display_name = shorten_agent_name(self.agent_name)
-        name_text = Text(display_name, style=name_style)
-
-        yield Static(indicator + name_text)
+    def watch_highlighted(self, value: bool) -> None:
+        super().watch_highlighted(value)
+        try:
+            self.query_one("#agent-label", Static).update(self._build_text(value))
+        except Exception:
+            pass
 
 
 class AgentSelector(ListView):
