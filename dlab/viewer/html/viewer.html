@@ -132,6 +132,7 @@ let artifactsData = [];
 const NODE_CONFIGS = {
   session:  { w: 200, h: 40, rx: 20, fill: '#0F1117', stroke: '#6C72FF', strokeW: 1.5 },
   todo:     { w: 280, h: 40, rx: 6,  fill: '#0F1117', stroke: '#36B5A0', strokeW: 1 },
+  thinking: { w: 160, h: 28, rx: 4,  fill: '#161922', stroke: '#2E3348', strokeW: 1 },
   parallel: { w: 180, h: 32, rx: 6,  fill: '#0F1117', stroke: '#D4A0FF', strokeW: 1 },
 };
 
@@ -156,11 +157,11 @@ function renderTree() {
   const root = d3.hierarchy(treeData, d => d.children);
 
   // Compute tree layout
-  const dx = 56;  // vertical spacing between nodes
-  const dy = 180; // horizontal spacing between siblings
+  const dx = 50;  // vertical spacing between nodes
+  const dy = 320; // horizontal: must exceed widest node (280px) + gap
   const tree = d3.tree()
     .nodeSize([dx, dy])
-    .separation((a, b) => a.parent === b.parent ? 1 : 1.4);
+    .separation((a, b) => a.parent === b.parent ? 1 : 1.2);
   tree(root);
 
   // Compute bounds
@@ -250,6 +251,11 @@ function renderTree() {
         .attr('text-anchor', 'middle').attr('dy', '4')
         .attr('font-size', '10px').attr('fill', '#D4A0FF')
         .text(d.data.name || 'parallel');
+    } else if (type === 'thinking') {
+      g.append('text').attr('class', 'node-label')
+        .attr('text-anchor', 'middle').attr('dy', '4')
+        .attr('font-size', '10px').attr('fill', d.data.has_error ? '#E8585A' : '#8B8FA3')
+        .text(d.data.name || 'working');
     }
   });
 }
@@ -263,9 +269,11 @@ function selectNode(d) {
   const content = document.getElementById('detail-content');
   const type = d.data.type;
   const typeColors = { session: '#6C72FF', todo: '#36B5A0', thinking: '#8B8FA3', parallel: '#D4A0FF' };
+  const typeLabels = { session: 'session', todo: 'todo', thinking: 'working', parallel: 'parallel' };
   const color = d.data.has_error ? '#E8585A' : (typeColors[type] || '#8B8FA3');
 
-  hdr.innerHTML = `<span class="node-type" style="background:${color}22;color:${color}">${type}</span>` +
+  const displayType = typeLabels[type] || type;
+  hdr.innerHTML = `<span class="node-type" style="background:${color}22;color:${color}">${displayType}</span>` +
     `<span class="node-title">${esc(d.data.name || '')}</span>`;
 
   let html = '';

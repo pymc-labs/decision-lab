@@ -424,13 +424,9 @@ def _tree_to_d3(agent_tree: dict[str, Any]) -> dict[str, Any]:
     children: list[dict[str, Any]] = []
 
     for todo in agent_tree.get("todos", []):
-        # Collect all steps from thinking turns for the detail panel
-        all_steps: list[dict[str, Any]] = []
-        # Only parallel turns become tree children
         todo_children: list[dict[str, Any]] = []
 
         for turn in todo.get("turns", []):
-            all_steps.extend(turn.get("steps", []))
             if turn["type"] == "parallel":
                 parallel_children: list[dict[str, Any]] = []
                 for child_tree in turn.get("children", []):
@@ -447,15 +443,27 @@ def _tree_to_d3(agent_tree: dict[str, Any]) -> dict[str, Any]:
                     "steps": turn.get("steps", []),
                     "children": parallel_children,
                 })
+            else:
+                # Thinking turn — summary node with steps for detail panel
+                todo_children.append({
+                    "name": turn.get("summary", "working"),
+                    "type": "thinking",
+                    "has_error": turn.get("has_error", False),
+                    "steps": turn.get("steps", []),
+                })
 
-        children.append({
-            "name": todo["label"],
-            "type": "todo",
-            "status": todo.get("status"),
-            "has_error": todo.get("has_error", False),
-            "steps": all_steps,  # all steps for detail panel
-            "children": todo_children if todo_children else None,
-        })
+        # Skip "Free-form working" as a todo node — promote its children
+        # directly into the parent's children list
+        if todo["label"] == "Free-form working":
+            children.extend(todo_children)
+        else:
+            children.append({
+                "name": todo["label"],
+                "type": "todo",
+                "status": todo.get("status"),
+                "has_error": todo.get("has_error", False),
+                "children": todo_children if todo_children else None,
+            })
 
     return {
         "name": agent_tree.get("agent", "agent"),
