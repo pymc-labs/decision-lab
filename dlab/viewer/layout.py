@@ -423,6 +423,30 @@ def _tree_to_d3(agent_tree: dict[str, Any]) -> dict[str, Any]:
     """
     children: list[dict[str, Any]] = []
 
+    # Preamble turns (before first todowrite) become direct session children
+    for turn in agent_tree.get("preamble_turns", []):
+        if turn["type"] == "parallel":
+            parallel_children: list[dict[str, Any]] = []
+            for child_tree in turn.get("children", []):
+                parallel_children.append(_tree_to_d3(child_tree))
+            consolidator: dict[str, Any] | None = turn.get("consolidator")
+            if consolidator:
+                parallel_children.append(_tree_to_d3(consolidator))
+            children.append({
+                "name": turn.get("summary", "parallel"),
+                "type": "parallel",
+                "has_error": turn.get("has_error", False),
+                "steps": turn.get("steps", []),
+                "children": parallel_children,
+            })
+        else:
+            children.append({
+                "name": turn.get("summary", "working"),
+                "type": "thinking",
+                "has_error": turn.get("has_error", False),
+                "steps": turn.get("steps", []),
+            })
+
     for todo in agent_tree.get("todos", []):
         todo_children: list[dict[str, Any]] = []
 
