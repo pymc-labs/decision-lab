@@ -277,6 +277,16 @@ def _get_model(events: list[LogEvent]) -> str | None:
     return None
 
 
+def _get_prompt(events: list[LogEvent]) -> str | None:
+    """Extract prompt from dlab_start event if present."""
+    for event in events:
+        if event.event_type == "dlab_start":
+            return event.part.get("prompt") or event.raw.get("prompt")
+        if event.timestamp is not None:
+            break
+    return None
+
+
 def _split_main_node(
     root: SessionNode,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -990,6 +1000,7 @@ def _summarize_steps(steps: list[dict[str, Any]]) -> str:
 def _build_agent_tree(
     node: SessionNode,
     agent_prefix: str = "",
+    work_dir: Path | None = None,
 ) -> dict[str, Any]:
     """
     Build a process tree: session → todos → turns.
@@ -1004,6 +1015,8 @@ def _build_agent_tree(
         Session node with events and children.
     agent_prefix : str
         Prefix for IDs.
+    work_dir : Path | None
+        Work directory for artifact discovery.
 
     Returns
     -------
@@ -1022,6 +1035,7 @@ def _build_agent_tree(
 
     todos: list[dict[str, Any]] = []
     preamble_turns: list[dict[str, Any]] = []
+    total_cost: float = 0.0
 
     for phase_meta in phases_meta:
         phase_events: list[LogEvent] = node.events[phase_meta["event_start"]:phase_meta["event_end"]]
@@ -1033,6 +1047,12 @@ def _build_agent_tree(
 
         for evt_offset, event in enumerate(phase_events):
             evt_idx: int = phase_meta["event_start"] + evt_offset
+
+            # Accumulate cost from step_finish events
+            if event.event_type == "step_finish":
+                cost: float | None = get_step_cost(event)
+                if cost:
+                    total_cost += cost
 
             step: dict[str, Any] | None = _event_to_step(event)
             if step is None:
@@ -1069,6 +1089,7 @@ def _build_agent_tree(
                     child_tree: dict[str, Any] = _build_agent_tree(
                         child,
                         agent_prefix=f"{child.agent_name}-{child.name}-",
+                        work_dir=work_dir,
                     )
                     if child.is_consolidator:
                         consolidator_session = child_tree
@@ -1157,11 +1178,40 @@ def _build_agent_tree(
     if node.agent_name and node.agent_name != node.name:
         agent_label = f"{node.agent_name}/{node.name}"
 
+    # Discover artifacts for this agent's work directory
+    agent_artifacts: list[dict[str, Any]] = []
+    if work_dir is not None:
+        is_main: bool = node.name == "main" or node.agent_name == "main"
+        agent_dir: Path | None = None
+        if not is_main:
+            agent_dir = _find_parallel_artifact_dir(
+                work_dir, node.agent_name, node.name,
+            )
+        from dlab.tui.widgets.artifacts_pane import _sort_artifacts
+        raw: list[Path] = discover_artifacts(work_dir, agent_dir, is_main=is_main)
+        for path in _sort_artifacts(raw):
+            if path.name.startswith("."):
+                continue
+            try:
+                rel: str = str(path.relative_to(work_dir))
+            except ValueError:
+                rel = str(path)
+            ext: str = path.suffix.lower()
+            ftype: str = "image" if ext in {".png", ".jpg", ".jpeg", ".gif", ".webp"} else ext.lstrip(".")
+            try:
+                sz: int = path.stat().st_size
+            except OSError:
+                sz = 0
+            agent_artifacts.append({"path": rel, "name": path.name, "type": ftype, "size_bytes": sz})
+
     return {
         "agent": agent_label,
         "model": node.model,
+        "prompt": _get_prompt(node.events),
         "is_complete": is_log_complete(node.events),
         "is_consolidator": node.is_consolidator,
+        "total_cost": round(total_cost, 6),
+        "artifacts": agent_artifacts,
         "todos": todos,
         "preamble_turns": preamble_turns,
     }
@@ -1185,7 +1235,7 @@ def extract_process_tree(work_dir: Path) -> dict[str, Any]:
     if root is None:
         return {"tree": {"agent": "main", "todos": [], "model": None}, "meta": {}}
 
-    tree: dict[str, Any] = _build_agent_tree(root)
+    tree: dict[str, Any] = _build_agent_tree(root, work_dir=work_dir)
 
     # Metadata
     state_meta: dict[str, Any] = _load_state_meta(work_dir)
@@ -1195,6 +1245,22 @@ def extract_process_tree(work_dir: Path) -> dict[str, Any]:
     global_start: int | None = min(all_ts) if all_ts else None
     global_end: int | None = max(all_ts) if all_ts else None
 
+    def _recursive_cost(t: dict[str, Any]) -> float:
+        c: float = t.get("total_cost", 0)
+        for todo in t.get("todos", []):
+            for turn in todo.get("turns", []):
+                if turn.get("type") == "parallel":
+                    for child in turn.get("children", []):
+                        c += _recursive_cost(child)
+                    cons: dict[str, Any] | None = turn.get("consolidator")
+                    if cons:
+                        c += _recursive_cost(cons)
+        for turn in t.get("preamble_turns", []):
+            if turn.get("type") == "parallel":
+                for child in turn.get("children", []):
+                    c += _recursive_cost(child)
+        return c
+
     meta: dict[str, Any] = {
         "work_dir": str(work_dir),
         "dpack_name": state_meta.get("dpack_name", work_dir.name),
@@ -1202,6 +1268,7 @@ def extract_process_tree(work_dir: Path) -> dict[str, Any]:
         "global_start_ms": global_start,
         "global_end_ms": global_end,
         "total_duration_ms": (global_end - global_start) if global_start and global_end else None,
+        "total_cost": round(_recursive_cost(tree), 2),
     }
 
     # Discover artifacts for the main session (sorted by relevance)

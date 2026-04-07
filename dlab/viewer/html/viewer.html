@@ -58,10 +58,10 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: v
 #detail-content { flex: 1; overflow-y: auto; }
 #detail-placeholder { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-tertiary); font-size: 12px; }
 
-.step-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--border-subtle); cursor: pointer; transition: background 0.1s; }
+.step-item { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--border-subtle); cursor: pointer; transition: background 0.1s; }
 .step-item:hover { background: var(--bg-tertiary); }
 .step-item.expanded { background: var(--bg-tertiary); }
-.step-icon { width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; margin-top: 1px; }
+.step-icon { width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; line-height: 1; }
 .step-icon.tool { background: rgba(108,114,255,0.15); color: var(--node-session); }
 .step-icon.text { background: rgba(139,143,163,0.1); color: var(--text-tertiary); }
 .step-icon.error { background: rgba(232,88,90,0.15); color: var(--node-error); }
@@ -106,6 +106,7 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: v
   <span class="sep">/</span>
   <span class="dpack-name" id="dpack-name">loading...</span>
   <span class="hdr-stat"><span class="val" id="stat-duration">--</span></span>
+  <span class="hdr-stat"><span class="val" id="stat-cost">--</span></span>
 </div>
 
 <div id="artifact-overlay" onclick="if(event.target===this)closeArtifacts()">
@@ -150,6 +151,7 @@ function renderHeader() {
   document.getElementById('dpack-name').textContent = sessionMeta.dpack_name || 'session';
   document.title = `dlab / ${sessionMeta.dpack_name || 'session'}`;
   document.getElementById('stat-duration').textContent = fmtDuration(sessionMeta.total_duration_ms);
+  document.getElementById('stat-cost').textContent = fmtCost(sessionMeta.total_cost);
 }
 
 function renderTree() {
@@ -293,17 +295,26 @@ function selectNode(d) {
   if (type === 'session') {
     if (d.data.model) html += infoRow('Model', d.data.model);
     html += infoRow('Status', d.data.is_complete ? 'Complete' : 'Running');
-    const nTodos = (d.data.children || []).length;
-    html += infoRow('Todos', nTodos);
-    if (artifactsData.length > 0) {
-      html += `<div style="padding:8px 16px"><button class="artifacts-btn" onclick="openArtifacts()">View ${artifactsData.length} artifacts</button></div>`;
-    }
+    if (d.data.total_cost) html += infoRow('Cost', fmtCost(d.data.total_cost));
   } else if (type === 'todo') {
     if (d.data.status) html += infoRow('Status', d.data.status);
   } else if (type === 'parallel') {
     html += infoRow('Agent', d.data.name);
     const nChildren = (d.data.children || []).length;
     html += infoRow('Instances', nChildren);
+  }
+
+  // Artifacts button (from nearest session ancestor)
+  const sessionArtifacts = findSessionArtifacts(d);
+  if (sessionArtifacts.length > 0) {
+    html += `<div style="padding:8px 16px"><button class="artifacts-btn" onclick="openArtifacts()">View ${sessionArtifacts.length} artifacts</button></div>`;
+    artifactsData = sessionArtifacts;
+  }
+
+  // Prompt (session nodes only)
+  if (type === 'session' && d.data.prompt) {
+    html += '<div style="padding:8px 16px;color:var(--text-tertiary);font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-top:4px">Prompt</div>';
+    html += `<div style="padding:0 16px"><div style="background:var(--bg-elevated);border-radius:4px;padding:10px 12px;font-family:var(--font-mono);font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-word;color:var(--text-secondary);max-height:300px;overflow-y:auto">${esc(d.data.prompt)}</div></div>`;
   }
 
   // Steps (for thinking and parallel nodes)
@@ -370,6 +381,10 @@ function infoRow(label, value) {
   return `<div class="info-row"><span class="info-label">${esc(label)}</span><span class="info-value">${esc(String(value))}</span></div>`;
 }
 
+function fmtCost(c) {
+  if (!c || c <= 0) return '';
+  return '$' + c.toFixed(2);
+}
 function fmtDuration(ms) {
   if (!ms || ms <= 0) return '';
   const s = ms / 1000;
@@ -387,6 +402,18 @@ function fmtDuration(ms) {
 }
 function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '\u2026' : s; }
 function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+
+function findSessionArtifacts(d) {
+  // Walk up the d3 hierarchy to find the nearest session ancestor
+  let node = d;
+  while (node) {
+    if (node.data.type === 'session' && node.data.artifacts && node.data.artifacts.length > 0) {
+      return node.data.artifacts;
+    }
+    node = node.parent;
+  }
+  return [];
+}
 
 // Artifacts overlay
 function openArtifacts() {
