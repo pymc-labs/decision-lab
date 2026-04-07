@@ -686,6 +686,11 @@ def extract_session_data(work_dir: Path) -> dict[str, Any]:
     }
 
 
+def _truncate(text: str, max_len: int = 120) -> str:
+    """Truncate text with ellipsis."""
+    return text[:max_len] + "..." if len(text) > max_len else text
+
+
 # ---------------------------------------------------------------------------
 # Process tree extraction (v2 — todo-segmented vertical tree)
 # ---------------------------------------------------------------------------
@@ -722,7 +727,7 @@ def _event_to_step(event: LogEvent) -> dict[str, Any] | None:
         text: str | None = get_text(event)
         if not text or not text.strip():
             return None
-        first_line: str = text.strip().split("\n")[0][:120]
+        first_line: str = _truncate(text.strip().split("\n")[0])
         return {
             "type": "text",
             "tool": None,
@@ -762,7 +767,7 @@ def _event_to_step(event: LogEvent) -> dict[str, Any] | None:
             "type": "error",
             "tool": None,
             "status": "error",
-            "summary": msg[:120],
+            "summary": _truncate(msg),
             "timestamp": event.timestamp,
             "duration_ms": None,
             "cost": 0.0,
@@ -820,7 +825,7 @@ def _event_to_step(event: LogEvent) -> dict[str, Any] | None:
             "type": "parallel-agents" if tool == "parallel-agents" else "tool",
             "tool": tool,
             "status": status,
-            "summary": summary[:120],
+            "summary": _truncate(summary),
             "timestamp": event.timestamp,
             "duration_ms": dur,
             "cost": 0.0,
@@ -974,11 +979,11 @@ def _summarize_steps(steps: list[dict[str, Any]]) -> str:
     n_errors: int = sum(1 for s in steps if s["type"] == "error")
     parts: list[str] = []
     if n_tools:
-        parts.append(f"{n_tools} tool calls")
+        parts.append(f"{n_tools} tool call{'s' if n_tools != 1 else ''}")
     if n_text:
-        parts.append(f"{n_text} messages")
+        parts.append(f"{n_text} message{'s' if n_text != 1 else ''}")
     if n_errors:
-        parts.append(f"{n_errors} errors")
+        parts.append(f"{n_errors} error{'s' if n_errors != 1 else ''}")
     return ", ".join(parts) if parts else "working"
 
 

@@ -30,7 +30,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-sans); font-size: 13px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-#header { display: flex; align-items: center; gap: 14px; padding: 10px 20px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); flex-shrink: 0; }
+#header { display: flex; align-items: baseline; gap: 14px; padding: 10px 20px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); flex-shrink: 0; }
 #header .logo { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--node-session); letter-spacing: -0.3px; }
 #header .sep { color: var(--text-tertiary); }
 #header .dpack-name { font-weight: 500; font-size: 13px; }
@@ -102,7 +102,7 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: v
 <body>
 
 <div id="header">
-  <span class="logo">dlab</span>
+  <span class="logo">decision-lab</span>
   <span class="sep">/</span>
   <span class="dpack-name" id="dpack-name">loading...</span>
   <span class="hdr-stat"><span class="val" id="stat-duration">--</span></span>
@@ -376,6 +376,13 @@ function fmtDuration(ms) {
   if (s < 60) return s.toFixed(0) + 's';
   const m = Math.floor(s / 60);
   const rs = Math.round(s % 60);
+  if (m >= 60) {
+    const h = Math.floor(m / 60);
+    const rm = m % 60;
+    if (rs) return h + 'h' + rm + 'm' + rs + 's';
+    if (rm) return h + 'h' + rm + 'm';
+    return h + 'h';
+  }
   return rs ? m + 'm' + rs + 's' : m + 'm';
 }
 function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '\u2026' : s; }
