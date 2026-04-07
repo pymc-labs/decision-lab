@@ -495,5 +495,8 @@ def _tree_to_d3(agent_tree: dict[str, Any]) -> dict[str, Any]:
         "model": agent_tree.get("model"),
         "is_complete": agent_tree.get("is_complete", False),
         "is_consolidator": agent_tree.get("is_consolidator", False),
+        "total_cost": agent_tree.get("total_cost", 0),
+        "prompt": agent_tree.get("prompt"),
+        "artifacts": agent_tree.get("artifacts", []),
         "children": children if children else None,
     }
