@@ -1189,17 +1189,25 @@ def _build_agent_tree(
             )
         from dlab.tui.widgets.artifacts_pane import _sort_artifacts
         raw: list[Path] = discover_artifacts(work_dir, agent_dir, is_main=is_main)
+        # discover_artifacts returns paths relative to search_dir (agent_dir or work_dir).
+        # We need paths relative to work_dir for the /api/file/ endpoint.
+        base_dir: Path = agent_dir if agent_dir else work_dir
         for path in _sort_artifacts(raw):
             if path.name.startswith("."):
                 continue
+            abs_path: Path = path if path.is_absolute() else (base_dir / path)
             try:
-                rel: str = str(path.relative_to(work_dir))
+                rel: str = str(abs_path.relative_to(work_dir))
             except ValueError:
-                rel = str(path)
+                # If it can't be made relative, try resolving
+                try:
+                    rel = str(abs_path.resolve().relative_to(work_dir.resolve()))
+                except ValueError:
+                    rel = str(path)
             ext: str = path.suffix.lower()
             ftype: str = "image" if ext in {".png", ".jpg", ".jpeg", ".gif", ".webp"} else ext.lstrip(".")
             try:
-                sz: int = path.stat().st_size
+                sz: int = abs_path.stat().st_size
             except OSError:
                 sz = 0
             agent_artifacts.append({"path": rel, "name": path.name, "type": ftype, "size_bytes": sz})

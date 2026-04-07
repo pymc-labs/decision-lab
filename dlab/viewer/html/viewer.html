@@ -116,8 +116,8 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: v
 #artifact-viewer .md table { border-collapse: collapse; margin: 8px 0; width: 100%; }
 #artifact-viewer .md th, #artifact-viewer .md td { border: 1px solid var(--border-default); padding: 6px 10px; font-size: 12px; }
 #artifact-viewer .md th { background: var(--bg-tertiary); }
-.artifacts-btn { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: 4px; color: var(--text-secondary); font-size: 11px; padding: 3px 8px; cursor: pointer; font-family: var(--font-mono); margin-top: 4px; }
-.artifacts-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+.artifacts-btn { background: rgba(108,114,255,0.1); border: 1px solid rgba(108,114,255,0.3); border-radius: 6px; color: #6C72FF; font-size: 12px; padding: 6px 14px; cursor: pointer; font-family: var(--font-sans); font-weight: 500; margin-top: 4px; transition: all 0.15s; }
+.artifacts-btn:hover { background: rgba(108,114,255,0.2); border-color: rgba(108,114,255,0.5); color: #8085FF; }
 </style>
 </head>
 <body>
@@ -326,10 +326,11 @@ function selectNode(d) {
   }
 
   // Artifacts button (from nearest session ancestor)
-  const sessionArtifacts = findSessionArtifacts(d);
-  if (sessionArtifacts.length > 0) {
-    html += `<div style="padding:8px 16px"><button class="artifacts-btn" onclick="openArtifacts()">View ${sessionArtifacts.length} artifacts</button></div>`;
-    artifactsData = sessionArtifacts;
+  const sessionInfo = findSessionArtifacts(d);
+  if (sessionInfo.artifacts.length > 0) {
+    artifactsData = sessionInfo.artifacts;
+    const sn = sessionInfo.name || '';
+    html += `<div style="padding:8px 16px"><button class="artifacts-btn" onclick="openArtifacts('${esc(sn)}')">View ${sessionInfo.artifacts.length} session artifacts</button></div>`;
   }
 
   // Prompt (session nodes only)
@@ -429,17 +430,19 @@ function findSessionArtifacts(d) {
   let node = d;
   while (node) {
     if (node.data.type === 'session' && node.data.artifacts && node.data.artifacts.length > 0) {
-      return node.data.artifacts;
+      return { artifacts: node.data.artifacts, name: node.data.name };
     }
     node = node.parent;
   }
-  return [];
+  return { artifacts: [], name: null };
 }
 
 // Artifacts overlay
-function openArtifacts() {
+function openArtifacts(sessionName) {
   const overlay = document.getElementById('artifact-overlay');
   overlay.classList.add('visible');
+  const title = document.querySelector('#artifact-modal-header h3');
+  title.textContent = sessionName ? `Artifacts — ${sessionName}` : 'Artifacts';
   const list = document.getElementById('artifact-list');
   list.innerHTML = artifactsData.map((a, i) =>
     `<div class="artifact-item" onclick="loadArtifact(${i})" data-idx="${i}">${esc(a.name)}</div>`
@@ -457,11 +460,11 @@ async function loadArtifact(idx) {
   if (el) el.classList.add('active');
   const viewer = document.getElementById('artifact-viewer');
   if (a.type === 'image') {
-    viewer.innerHTML = `<img src="/api/file/${encodeURIComponent(a.path)}"/>`;
+    viewer.innerHTML = `<img src="/api/file/${a.path.split('/').map(encodeURIComponent).join('/')}"/>`;
     return;
   }
   try {
-    const res = await fetch(`/api/file/${encodeURIComponent(a.path)}`);
+    const res = await fetch(`/api/file/${a.path.split('/').map(encodeURIComponent).join('/')}`);
     const text = await res.text();
     if (a.type === 'md') {
       marked.setOptions({ breaks: true, gfm: true });
