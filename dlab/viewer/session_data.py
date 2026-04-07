@@ -924,24 +924,63 @@ def _segment_by_todowrite(
     return phases
 
 
+def _clean_todo_label(label: str) -> str:
+    """
+    Strip 'Step N:' or 'Phase N:' prefixes from todo labels.
+
+    Parameters
+    ----------
+    label : str
+        Raw todo label.
+
+    Returns
+    -------
+    str
+        Cleaned label.
+    """
+    import re
+    # Remove "Step N:" or "Step N.N:" or "Phase N:" prefix
+    cleaned: str = re.sub(r"^(?:Step|Phase)\s+[\d.]+:\s*", "", label)
+    return cleaned.strip() or label
+
+
+def _summarize_steps(steps: list[dict[str, Any]]) -> str:
+    """Build a consistent summary string for a list of steps."""
+    n_tools: int = sum(1 for s in steps if s["type"] == "tool")
+    n_text: int = sum(1 for s in steps if s["type"] == "text")
+    n_errors: int = sum(1 for s in steps if s["type"] == "error")
+    parts: list[str] = []
+    if n_tools:
+        parts.append(f"{n_tools} tool calls")
+    if n_text:
+        parts.append(f"{n_text} messages")
+    if n_errors:
+        parts.append(f"{n_errors} errors")
+    return ", ".join(parts) if parts else "working"
+
+
 def _build_agent_tree(
     node: SessionNode,
     agent_prefix: str = "",
 ) -> dict[str, Any]:
     """
-    Build a process tree for a single agent (main or parallel instance).
+    Build a process tree: session → todos → turns.
+
+    Each todo contains "turns" — segments of work separated by
+    parallel-agents calls. Steps (individual events) are stored
+    inside turns for the detail panel, not as tree nodes.
 
     Parameters
     ----------
     node : SessionNode
         Session node with events and children.
     agent_prefix : str
-        Prefix for phase IDs (e.g. "inst1-").
+        Prefix for IDs.
 
     Returns
     -------
     dict[str, Any]
-        Agent tree with phases and steps.
+        Agent tree with todos and turns.
     """
     phases_meta: list[dict[str, Any]] = _segment_by_todowrite(node.events)
 
@@ -953,35 +992,49 @@ def _build_agent_tree(
             children_by_idx[idx] = []
         children_by_idx[idx].append(child)
 
-    phases: list[dict[str, Any]] = []
-    total_cost: float = 0.0
+    todos: list[dict[str, Any]] = []
 
     for phase_meta in phases_meta:
         phase_events: list[LogEvent] = node.events[phase_meta["event_start"]:phase_meta["event_end"]]
-        steps: list[dict[str, Any]] = []
-        phase_cost: float = 0.0
+
+        # Split phase events into turns at parallel-agents/task spawn points
+        turns: list[dict[str, Any]] = []
+        current_steps: list[dict[str, Any]] = []
+        has_error: bool = False
 
         for evt_offset, event in enumerate(phase_events):
             evt_idx: int = phase_meta["event_start"] + evt_offset
-
-            # Accumulate cost from step_finish
-            if event.event_type == "step_finish":
-                cost: float | None = get_step_cost(event)
-                if cost:
-                    phase_cost += cost
-                continue
 
             step: dict[str, Any] | None = _event_to_step(event)
             if step is None:
                 continue
 
-            # Attach children for parallel-agents or task tool calls
-            if evt_idx in children_by_idx and step["type"] in ("parallel-agents", "tool"):
-                # Promote task tool to parallel-agents type for rendering
-                if step["tool"] == "task":
-                    step["type"] = "parallel-agents"
-                child_trees: list[dict[str, Any]] = []
-                consolidator_tree: dict[str, Any] | None = None
+            # Only count actual error events (session-level), not tool retries
+            if step["type"] == "error":
+                has_error = True
+
+            # Check if this event spawns parallel children
+            is_spawn: bool = (
+                evt_idx in children_by_idx
+                and event.event_type == "tool_use"
+                and get_tool_name(event) in ("parallel-agents", "task")
+            )
+
+            if is_spawn:
+                # Flush current steps as a "thinking" turn
+                if current_steps:
+                    turns.append({
+                        "type": "thinking",
+                        "summary": _summarize_steps(current_steps),
+                        "steps": current_steps,
+                        "has_error": any(s["type"] == "error" for s in current_steps),
+                    })
+                    current_steps = []
+
+                # Build child session trees
+                child_sessions: list[dict[str, Any]] = []
+                consolidator_session: dict[str, Any] | None = None
+                agent_name: str = ""
 
                 for child in children_by_idx[evt_idx]:
                     child_tree: dict[str, Any] = _build_agent_tree(
@@ -989,41 +1042,59 @@ def _build_agent_tree(
                         agent_prefix=f"{child.agent_name}-{child.name}-",
                     )
                     if child.is_consolidator:
-                        consolidator_tree = child_tree
+                        consolidator_session = child_tree
                     else:
-                        child_trees.append(child_tree)
+                        child_sessions.append(child_tree)
+                    agent_name = child.agent_name
 
-                step["children"] = child_trees
-                step["consolidator"] = consolidator_tree
+                turns.append({
+                    "type": "parallel",
+                    "summary": f"{agent_name} x{len(child_sessions)}",
+                    "agent": agent_name,
+                    "children": child_sessions,
+                    "consolidator": consolidator_session,
+                    "steps": [step],  # the spawn step itself
+                    "has_error": step.get("has_error", False),
+                })
+            else:
+                current_steps.append(step)
 
-            steps.append(step)
+        # Flush remaining steps
+        if current_steps:
+            turns.append({
+                "type": "thinking",
+                "summary": _summarize_steps(current_steps),
+                "steps": current_steps,
+                "has_error": any(s["type"] == "error" for s in current_steps),
+            })
 
-        total_cost += phase_cost
+        label_raw: str = phase_meta["label"]
+        label: str = _clean_todo_label(label_raw) if label_raw != "Free-form working" else label_raw
 
-        phases.append({
+        todos.append({
             "id": f"{agent_prefix}{phase_meta['id']}",
-            "label": phase_meta["label"],
+            "label": label,
             "status": phase_meta["status"],
-            "steps": steps,
-            "cost": round(phase_cost, 6),
+            "turns": turns,
+            "has_error": has_error,
         })
 
+    agent_label: str = node.name
+    if node.agent_name and node.agent_name != node.name:
+        agent_label = f"{node.agent_name}/{node.name}"
+
     return {
-        "agent": f"{node.agent_name}/{node.name}" if node.agent_name != node.name else node.name,
+        "agent": agent_label,
         "model": node.model,
         "is_complete": is_log_complete(node.events),
         "is_consolidator": node.is_consolidator,
-        "total_cost": round(total_cost, 6),
-        "phases": phases,
+        "todos": todos,
     }
 
 
 def extract_process_tree(work_dir: Path) -> dict[str, Any]:
     """
-    Extract a process tree for the viewer (v2 — todo-segmented).
-
-    The tree is organized by todowrite phases, with steps within each
-    phase and recursive children for parallel agent instances.
+    Extract a process tree: session → todos → turns.
 
     Parameters
     ----------
@@ -1033,15 +1104,11 @@ def extract_process_tree(work_dir: Path) -> dict[str, Any]:
     Returns
     -------
     dict[str, Any]
-        {
-            "tree": agent tree dict,
-            "meta": session metadata dict,
-            "artifacts": {agent_id: [artifact dicts]},
-        }
+        {"tree": agent tree, "meta": session metadata}
     """
     root: SessionNode | None = _build_enhanced_graph(work_dir)
     if root is None:
-        return {"tree": {"agent": "main", "phases": [], "total_cost": 0}, "meta": {}, "artifacts": {}}
+        return {"tree": {"agent": "main", "todos": [], "model": None}, "meta": {}}
 
     tree: dict[str, Any] = _build_agent_tree(root)
 
@@ -1060,11 +1127,6 @@ def extract_process_tree(work_dir: Path) -> dict[str, Any]:
         "global_start_ms": global_start,
         "global_end_ms": global_end,
         "total_duration_ms": (global_end - global_start) if global_start and global_end else None,
-        "total_cost": tree["total_cost"],
     }
 
-    return {
-        "tree": tree,
-        "meta": meta,
-        "artifacts": {},  # TODO: wire up per-agent artifact discovery
-    }
+    return {"tree": tree, "meta": meta}

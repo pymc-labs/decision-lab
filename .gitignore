@@ -70,3 +70,5 @@ ab_testing/
 
 # Manual test decision-packs (not the tests/ directory)
 test/
+
+.notes/
