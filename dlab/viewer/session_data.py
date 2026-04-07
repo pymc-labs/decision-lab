@@ -225,10 +225,12 @@ def _build_enhanced_graph(work_dir: Path) -> SessionNode | None:
         parts: list[str] = dir_name.split("-parallel-run-")
         agent_name: str = parts[0] if len(parts) == 2 else dir_name
 
-        # Try to match to a spawn point
+        # Try to match to a blocking spawn point (parallel-agents only).
+        # Task tool calls are single subagents, not parallel spawns.
         parent_idx: int | None = None
         for sp in spawn_points:
-            # Match by agent name substring (popo-poet matches poet)
+            if not sp["blocking"]:
+                continue
             if agent_name in sp["agent_name"] or sp["agent_name"] in agent_name:
                 parent_idx = sp["event_index"]
                 break
@@ -885,6 +887,14 @@ def _segment_by_todowrite(
         todo_statuses.append(status)
         prev_todos = todos
 
+    # Determine final status for each todo from the last todowrite snapshot.
+    # A todo's status should reflect its FINAL state, not when it first appeared.
+    final_status_by_label: dict[str, str] = {}
+    if prev_todos:
+        for t in prev_todos:
+            content: str = t.get("content", "")
+            final_status_by_label[content] = t.get("status", "pending")
+
     # Build phase segments
     phases: list[dict[str, Any]] = []
     boundaries: list[int] = [0] + todo_indices + [len(events)]
@@ -898,10 +908,8 @@ def _segment_by_todowrite(
             status = None
         else:
             label = todo_labels[seg_idx - 1]
-            status = todo_statuses[seg_idx - 1]
-
-        # Clean up label: remove "Step N: " prefix if redundant
-        # Keep it as-is for clarity
+            # Use final status from last snapshot
+            status = final_status_by_label.get(label, todo_statuses[seg_idx - 1])
 
         phases.append({
             "id": f"phase-{seg_idx}",
@@ -1079,6 +1087,40 @@ def _build_agent_tree(
             "has_error": has_error,
         })
 
+    # Handle unlinked children (parent_event_index=None) — parallel work
+    # that wasn't triggered by a visible tool call in main.log
+    unlinked: list[SessionNode] = children_by_idx.get(None, [])
+    if unlinked:
+        child_sessions: list[dict[str, Any]] = []
+        agent_name: str = ""
+        for child in unlinked:
+            child_tree: dict[str, Any] = _build_agent_tree(
+                child,
+                agent_prefix=f"{child.agent_name}-{child.name}-",
+            )
+            if not child.is_consolidator:
+                child_sessions.append(child_tree)
+            agent_name = child.agent_name
+
+        if child_sessions:
+            todos.append({
+                "id": f"{agent_prefix}parallel-work",
+                "label": f"Parallel work ({agent_name})",
+                "status": "completed" if all(
+                    is_log_complete(c.events) for c in unlinked
+                ) else None,
+                "turns": [{
+                    "type": "parallel",
+                    "summary": f"{agent_name} x{len(child_sessions)}",
+                    "agent": agent_name,
+                    "children": child_sessions,
+                    "consolidator": None,
+                    "steps": [],
+                    "has_error": False,
+                }],
+                "has_error": False,
+            })
+
     agent_label: str = node.name
     if node.agent_name and node.agent_name != node.name:
         agent_label = f"{node.agent_name}/{node.name}"
@@ -1129,4 +1171,24 @@ def extract_process_tree(work_dir: Path) -> dict[str, Any]:
         "total_duration_ms": (global_end - global_start) if global_start and global_end else None,
     }
 
-    return {"tree": tree, "meta": meta}
+    # Discover artifacts for the main session (sorted by relevance)
+    from dlab.tui.widgets.artifacts_pane import _sort_artifacts
+    raw_artifacts: list[Path] = discover_artifacts(work_dir, None, is_main=True)
+    sorted_artifacts: list[Path] = _sort_artifacts(raw_artifacts)
+    artifacts: list[dict[str, Any]] = []
+    for path in sorted_artifacts:
+        if path.name.startswith("."):
+            continue
+        try:
+            rel_path: str = str(path.relative_to(work_dir))
+        except ValueError:
+            rel_path = str(path)
+        ext: str = path.suffix.lower()
+        file_type: str = "image" if ext in {".png", ".jpg", ".jpeg", ".gif", ".webp"} else ext.lstrip(".")
+        try:
+            size: int = path.stat().st_size
+        except OSError:
+            size = 0
+        artifacts.append({"path": rel_path, "name": path.name, "type": file_type, "size_bytes": size})
+
+    return {"tree": tree, "meta": meta, "artifacts": artifacts}

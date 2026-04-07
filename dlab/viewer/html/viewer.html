@@ -67,6 +67,7 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: v
 .step-icon.error { background: rgba(232,88,90,0.15); color: var(--node-error); }
 .step-icon.raw { background: rgba(86,91,115,0.1); color: var(--text-tertiary); }
 .step-summary { font-size: 12px; color: var(--text-secondary); line-height: 1.4; flex: 1; }
+.step-summary.mono { font-family: var(--font-mono); font-size: 11px; }
 .step-summary .tool-name { color: var(--text-primary); font-family: var(--font-mono); font-size: 11px; }
 .step-detail { margin: 6px 0 4px 26px; padding: 8px 10px; background: var(--bg-elevated); border-radius: 4px; font-family: var(--font-mono); font-size: 11px; line-height: 1.5; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow-y: auto; }
 .step-detail.error-detail { border-left: 2px solid var(--node-error); }
@@ -74,6 +75,28 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: v
 .info-row { display: flex; justify-content: space-between; padding: 8px 16px; font-size: 12px; border-bottom: 1px solid var(--border-subtle); }
 .info-label { color: var(--text-tertiary); }
 .info-value { color: var(--text-secondary); font-family: var(--font-mono); font-size: 11px; }
+
+/* Artifacts overlay */
+#artifact-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; display: none; }
+#artifact-overlay.visible { display: flex; }
+#artifact-modal { margin: 40px auto; width: 90%; max-width: 900px; max-height: calc(100vh - 80px); background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; }
+#artifact-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
+#artifact-modal-header h3 { font-size: 14px; font-weight: 500; }
+#artifact-modal-close { background: none; border: none; color: var(--text-tertiary); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+#artifact-modal-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+#artifact-modal-body { display: flex; flex: 1; overflow: hidden; }
+#artifact-list { width: 220px; min-width: 220px; border-right: 1px solid var(--border-subtle); overflow-y: auto; padding: 8px 0; }
+.artifact-item { display: flex; align-items: center; gap: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; font-family: var(--font-mono); color: var(--text-secondary); transition: background 0.1s; }
+.artifact-item:hover { background: var(--bg-tertiary); }
+.artifact-item.active { background: var(--bg-tertiary); border-left: 2px solid var(--node-session); color: var(--text-primary); }
+#artifact-viewer { flex: 1; overflow: auto; padding: 16px; }
+#artifact-viewer pre { font-family: var(--font-mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: var(--text-secondary); }
+#artifact-viewer img { max-width: 100%; border-radius: 6px; }
+#artifact-viewer table { border-collapse: collapse; font-family: var(--font-mono); font-size: 11px; width: 100%; }
+#artifact-viewer th, #artifact-viewer td { border: 1px solid var(--border-default); padding: 4px 8px; text-align: left; }
+#artifact-viewer th { background: var(--bg-tertiary); color: var(--text-tertiary); font-weight: 600; }
+.artifacts-btn { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: 4px; color: var(--text-secondary); font-size: 11px; padding: 3px 8px; cursor: pointer; font-family: var(--font-mono); margin-top: 4px; }
+.artifacts-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
 </style>
 </head>
 <body>
@@ -83,6 +106,13 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: v
   <span class="sep">/</span>
   <span class="dpack-name" id="dpack-name">loading...</span>
   <span class="hdr-stat"><span class="val" id="stat-duration">--</span></span>
+</div>
+
+<div id="artifact-overlay" onclick="if(event.target===this)closeArtifacts()">
+  <div id="artifact-modal">
+    <div id="artifact-modal-header"><h3>Artifacts</h3><button id="artifact-modal-close" onclick="closeArtifacts()">&times;</button></div>
+    <div id="artifact-modal-body"><div id="artifact-list"></div><div id="artifact-viewer"></div></div>
+  </div>
 </div>
 
 <div id="main">
@@ -97,12 +127,12 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: v
 let treeData = null;
 let sessionMeta = null;
 let selectedNode = null;
+let artifactsData = [];
 
 const NODE_CONFIGS = {
-  session:  { w: 180, h: 36, rx: 18, fill: '#0F1117', stroke: '#6C72FF', strokeW: 1.5 },
-  todo:     { w: 200, h: 30, rx: 6,  fill: '#0F1117', stroke: '#36B5A0', strokeW: 1 },
-  thinking: { w: 120, h: 24, rx: 4,  fill: '#161922', stroke: '#2E3348', strokeW: 1 },
-  parallel: { w: 150, h: 28, rx: 6,  fill: '#0F1117', stroke: '#D4A0FF', strokeW: 1 },
+  session:  { w: 200, h: 40, rx: 20, fill: '#0F1117', stroke: '#6C72FF', strokeW: 1.5 },
+  todo:     { w: 280, h: 40, rx: 6,  fill: '#0F1117', stroke: '#36B5A0', strokeW: 1 },
+  parallel: { w: 180, h: 32, rx: 6,  fill: '#0F1117', stroke: '#D4A0FF', strokeW: 1 },
 };
 
 async function init() {
@@ -110,6 +140,7 @@ async function init() {
   const data = await res.json();
   treeData = data.layout;
   sessionMeta = data.session.meta;
+  artifactsData = data.session.artifacts || [];
   renderHeader();
   renderTree();
 }
@@ -125,9 +156,11 @@ function renderTree() {
   const root = d3.hierarchy(treeData, d => d.children);
 
   // Compute tree layout
-  const dx = 60;  // vertical spacing between nodes
-  const dy = 220; // horizontal spacing between siblings
-  const tree = d3.tree().nodeSize([dx, dy]);
+  const dx = 56;  // vertical spacing between nodes
+  const dy = 180; // horizontal spacing between siblings
+  const tree = d3.tree()
+    .nodeSize([dx, dy])
+    .separation((a, b) => a.parent === b.parent ? 1 : 1.4);
   tree(root);
 
   // Compute bounds
@@ -168,10 +201,10 @@ function renderTree() {
     .attr('transform', d => `translate(${d.y},${d.x})`)
     .on('click', (ev, d) => selectNode(d));
 
-  // Node backgrounds
+  // Node backgrounds + labels
   node.each(function(d) {
     const g = d3.select(this);
-    const cfg = NODE_CONFIGS[d.data.type] || NODE_CONFIGS.thinking;
+    const cfg = NODE_CONFIGS[d.data.type] || NODE_CONFIGS.parallel;
     let fill = cfg.fill;
     let stroke = cfg.stroke;
     if (d.data.has_error) { stroke = '#E8585A'; fill = '#1a0f0f'; }
@@ -183,42 +216,40 @@ function renderTree() {
       .attr('rx', cfg.rx)
       .attr('fill', fill).attr('stroke', stroke).attr('stroke-width', cfg.strokeW);
 
-    // Labels
     const type = d.data.type;
     if (type === 'session') {
       const name = d.data.name || 'agent';
       const model = d.data.model ? d.data.model.split('/').pop() : '';
       g.append('text').attr('class', 'node-label')
-        .attr('text-anchor', 'middle').attr('dy', model ? '-2' : '4')
-        .attr('font-size', '11px').text(truncate(name, 22));
+        .attr('text-anchor', 'middle').attr('dy', model ? '-3' : '4')
+        .attr('font-size', '11px').text(truncate(name, 26));
       if (model) {
         g.append('text').attr('class', 'node-sublabel')
-          .attr('text-anchor', 'middle').attr('dy', '12')
-          .attr('font-size', '9px').text(truncate(model, 24));
+          .attr('text-anchor', 'middle').attr('dy', '11')
+          .attr('font-size', '9px').text(truncate(model, 28));
       }
     } else if (type === 'todo') {
       const label = d.data.name || '';
-      const statusIcon = d.data.status === 'completed' ? '\u2713 ' : d.data.status === 'in_progress' ? '\u25cb ' : '';
-      const statusColor = d.data.status === 'completed' ? '#36B5A0' : d.data.status === 'in_progress' ? '#F0C246' : '#565B73';
-      if (statusIcon) {
-        g.append('text').attr('class', 'node-label')
-          .attr('x', -cfg.w / 2 + 8).attr('dy', '4')
-          .attr('font-size', '11px').attr('fill', statusColor).text(statusIcon);
+      const isComplete = d.data.status === 'completed';
+      // Use foreignObject for text wrapping
+      const fo = g.append('foreignObject')
+        .attr('x', -cfg.w / 2 + 6).attr('y', -cfg.h / 2 + 4)
+        .attr('width', cfg.w - 12).attr('height', cfg.h - 8);
+      const div = fo.append('xhtml:div')
+        .style('font-size', '11px').style('line-height', '1.3')
+        .style('color', '#EDEDEF').style('overflow', 'hidden')
+        .style('font-family', 'var(--font-sans)');
+      if (isComplete) {
+        div.append('xhtml:span')
+          .style('color', '#36B5A0').style('margin-right', '4px')
+          .text('\u2713');
       }
-      g.append('text').attr('class', 'node-label')
-        .attr('x', -cfg.w / 2 + (statusIcon ? 22 : 8)).attr('dy', '4')
-        .attr('font-size', '11px').text(truncate(label, 24));
+      div.append('xhtml:span').text(label);
     } else if (type === 'parallel') {
       g.append('text').attr('class', 'node-label')
         .attr('text-anchor', 'middle').attr('dy', '4')
         .attr('font-size', '10px').attr('fill', '#D4A0FF')
         .text(d.data.name || 'parallel');
-    } else {
-      // thinking
-      g.append('text').attr('class', 'node-label')
-        .attr('text-anchor', 'middle').attr('dy', '4')
-        .attr('font-size', '10px').attr('fill', d.data.has_error ? '#E8585A' : '#8B8FA3')
-        .text(d.data.name || 'working');
     }
   });
 }
@@ -244,10 +275,11 @@ function selectNode(d) {
     html += infoRow('Status', d.data.is_complete ? 'Complete' : 'Running');
     const nTodos = (d.data.children || []).length;
     html += infoRow('Todos', nTodos);
+    if (artifactsData.length > 0) {
+      html += `<div style="padding:8px 16px"><button class="artifacts-btn" onclick="openArtifacts()">View ${artifactsData.length} artifacts</button></div>`;
+    }
   } else if (type === 'todo') {
     if (d.data.status) html += infoRow('Status', d.data.status);
-    const nTurns = (d.data.children || []).length;
-    html += infoRow('Turns', nTurns);
   } else if (type === 'parallel') {
     html += infoRow('Agent', d.data.name);
     const nChildren = (d.data.children || []).length;
@@ -281,6 +313,8 @@ function renderStepItem(step, idx) {
   const icons = { tool: '\u2699', text: '\u2261', error: '\u26a0', raw: '\u00b7', 'parallel-agents': '\u2693' };
   const icon = icons[type] || '\u00b7';
 
+  // Mono class for tool and raw steps
+  const isMono = type === 'tool' || type === 'parallel-agents' || type === 'raw';
   let summary = '';
   if (type === 'tool' || type === 'parallel-agents') {
     summary = `<span class="tool-name">${esc(step.tool || '')}</span> ${esc(step.summary.replace(step.tool + ': ', '') || '')}`;
@@ -309,7 +343,7 @@ function renderStepItem(step, idx) {
     if (text.length > 60) detail = `<div class="step-detail" style="display:none">${esc(text)}</div>`;
   }
 
-  return `<div class="step-item"><span class="step-icon ${iconClass}">${icon}</span><div class="step-summary">${summary}${detail}</div></div>`;
+  return `<div class="step-item"><span class="step-icon ${iconClass}">${icon}</span><div class="step-summary${isMono ? ' mono' : ''}">${summary}${detail}</div></div>`;
 }
 
 function infoRow(label, value) {
@@ -326,6 +360,51 @@ function fmtDuration(ms) {
 }
 function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '\u2026' : s; }
 function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+
+// Artifacts overlay
+function openArtifacts() {
+  const overlay = document.getElementById('artifact-overlay');
+  overlay.classList.add('visible');
+  const list = document.getElementById('artifact-list');
+  list.innerHTML = artifactsData.map((a, i) =>
+    `<div class="artifact-item" onclick="loadArtifact(${i})" data-idx="${i}">${esc(a.name)}</div>`
+  ).join('');
+  document.getElementById('artifact-viewer').innerHTML = '<div style="color:var(--text-tertiary);padding:20px">Select a file to view</div>';
+  if (artifactsData.length > 0) loadArtifact(0);
+}
+function closeArtifacts() {
+  document.getElementById('artifact-overlay').classList.remove('visible');
+}
+async function loadArtifact(idx) {
+  const a = artifactsData[idx];
+  document.querySelectorAll('.artifact-item').forEach(el => el.classList.remove('active'));
+  const el = document.querySelector(`.artifact-item[data-idx="${idx}"]`);
+  if (el) el.classList.add('active');
+  const viewer = document.getElementById('artifact-viewer');
+  if (a.type === 'image') {
+    viewer.innerHTML = `<img src="/api/file/${encodeURIComponent(a.path)}"/>`;
+    return;
+  }
+  try {
+    const res = await fetch(`/api/file/${encodeURIComponent(a.path)}`);
+    const text = await res.text();
+    if (a.type === 'csv') {
+      const lines = text.trim().split('\n');
+      let h = '<table>';
+      for (let i = 0; i < Math.min(lines.length, 200); i++) {
+        const cells = lines[i].split(',');
+        const tag = i === 0 ? 'th' : 'td';
+        h += '<tr>' + cells.map(c => `<${tag}>${esc(c)}</${tag}>`).join('') + '</tr>';
+      }
+      viewer.innerHTML = h + '</table>';
+    } else {
+      viewer.innerHTML = `<pre>${esc(text)}</pre>`;
+    }
+  } catch (e) {
+    viewer.innerHTML = `<pre style="color:var(--node-error)">Error: ${esc(e.message)}</pre>`;
+  }
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeArtifacts(); });
 
 init();
 </script>
