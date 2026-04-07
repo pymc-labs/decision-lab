@@ -17,7 +17,11 @@ from dlab.opencode_logparser import (
     build_session_graph,
     get_step_cost,
     get_step_tokens,
+    get_text,
+    get_tool_error,
+    get_tool_input,
     get_tool_name,
+    get_tool_output,
     get_tool_status,
     get_tool_time,
     is_log_complete,
@@ -677,4 +681,390 @@ def extract_session_data(work_dir: Path) -> dict[str, Any]:
         "edges": edges,
         "meta": meta,
         "artifacts": artifacts,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Process tree extraction (v2 — todo-segmented vertical tree)
+# ---------------------------------------------------------------------------
+
+
+def _event_to_step(event: LogEvent) -> dict[str, Any] | None:
+    """
+    Convert a single LogEvent to a step dict for the process tree.
+
+    Returns None for events that should be skipped (step_start,
+    step_finish, intermediate tool states, todowrite).
+
+    Parameters
+    ----------
+    event : LogEvent
+        Parsed log event.
+
+    Returns
+    -------
+    dict[str, Any] | None
+        Step dict or None to skip.
+    """
+    etype: str = event.event_type
+
+    # Skip structural events
+    if etype in ("step_start", "step_finish", "dlab_start", "additional_output"):
+        return None
+
+    # Skip reasoning (extended thinking)
+    if etype == "reasoning":
+        return None
+
+    if etype == "text":
+        text: str | None = get_text(event)
+        if not text or not text.strip():
+            return None
+        first_line: str = text.strip().split("\n")[0][:120]
+        return {
+            "type": "text",
+            "tool": None,
+            "status": None,
+            "summary": first_line,
+            "timestamp": event.timestamp,
+            "duration_ms": None,
+            "cost": 0.0,
+            "has_error": False,
+            "raw": event.raw,
+        }
+
+    if etype == "raw_text":
+        text = get_text(event)
+        if not text or not text.strip():
+            return None
+        first_line = text.strip().split("\n")[0][:120]
+        return {
+            "type": "raw",
+            "tool": None,
+            "status": None,
+            "summary": first_line,
+            "timestamp": event.timestamp,
+            "duration_ms": None,
+            "cost": 0.0,
+            "has_error": False,
+            "raw": event.raw,
+        }
+
+    if etype == "error":
+        err_data: dict[str, Any] = event.raw.get("error", event.part.get("error", {}))
+        if isinstance(err_data, dict):
+            msg: str = err_data.get("data", {}).get("message", err_data.get("name", "Error"))
+        else:
+            msg = str(err_data)
+        return {
+            "type": "error",
+            "tool": None,
+            "status": "error",
+            "summary": msg[:120],
+            "timestamp": event.timestamp,
+            "duration_ms": None,
+            "cost": 0.0,
+            "has_error": True,
+            "raw": event.raw,
+        }
+
+    if etype == "tool_use":
+        tool: str | None = get_tool_name(event)
+        status: str | None = get_tool_status(event)
+
+        # Skip intermediate states (pending, running) — only show final
+        if status not in ("completed", "error"):
+            return None
+
+        # Skip todowrite from step list (it's a phase boundary)
+        if tool == "todowrite":
+            return None
+
+        # Build summary
+        input_data: dict[str, Any] | None = get_tool_input(event)
+        summary: str = tool or "unknown"
+        if tool == "bash":
+            desc: str = (input_data or {}).get("description", "")
+            cmd: str = (input_data or {}).get("command", "")
+            summary = f"bash: {desc or cmd[:60]}"
+        elif tool == "read":
+            fp: str = (input_data or {}).get("filePath", "")
+            summary = f"read: {Path(fp).name}" if fp else "read"
+        elif tool == "write":
+            fp = (input_data or {}).get("filePath", "")
+            summary = f"write: {Path(fp).name}" if fp else "write"
+        elif tool == "edit":
+            fp = (input_data or {}).get("filePath", "")
+            summary = f"edit: {Path(fp).name}" if fp else "edit"
+        elif tool == "glob":
+            pattern: str = (input_data or {}).get("pattern", "")
+            summary = f"glob: {pattern}" if pattern else "glob"
+        elif tool == "inspect-data":
+            summary = "inspect-data"
+        elif tool == "task":
+            subagent: str = (input_data or {}).get("subagent_type", "")
+            summary = f"task: {subagent}" if subagent else "task"
+        elif tool == "parallel-agents":
+            agent: str = (input_data or {}).get("agent", "")
+            prompts: list = (input_data or {}).get("prompts", [])
+            summary = f"parallel-agents: {agent} x{len(prompts)}"
+        elif tool == "optimize-budget":
+            summary = "optimize-budget"
+
+        time_start, time_end = get_tool_time(event)
+        dur: int | None = (time_end - time_start) if time_start and time_end else None
+
+        return {
+            "type": "parallel-agents" if tool == "parallel-agents" else "tool",
+            "tool": tool,
+            "status": status,
+            "summary": summary[:120],
+            "timestamp": event.timestamp,
+            "duration_ms": dur,
+            "cost": 0.0,
+            "has_error": status == "error",
+            "raw": event.raw,
+        }
+
+    return None
+
+
+def _segment_by_todowrite(
+    events: list[LogEvent],
+) -> list[dict[str, Any]]:
+    """
+    Segment events into phases based on todowrite boundaries.
+
+    Parameters
+    ----------
+    events : list[LogEvent]
+        All events from a log file.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        List of phase dicts with id, label, status, event_range.
+    """
+    # Find todowrite indices and extract labels
+    todo_indices: list[int] = []
+    todo_labels: list[str] = []
+    todo_statuses: list[str | None] = []
+
+    prev_todos: list[dict[str, Any]] = []
+    for i, event in enumerate(events):
+        if event.event_type != "tool_use":
+            continue
+        if get_tool_name(event) != "todowrite":
+            continue
+        if get_tool_status(event) != "completed":
+            continue
+
+        state: dict[str, Any] = event.part.get("state", {})
+        todos: list[dict[str, Any]] = state.get("input", {}).get("todos", [])
+
+        # Find which todo transitioned to in_progress
+        label: str = "Working"
+        status: str | None = None
+        for j, t in enumerate(todos):
+            old_status: str = prev_todos[j]["status"] if j < len(prev_todos) else "new"
+            if t.get("status") == "in_progress" and old_status != "in_progress":
+                label = t.get("content", "Working")
+                status = "in_progress"
+                break
+
+        # If nothing went to in_progress, find what completed
+        if status is None:
+            for j, t in enumerate(todos):
+                old_status = prev_todos[j]["status"] if j < len(prev_todos) else "new"
+                if t.get("status") == "completed" and old_status != "completed":
+                    label = t.get("content", "Working")
+                    status = "completed"
+
+        todo_indices.append(i)
+        todo_labels.append(label)
+        todo_statuses.append(status)
+        prev_todos = todos
+
+    # Build phase segments
+    phases: list[dict[str, Any]] = []
+    boundaries: list[int] = [0] + todo_indices + [len(events)]
+
+    for seg_idx in range(len(boundaries) - 1):
+        start: int = boundaries[seg_idx]
+        end: int = boundaries[seg_idx + 1]
+
+        if seg_idx == 0:
+            label = "Free-form working"
+            status = None
+        else:
+            label = todo_labels[seg_idx - 1]
+            status = todo_statuses[seg_idx - 1]
+
+        # Clean up label: remove "Step N: " prefix if redundant
+        # Keep it as-is for clarity
+
+        phases.append({
+            "id": f"phase-{seg_idx}",
+            "label": label,
+            "status": status,
+            "event_start": start,
+            "event_end": end,
+        })
+
+    # If no todowrite at all, single free-form phase
+    if not phases:
+        phases.append({
+            "id": "phase-0",
+            "label": "Free-form working",
+            "status": None,
+            "event_start": 0,
+            "event_end": len(events),
+        })
+
+    return phases
+
+
+def _build_agent_tree(
+    node: SessionNode,
+    agent_prefix: str = "",
+) -> dict[str, Any]:
+    """
+    Build a process tree for a single agent (main or parallel instance).
+
+    Parameters
+    ----------
+    node : SessionNode
+        Session node with events and children.
+    agent_prefix : str
+        Prefix for phase IDs (e.g. "inst1-").
+
+    Returns
+    -------
+    dict[str, Any]
+        Agent tree with phases and steps.
+    """
+    phases_meta: list[dict[str, Any]] = _segment_by_todowrite(node.events)
+
+    # Map children by parent_event_index
+    children_by_idx: dict[int | None, list[SessionNode]] = {}
+    for child in node.children:
+        idx: int | None = child.parent_event_index
+        if idx not in children_by_idx:
+            children_by_idx[idx] = []
+        children_by_idx[idx].append(child)
+
+    phases: list[dict[str, Any]] = []
+    total_cost: float = 0.0
+
+    for phase_meta in phases_meta:
+        phase_events: list[LogEvent] = node.events[phase_meta["event_start"]:phase_meta["event_end"]]
+        steps: list[dict[str, Any]] = []
+        phase_cost: float = 0.0
+
+        for evt_offset, event in enumerate(phase_events):
+            evt_idx: int = phase_meta["event_start"] + evt_offset
+
+            # Accumulate cost from step_finish
+            if event.event_type == "step_finish":
+                cost: float | None = get_step_cost(event)
+                if cost:
+                    phase_cost += cost
+                continue
+
+            step: dict[str, Any] | None = _event_to_step(event)
+            if step is None:
+                continue
+
+            # Attach children for parallel-agents or task tool calls
+            if evt_idx in children_by_idx and step["type"] in ("parallel-agents", "tool"):
+                # Promote task tool to parallel-agents type for rendering
+                if step["tool"] == "task":
+                    step["type"] = "parallel-agents"
+                child_trees: list[dict[str, Any]] = []
+                consolidator_tree: dict[str, Any] | None = None
+
+                for child in children_by_idx[evt_idx]:
+                    child_tree: dict[str, Any] = _build_agent_tree(
+                        child,
+                        agent_prefix=f"{child.agent_name}-{child.name}-",
+                    )
+                    if child.is_consolidator:
+                        consolidator_tree = child_tree
+                    else:
+                        child_trees.append(child_tree)
+
+                step["children"] = child_trees
+                step["consolidator"] = consolidator_tree
+
+            steps.append(step)
+
+        total_cost += phase_cost
+
+        phases.append({
+            "id": f"{agent_prefix}{phase_meta['id']}",
+            "label": phase_meta["label"],
+            "status": phase_meta["status"],
+            "steps": steps,
+            "cost": round(phase_cost, 6),
+        })
+
+    return {
+        "agent": f"{node.agent_name}/{node.name}" if node.agent_name != node.name else node.name,
+        "model": node.model,
+        "is_complete": is_log_complete(node.events),
+        "is_consolidator": node.is_consolidator,
+        "total_cost": round(total_cost, 6),
+        "phases": phases,
+    }
+
+
+def extract_process_tree(work_dir: Path) -> dict[str, Any]:
+    """
+    Extract a process tree for the viewer (v2 — todo-segmented).
+
+    The tree is organized by todowrite phases, with steps within each
+    phase and recursive children for parallel agent instances.
+
+    Parameters
+    ----------
+    work_dir : Path
+        Path to the session work directory.
+
+    Returns
+    -------
+    dict[str, Any]
+        {
+            "tree": agent tree dict,
+            "meta": session metadata dict,
+            "artifacts": {agent_id: [artifact dicts]},
+        }
+    """
+    root: SessionNode | None = _build_enhanced_graph(work_dir)
+    if root is None:
+        return {"tree": {"agent": "main", "phases": [], "total_cost": 0}, "meta": {}, "artifacts": {}}
+
+    tree: dict[str, Any] = _build_agent_tree(root)
+
+    # Metadata
+    state_meta: dict[str, Any] = _load_state_meta(work_dir)
+    all_ts: list[int] = [e.timestamp for e in root.events if e.timestamp]
+    for child in root.children:
+        all_ts += [e.timestamp for e in child.events if e.timestamp]
+    global_start: int | None = min(all_ts) if all_ts else None
+    global_end: int | None = max(all_ts) if all_ts else None
+
+    meta: dict[str, Any] = {
+        "work_dir": str(work_dir),
+        "dpack_name": state_meta.get("dpack_name", work_dir.name),
+        "status": state_meta.get("status", "unknown"),
+        "global_start_ms": global_start,
+        "global_end_ms": global_end,
+        "total_duration_ms": (global_end - global_start) if global_start and global_end else None,
+        "total_cost": tree["total_cost"],
+    }
+
+    return {
+        "tree": tree,
+        "meta": meta,
+        "artifacts": {},  # TODO: wire up per-agent artifact discovery
     }

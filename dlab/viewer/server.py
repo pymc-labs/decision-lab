@@ -17,8 +17,8 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
-from dlab.viewer.layout import compute_layout
-from dlab.viewer.session_data import extract_session_data
+from dlab.viewer.layout import compute_process_layout
+from dlab.viewer.session_data import extract_process_tree
 
 
 def _create_app(work_dir: Path) -> FastAPI:
@@ -38,11 +38,8 @@ def _create_app(work_dir: Path) -> FastAPI:
     app: FastAPI = FastAPI(title="dlab session viewer")
 
     # Pre-compute session data and layout at startup
-    session_data: dict[str, Any] = extract_session_data(work_dir)
-    layout_result: dict[str, Any] = compute_layout(
-        session_data["nodes"],
-        session_data["edges"],
-    )
+    session_data: dict[str, Any] = extract_process_tree(work_dir)
+    layout_result: dict[str, Any] = compute_process_layout(session_data["tree"])
 
     # Load HTML template
     html_content: str = _load_viewer_html()
