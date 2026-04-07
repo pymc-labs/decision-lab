@@ -134,6 +134,7 @@ class ConnectApp(App):
         padding: 0 1;
     }
 
+
     ArtifactList {
         height: 1fr;
         padding: 0 1;
@@ -264,6 +265,12 @@ class ConnectApp(App):
         # Show placeholder in file viewer
         file_viewer = self.query_one("#file-viewer", FileViewer)
         file_viewer.show_placeholder()
+
+        # Focus log view and select last event
+        log_view = self.query_one("#log-view", LogView)
+        log_view.focus()
+        if log_view._widgets:
+            log_view.selected_index = len(log_view._widgets) - 1
 
         # Start periodic update timer
         self._update_timer = self.set_interval(0.5, self._on_update_tick)

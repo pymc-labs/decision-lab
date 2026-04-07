@@ -60,11 +60,19 @@ def format_relative_time(event_ts: int, global_start_ts: int | None) -> str:
     # Events with timestamp=0 have no time (additional_output events)
     # All returns must be exactly 10 chars for column alignment
     if event_ts == 0:
-        return "       ---"  # 10 chars
+        return "  ---"
     if global_start_ts is None:
-        return "   ????.?s"  # 10 chars
-    rel_seconds = (event_ts - global_start_ts) / 1000
-    return f"+{rel_seconds:8.1f}s"  # 10 chars
+        return "  ---"
+    rel_seconds: int = max(0, (event_ts - global_start_ts) // 1000)
+    if rel_seconds < 60:
+        return f"{rel_seconds:>3d}s"
+    minutes: int = rel_seconds // 60
+    s: int = rel_seconds % 60
+    if minutes < 60:
+        return f"{minutes}m{s:02d}s"
+    hours: int = minutes // 60
+    m: int = minutes % 60
+    return f"{hours}h{m:02d}m{s:02d}s"
 
 
 def format_duration(ms: int | None) -> str:
@@ -90,14 +98,27 @@ def format_duration(ms: int | None) -> str:
     return f"[{minutes:.1f}m]"
 
 
+# Display labels for event types (shorter, cleaner)
+_EVENT_TYPE_LABELS: dict[str, str] = {
+    "tool_use": "tool",
+    "raw_text": "raw",
+    "text": "",
+    "error": "err",
+    "dlab_start": "init",
+    "additional_output": "raw",
+    "step_start": "",
+    "step_finish": "",
+}
+
+
 class LogEventPrefix(Static):
     """Fixed-width prefix showing selection, time, and event type."""
 
     DEFAULT_CSS = """
     LogEventPrefix {
-        width: 27;
-        min-width: 27;
-        max-width: 27;
+        width: 17;
+        min-width: 17;
+        max-width: 17;
     }
     """
 
@@ -126,10 +147,10 @@ class LogEventPrefix(Static):
         else:
             text = Text("  ")
 
-        text.append(self._time_str, style="dim")
-        text.append("  ", style="dim")
-        text.append(f"{self._event_type:12}", style=self._style)
+        text.append(f"{self._time_str:>8}", style="dim")
         text.append(" ", style="dim")
+        label: str = _EVENT_TYPE_LABELS.get(self._event_type, self._event_type)
+        text.append(f"{label:<5}", style=self._style)
 
         return text
 
@@ -310,6 +331,15 @@ class LogEventWidget(Horizontal):
         if self._is_long:
             self.is_collapsed = not self.is_collapsed
 
+    def on_click(self) -> None:
+        """Select this event when clicked."""
+        try:
+            log_view: LogView = self.screen.query_one("#log-view", LogView)
+            idx: int = log_view._widgets.index(self)
+            log_view.selected_index = idx
+        except Exception:
+            pass
+
 
 class LogView(VerticalScroll, can_focus=True):
     """
@@ -340,6 +370,8 @@ class LogView(VerticalScroll, can_focus=True):
         self._global_start_ts: int | None = None
         self._widgets: list[LogEventWidget] = []
         self._expand_all_mode: bool = False
+        self._suppress_scroll: bool = False
+        self._arrow_navigating: bool = False
 
     def watch_selected_index(self, old_index: int, new_index: int) -> None:
         """Update selection visuals when index changes."""
@@ -347,7 +379,8 @@ class LogView(VerticalScroll, can_focus=True):
             self._widgets[old_index].is_selected = False
         if 0 <= new_index < len(self._widgets):
             self._widgets[new_index].is_selected = True
-            self._widgets[new_index].scroll_visible()
+            if not self._suppress_scroll:
+                self._widgets[new_index].scroll_visible()
 
     def on_focus(self) -> None:
         """Auto-select first event when focusing if none selected."""
@@ -377,12 +410,12 @@ class LogView(VerticalScroll, can_focus=True):
 
     def _rebuild_widgets(self) -> None:
         """Rebuild all event widgets."""
-        # Clear existing
         self.remove_children()
         self._widgets = []
 
-        # Create new widgets
         for event in self._events:
+            if event.hidden:
+                continue
             widget = LogEventWidget(event, self._global_start_ts)
             self._widgets.append(widget)
             self.mount(widget)
@@ -400,6 +433,9 @@ class LogView(VerticalScroll, can_focus=True):
             Event to append.
         """
         self._events.append(event)
+        if event.hidden:
+            return
+
         widget = LogEventWidget(
             event,
             self._global_start_ts,
@@ -411,23 +447,70 @@ class LogView(VerticalScroll, can_focus=True):
         if self.auto_scroll:
             self.scroll_end(animate=False)
 
+    def _snap_selection_to_visible(self) -> None:
+        """If selected widget is off-screen, move selection to first visible.
+
+        When called from arrow keys (_arrow_navigating=True), just scrolls
+        to the current selection instead of snapping to a new one.
+        """
+        if not self._widgets:
+            return
+        if 0 <= self.selected_index < len(self._widgets):
+            w = self._widgets[self.selected_index]
+            vp_top: int = self.scroll_offset.y
+            vp_bottom: int = vp_top + self.size.height
+            try:
+                if w.virtual_region.y < vp_bottom and w.virtual_region.y + w.virtual_region.height > vp_top:
+                    return  # Already visible
+            except Exception:
+                return
+            # Off-screen: if arrow-navigating and just barely off edge, scroll to it
+            if self._arrow_navigating:
+                try:
+                    wy: int = w.virtual_region.y
+                    distance: int = min(abs(wy - vp_bottom), abs(wy - vp_top))
+                    # If within 3 line heights of viewport, just scroll (edge case)
+                    if distance < self.size.height // 2:
+                        self._widgets[self.selected_index].scroll_visible()
+                        return
+                except Exception:
+                    pass
+                # Far away — fall through to snap
+        # Snap to first visible — suppress scroll so we don't jump
+        vp_top = self.scroll_offset.y
+        self._suppress_scroll = True
+        for i, widget in enumerate(self._widgets):
+            try:
+                if widget.virtual_region.y + widget.virtual_region.height > vp_top:
+                    self.selected_index = i
+                    break
+            except Exception:
+                pass
+        self._suppress_scroll = False
+
     def expand_all(self) -> None:
         """Expand all collapsible events."""
+        self._snap_selection_to_visible()
         self._expand_all_mode = True
         for widget in self._widgets:
             widget.is_collapsed = False
         self.refresh(layout=True)
         if 0 <= self.selected_index < len(self._widgets):
-            self._widgets[self.selected_index].scroll_visible()
+            self.call_after_refresh(
+                self._widgets[self.selected_index].scroll_visible
+            )
 
     def collapse_all(self) -> None:
         """Collapse all collapsible events."""
+        self._snap_selection_to_visible()
         self._expand_all_mode = False
         for widget in self._widgets:
             widget.is_collapsed = True
         self.refresh(layout=True)
         if 0 <= self.selected_index < len(self._widgets):
-            self._widgets[self.selected_index].scroll_visible()
+            self.call_after_refresh(
+                self._widgets[self.selected_index].scroll_visible
+            )
 
     def highlight_search(self, query: str) -> list[int]:
         """
@@ -472,6 +555,9 @@ class LogView(VerticalScroll, can_focus=True):
         """Select the next event."""
         if not self._widgets:
             return
+        self._arrow_navigating = True
+        self._snap_selection_to_visible()
+        self._arrow_navigating = False
         if self.selected_index < len(self._widgets) - 1:
             self.selected_index += 1
         elif self.selected_index == -1:
@@ -481,6 +567,9 @@ class LogView(VerticalScroll, can_focus=True):
         """Select the previous event."""
         if not self._widgets:
             return
+        self._arrow_navigating = True
+        self._snap_selection_to_visible()
+        self._arrow_navigating = False
         if self.selected_index > 0:
             self.selected_index -= 1
         elif self.selected_index == -1:
