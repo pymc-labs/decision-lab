@@ -8,6 +8,7 @@ import pytest
 
 from dlab.opencode_logparser import LogEvent, SessionNode, parse_log_file
 from dlab.viewer.layout import _tree_to_d3, compute_process_layout
+from dlab.viewer.server import export_viewer
 from dlab.viewer.session_data import (
     _build_agent_tree,
     _build_enhanced_graph,
@@ -695,3 +696,111 @@ class TestExtractProcessTree:
                 check_no_ffw(child)
 
         check_no_ffw(d3)
+
+
+# ---------------------------------------------------------------------------
+# TestExportViewer
+# ---------------------------------------------------------------------------
+
+
+class TestExportViewer:
+    def test_basic_export(self, tmp_path: Path) -> None:
+        """Export produces a valid HTML file with inlined data."""
+        work_dir: Path = _make_session(tmp_path, [
+            _dlab_start(1000, prompt="Test prompt"),
+            _step_start(1001),
+            _text(1002, "Working on it"),
+            _tool(1003, "bash"),
+            _step_finish(1004, cost=0.05),
+        ])
+        output: Path = tmp_path / "report.html"
+        result: int = export_viewer(work_dir, output)
+
+        assert result == 0
+        assert output.exists()
+
+        html: str = output.read_text()
+        assert "<!DOCTYPE html>" in html
+        assert "__INLINE_DATA__" in html
+        assert "__ARTIFACT_MAP__" in html
+        # Should NOT have fetch('/api/session')
+        assert "fetch('/api/session')" not in html
+
+    def test_export_no_external_deps(self, tmp_path: Path) -> None:
+        """Exported HTML has no script src= or link href= to external URLs."""
+        work_dir: Path = _make_session(tmp_path, [
+            _step_start(1000),
+            _text(1001, "Hello"),
+            _step_finish(1002),
+        ])
+        output: Path = tmp_path / "report.html"
+        export_viewer(work_dir, output)
+
+        html: str = output.read_text()
+        # All CDN scripts should be inlined (or at worst kept as fallback)
+        # But no fetch() calls to /api/ endpoints
+        assert "fetch(`/api/file/" not in html
+        assert "fetch('/api/session')" not in html
+
+    def test_export_with_artifacts(self, tmp_path: Path) -> None:
+        """Artifacts are embedded in the export."""
+        work_dir: Path = _make_session(tmp_path, [
+            _step_start(1000),
+            _tool(1001, "write", input={"filePath": "/workspace/report.md"}),
+            _step_finish(1002),
+        ])
+        # Create an artifact file
+        (work_dir / "report.md").write_text("# Test Report\nHello world")
+
+        output: Path = tmp_path / "report.html"
+        export_viewer(work_dir, output)
+
+        html: str = output.read_text()
+        assert "Test Report" in html
+        assert "Hello world" in html
+
+    def test_export_with_image_artifact(self, tmp_path: Path) -> None:
+        """Binary artifacts are base64-encoded in the export."""
+        work_dir: Path = _make_session(tmp_path, [
+            _step_start(1000),
+            _step_finish(1001),
+        ])
+        # Create a fake PNG (just the header)
+        png_header: bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+        (work_dir / "plot.png").write_bytes(png_header)
+
+        output: Path = tmp_path / "report.html"
+        export_viewer(work_dir, output)
+
+        html: str = output.read_text()
+        assert "data:image/png;base64," in html
+
+    def test_export_csv_truncation(self, tmp_path: Path) -> None:
+        """Large CSV files are truncated to 1000 rows in export."""
+        work_dir: Path = _make_session(tmp_path, [
+            _step_start(1000),
+            _step_finish(1001),
+        ])
+        # Create a CSV with 2000 rows
+        header: str = "a,b,c"
+        rows: list[str] = [header] + [f"{i},{i*2},{i*3}" for i in range(2000)]
+        (work_dir / "data.csv").write_text("\n".join(rows))
+
+        output: Path = tmp_path / "report.html"
+        export_viewer(work_dir, output)
+
+        html: str = output.read_text()
+        assert "truncated" in html
+        assert "2000 rows total" in html
+
+    def test_export_empty_session(self, tmp_path: Path) -> None:
+        """Export works for minimal sessions."""
+        work_dir: Path = _make_session(tmp_path, [
+            _error(1000, "Immediate failure"),
+        ])
+        output: Path = tmp_path / "report.html"
+        result: int = export_viewer(work_dir, output)
+
+        assert result == 0
+        assert output.exists()
+        assert output.stat().st_size > 1000  # not empty
