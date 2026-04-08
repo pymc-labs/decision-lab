@@ -79,6 +79,9 @@ dlab connect <work-dir> [--log] [--log-json]
 
 # View execution timeline with Gantt chart
 dlab timeline [work-dir]
+
+# Browser-based session viewer (DAG visualization)
+dlab view <work-dir> [--port PORT] [--no-open]
 ```
 
 ## Coding Style
@@ -143,6 +146,11 @@ dlab timeline [work-dir]
   - `log_watcher.py` - File watcher for live log updates
   - `models.py` - Data models for log events
   - `widgets/` - Agent list, log view, artifacts pane, search, status bar
+- `viewer/` - Browser-based session viewer for `view` command:
+  - `server.py` - FastAPI app with JSON API and file serving
+  - `session_data.py` - SessionNode tree → flat node/edge dicts
+  - `layout.py` - DAG layout algorithm (time axis + lane stacking)
+  - `html/viewer.html` - Single-file frontend (SVG DAG + detail panel)
 
 ## Hooks (pre-run / post-run)
 

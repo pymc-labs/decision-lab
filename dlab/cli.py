@@ -273,6 +273,34 @@ def create_parser() -> argparse.ArgumentParser:
         help="Path to session work directory (default: cwd if it has _opencode_logs)",
     )
 
+    # View subcommand (browser-based session viewer)
+    view_parser = subparsers.add_parser(
+        "view",
+        help="Open browser-based session viewer with DAG visualization",
+    )
+    view_parser.add_argument(
+        "work_dir",
+        metavar="WORK_DIR",
+        help="Path to session work directory",
+    )
+    view_parser.add_argument(
+        "--port",
+        type=int,
+        default=0,
+        help="Port for the viewer server (default: auto-select)",
+    )
+    view_parser.add_argument(
+        "--no-open",
+        action="store_true",
+        help="Start server without opening browser",
+    )
+    view_parser.add_argument(
+        "--export",
+        metavar="FILE",
+        default=None,
+        help="Export self-contained HTML file instead of starting server",
+    )
+
     # Create decision-pack subcommand
     create_dpack_parser = subparsers.add_parser(
         "create-dpack",
@@ -897,6 +925,47 @@ def cmd_create_parallel_agent(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_view(args: argparse.Namespace) -> int:
+    """
+    Handle view mode - browser-based session viewer with DAG visualization.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments.
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, non-zero for failure).
+    """
+    work_dir: Path = Path(args.work_dir).resolve()
+
+    if not work_dir.exists():
+        print(f"Error: Work directory not found: {work_dir}", file=sys.stderr)
+        return 1
+
+    logs_dir: Path = work_dir / "_opencode_logs"
+    if not logs_dir.exists():
+        print(f"Error: No logs directory found: {logs_dir}", file=sys.stderr)
+        print("Make sure this is a valid dlab session directory.", file=sys.stderr)
+        return 1
+
+    # Export mode — no server dependencies needed
+    if args.export:
+        from dlab.viewer.server import export_viewer
+        output_path: Path = Path(args.export)
+        return export_viewer(work_dir, output_path)
+
+    from dlab.viewer import run_viewer
+
+    return run_viewer(
+        work_dir,
+        port=args.port,
+        open_browser=not args.no_open,
+    )
+
+
 def cmd_timeline(args: argparse.Namespace) -> int:
     """
     Handle timeline mode - display execution timeline for a session.
@@ -1066,6 +1135,8 @@ def main() -> None:
         exit_code = cmd_create_dpack(args)
     elif args.command == "timeline":
         exit_code = cmd_timeline(args)
+    elif args.command == "view":
+        exit_code = cmd_view(args)
     elif args.dpack or args.data or args.prompt or args.prompt_file or args.continue_dir:
         exit_code = cmd_run(args)
     else:
