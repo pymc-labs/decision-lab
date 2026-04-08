@@ -957,12 +957,7 @@ def cmd_view(args: argparse.Namespace) -> int:
         output_path: Path = Path(args.export)
         return export_viewer(work_dir, output_path)
 
-    try:
-        from dlab.viewer import run_viewer
-    except ImportError:
-        print("Error: Viewer dependencies not installed.", file=sys.stderr)
-        print("Install with: pip install 'dlab-cli[viewer]'", file=sys.stderr)
-        return 1
+    from dlab.viewer import run_viewer
 
     return run_viewer(
         work_dir,
