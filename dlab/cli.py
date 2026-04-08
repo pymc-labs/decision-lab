@@ -294,6 +294,12 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Start server without opening browser",
     )
+    view_parser.add_argument(
+        "--export",
+        metavar="FILE",
+        default=None,
+        help="Export self-contained HTML file instead of starting server",
+    )
 
     # Create decision-pack subcommand
     create_dpack_parser = subparsers.add_parser(
@@ -944,6 +950,12 @@ def cmd_view(args: argparse.Namespace) -> int:
         print(f"Error: No logs directory found: {logs_dir}", file=sys.stderr)
         print("Make sure this is a valid dlab session directory.", file=sys.stderr)
         return 1
+
+    # Export mode — no server dependencies needed
+    if args.export:
+        from dlab.viewer.server import export_viewer
+        output_path: Path = Path(args.export)
+        return export_viewer(work_dir, output_path)
 
     try:
         from dlab.viewer import run_viewer
