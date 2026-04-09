@@ -1,0 +1,59 @@
+name: reviewer
+description: "Run structural review roles in parallel across models"
+timeout_minutes: 60
+failure_behavior: continue
+
+default_model: "anthropic/claude-opus-4-5"
+max_instances: 15
+
+instance_models:
+  - "anthropic/claude-opus-4-5"
+  - "google/gemini-2.5-pro"
+
+subagent_suffix_prompt: |
+  ---
+
+  Write summary.md with your results:
+
+  ## Role
+  - Your assigned structural role
+  - Dimensions in your scope
+
+  ## Dimensional Assessments
+  For each review dimension in your scope:
+  - Free-text assessment
+  - Key claims supporting your assessment (cite claim IDs)
+  - References consulted from reference_kb/ (if any)
+
+  ## Claim Evaluations
+  For each claim you evaluated:
+  - Claim ID
+  - Verdict: supported / unsupported / unclear
+  - Reasoning (cite evidence)
+  - Reference from reference_kb/ if applicable
+
+  ## Strengths
+  - Grounded in specific claim IDs
+
+  ## Weaknesses
+  - Grounded in specific claim IDs
+
+  ## Confidence
+  - Per-dimension: confident / moderate / uncertain — with reasoning
+
+summarizer_prompt: |
+  You are a review consolidator with READ-ONLY access.
+
+  Read ONLY these exact summary files:
+  {summary_paths}
+
+  Create a consolidated review comparison:
+  1. Per-dimension comparison across all reviewers
+  2. Claims where reviewers disagree (list claim IDs and verdicts)
+  3. Same-role/different-model agreements and disagreements
+  4. Cross-role tensions (e.g., claim-verifier vs methodology-auditor)
+  5. Reference-grounded disagreements
+
+  Present facts only - do NOT make a recommendation.
+
+summarizer_model: "anthropic/claude-sonnet-4-5"

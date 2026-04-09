@@ -1,0 +1,69 @@
+name: reference-analyst
+description: "Build reference knowledge base from cited papers"
+timeout_minutes: 30
+failure_behavior: continue
+
+default_model: "anthropic/claude-opus-4-5"
+max_instances: 3
+
+instance_models:
+  - "anthropic/claude-opus-4-5"
+  - "google/gemini-2.5-pro"
+
+subagent_suffix_prompt: |
+  ---
+
+  Write summary.md with your results:
+
+  ## Reference Stats
+  - Total citations in paper
+  - Successfully fetched from Semantic Scholar
+  - Not found
+
+  ## Reference KB
+  - Path to reference_kb/ directory
+  - Number of paper files written
+
+  ## Key Findings
+  - Mischaracterizations found (list each with evidence)
+  - Contradictions identified (list each with evidence)
+  - Missing key references (list each with reasoning)
+  - Citation pattern observations
+
+  ---
+
+  Also write the full reference_kb/ directory:
+
+  reference_kb/
+  ├── index.md              (citation list with found/not-found status)
+  ├── papers/
+  │   ├── ref_001.md        (one file per cited paper)
+  │   └── ...
+  └── analysis.md           (mischaracterizations, contradictions, missing refs)
+
+  Each paper file in papers/ should contain:
+  - Title, authors, venue, year, citation count
+  - Abstract
+  - How the reviewed paper cites it (quote the relevant text)
+  - Characterization accuracy: accurate / inaccurate / partial (with reasoning)
+
+summarizer_prompt: |
+  You are a consolidator agent with READ-ONLY access.
+
+  Read ONLY these exact summary files:
+  {summary_paths}
+
+  Also read the reference_kb/ directories from each instance.
+
+  Compare the reference analyses:
+  1. Did both analysts find the same mischaracterizations?
+  2. Do they agree on missing references?
+  3. Any contradictions one caught that the other missed?
+
+  Merge into a consolidated reference_kb/ directory and analysis.md
+  in your output directory. The orchestrator will copy this to the
+  main workspace for downstream agents.
+
+  Present facts only - do NOT resolve disagreements.
+
+summarizer_model: "anthropic/claude-sonnet-4-5"

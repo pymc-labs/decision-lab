@@ -1,0 +1,68 @@
+name: decomposer
+description: "Extract atomic claims from paper with different models"
+timeout_minutes: 30
+failure_behavior: continue
+
+default_model: "anthropic/claude-opus-4-5"
+max_instances: 3
+
+instance_models:
+  - "anthropic/claude-opus-4-5"
+  - "google/gemini-2.5-pro"
+
+subagent_suffix_prompt: |
+  ---
+
+  Write summary.md with your results:
+
+  ## Claim Count
+  - Total claims extracted
+  - By type: empirical, methodological, novelty, scope
+
+  ## Claims Index
+  For each claim:
+  - ID, text, type, section, evidence strength
+  - Dependencies on other claims
+
+  ## Parsing Issues
+  - Any sections that were unclear or hard to decompose
+
+  ---
+
+  Also write claims_index.json with the following structure:
+
+  ```json
+  {
+    "claims": [
+      {
+        "id": "claim_001",
+        "text": "The exact claim text from the paper",
+        "type": "empirical",
+        "section": "4.2 Experiments",
+        "evidence_strength": "supported",
+        "dependencies": ["claim_003"],
+        "reasoning": "Brief note on why this classification"
+      }
+    ]
+  }
+  ```
+
+summarizer_prompt: |
+  You are a consolidator agent with READ-ONLY access.
+
+  Read ONLY these exact summary files:
+  {summary_paths}
+
+  Also read the claims_index.json files from each instance directory.
+
+  Create a consolidated claim index:
+  1. Deduplicate claims found by both models (match by content, not ID)
+  2. Flag claims found by only one model (mark provenance)
+  3. Note any classification disagreements (type, evidence_strength)
+  4. Produce a merged claims_index.json with deduplicated, renumbered claim IDs
+
+  Write both summary.md (human-readable comparison) and claims_index.json (canonical merged index).
+
+  Present facts only - do NOT resolve disagreements.
+
+summarizer_model: "anthropic/claude-sonnet-4-5"
