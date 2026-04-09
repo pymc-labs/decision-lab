@@ -1,0 +1,5 @@
+name: peer-review
+description: Simulated academic peer review using parallel structural reviewers
+docker_image_name: dlab-peer-review
+default_model: anthropic/claude-opus-4-5
+requires_prompt: false
