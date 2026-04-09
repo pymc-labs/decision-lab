@@ -379,7 +379,7 @@ def _parse_latex(path: str | Path) -> dict[str, Any]:
         if pos != abstract_pos
     ]
 
-    for i, (pos, _label, heading_text) in enumerate(non_abstract_markers):
+    for i, (pos, _, heading_text) in enumerate(non_abstract_markers):
         # Body of this section = source from end of \section{…} to next marker
         section_cmd_end = raw.index("}", pos) + 1
         if i + 1 < len(non_abstract_markers):
