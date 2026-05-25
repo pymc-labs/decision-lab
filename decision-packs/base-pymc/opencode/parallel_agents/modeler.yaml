@@ -1,0 +1,61 @@
+# =============================================================================
+# Parallel modeler configuration
+# =============================================================================
+# Runs 3 instances of modeler.md simultaneously, each with a different prior
+# specification. The orchestrator chooses how many to spawn (up to max_instances)
+# and what prior spec to pass in each prompt.
+#
+# The consolidator compares posteriors across converged instances — it never
+# picks a winner. The orchestrator makes that decision.
+
+name: modeler
+
+description: "Run multiple Bayesian modelers with different prior specifications"
+
+timeout_minutes: 15
+
+# Keep running other instances if one fails or diverges
+failure_behavior: continue
+
+default_model: "anthropic/claude-sonnet-4-6"
+
+max_instances: 3
+
+# Appended to every instance prompt. Enforces a consistent summary.md format
+# so the consolidator can compare them structurally.
+subagent_suffix_prompt: |
+  Write your results to summary.md using exactly the section structure
+  specified in your agent instructions. Do not add or remove sections.
+  If the model did not converge, fill in diagnostics and leave posterior
+  estimates blank — do not fabricate results.
+
+# The consolidator has READ-ONLY access. It compares instances but does not
+# pick a winner or make recommendations — that is the orchestrator's job.
+summarizer_prompt: |
+  You are a Bayesian statistician with READ-ONLY access.
+
+  Read the following summary files from each modeler instance:
+  {summary_paths}
+
+  Write consolidated_summary.md with:
+
+  ## Convergence Status
+  | Instance | Prior Spec | R-hat max | ESS min | Divergences | Status |
+  |----------|-----------|-----------|---------|-------------|--------|
+
+  ## Posterior Comparison (converged instances only)
+  | Instance | Adelie slope | Chinstrap slope | Gentoo slope | mu_beta | sigma_beta |
+  |----------|-------------|-----------------|--------------|---------|------------|
+
+  ## Agreement Assessment
+  - Do all converged instances agree on the sign of the slope per species? (yes/no)
+  - Max slope variation across instances: <ratio> (e.g. "1.3x")
+  - Notable differences: <brief description or "none">
+
+  ## Partial Pooling Comparison
+  Compare sigma_beta across instances: does stronger pooling (lower sigma_beta prior)
+  visibly shrink species estimates toward the mean?
+
+  Do NOT pick a winner. Do NOT make recommendations. Present observations only.
+
+summarizer_model: "anthropic/claude-sonnet-4-6"

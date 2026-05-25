@@ -1,0 +1,59 @@
+# =============================================================================
+# OpenLIT observability stack for dlab
+# =============================================================================
+#
+# Starts two services:
+#   - clickhouse: storage backend for traces and logs
+#   - openlit:    collector + UI (receives OTLP at :4318, UI at :3000)
+#
+# Usage:
+#   docker compose -f docker-compose.openlit.yml up -d
+#   dlab trace <work-dir>          # export a completed session
+#   open http://localhost:3000     # OpenLIT UI (user@openlit.io / openlituser)
+#
+# Stop:
+#   docker compose -f docker-compose.openlit.yml down
+
+version: "3.8"
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: dlab-clickhouse
+    environment:
+      CLICKHOUSE_DB: openlit
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  openlit:
+    image: ghcr.io/openlit/openlit:latest
+    container_name: dlab-openlit
+    ports:
+      - "3000:3000"   # OpenLIT UI
+      - "4318:4318"   # OTLP/HTTP receiver (traces + logs)
+    environment:
+      INIT_DB_HOST: clickhouse
+      INIT_DB_PORT: "8123"
+      INIT_DB_DATABASE: openlit
+      INIT_DB_USERNAME: default
+      INIT_DB_PASSWORD: ""
+      SQLITE_DATABASE_URL: "file:/app/client/data/data.db"
+    volumes:
+      - openlit_data:/app/client/data
+      - ./otel-collector-config.yaml:/etc/otel/otel-collector-config.yaml:ro
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  clickhouse_data:
+  openlit_data:

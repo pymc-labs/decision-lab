@@ -1,0 +1,26 @@
+# =============================================================================
+# base-pymc decision-pack configuration
+# =============================================================================
+
+# Unique name for this decision-pack.
+name: base-pymc
+
+# Human-readable description shown in dlab output.
+description: >
+  Hierarchical Bayesian regression template using PyMC.
+  Default task: fit bill depth ~ bill length with partial pooling across
+  penguin species (Palmer Penguins dataset — no data file needed).
+  Pass --prompt to override with your own Bayesian modeling question.
+
+# Docker image name. dlab builds "dlab-base-pymc-base" and "dlab-base-pymc".
+docker_image_name: dlab-base-pymc
+
+# Default LLM model for orchestrator and all agents.
+default_model: anthropic/claude-sonnet-4-6
+
+# No external data file required — dataset is loaded from seaborn at runtime.
+requires_data: false
+# Prompt is required — use the default penguins analysis or describe your own
+# Bayesian modeling question. Example:
+#   dlab --dpack decision-packs/base-pymc --prompt "run the default penguins analysis"
+requires_prompt: true
