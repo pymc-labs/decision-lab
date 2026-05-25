@@ -760,6 +760,26 @@ def cmd_run(args: argparse.Namespace) -> int:
         signal.signal(signal.SIGINT, original_sigint)
         signal.signal(signal.SIGTERM, original_sigterm)
 
+        # Write dlab_end sentinel to main log so post-processing tools
+        # (e.g. `dlab trace`) can detect the outcome and timestamp.
+        try:
+            import json as _json
+            import time as _time_mod
+            _main_log = Path(work_dir) / "_opencode_logs" / "main.log"
+            if _main_log.exists():
+                _outcome = "interrupted" if interrupted else ("success" if exit_code == 0 else "error")
+                _sentinel = _json.dumps({
+                    "type": "dlab_end",
+                    "timestamp": int(_time_mod.time() * 1000),
+                    "outcome": _outcome,
+                    "exit_code": exit_code,
+                    "interrupted": interrupted,
+                })
+                with open(_main_log, "a") as _f:
+                    _f.write(_sentinel + "\n")
+        except Exception:
+            pass  # Never let sentinel writing break cleanup
+
         # --- Cleanup ---
         console.print(next_step("Cleanup"))
         # Fix file ownership before stopping (container runs as root)
