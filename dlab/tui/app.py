@@ -6,22 +6,22 @@ import json
 from pathlib import Path
 
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical
-from textual.widgets import Header, Footer, Static, TabbedContent, TabPane
 from textual.binding import Binding
+from textual.containers import Horizontal, Vertical
 from textual.timer import Timer
+from textual.widgets import Footer, Header, Static, TabbedContent, TabPane
 
-from dlab.tui.widgets.agent_list import AgentSelector
-from dlab.tui.widgets.log_view import LogView
-from dlab.tui.widgets.status_bar import StatusBar
-from dlab.tui.widgets.artifacts_pane import ArtifactList, FileViewer
-from dlab.tui.widgets.search_popup import SearchPopup
-from dlab.tui.log_watcher import LogWatcher
-from dlab.tui.models import SessionState, LogEvent
 from dlab.timeline import (
-    is_log_complete,
     discover_agents,
+    is_log_complete,
 )
+from dlab.tui.log_watcher import LogWatcher
+from dlab.tui.models import LogEvent, SessionState
+from dlab.tui.widgets.agent_list import AgentSelector
+from dlab.tui.widgets.artifacts_pane import ArtifactList, FileViewer
+from dlab.tui.widgets.log_view import LogView
+from dlab.tui.widgets.search_popup import SearchPopup
+from dlab.tui.widgets.status_bar import StatusBar
 
 
 def load_default_agent(work_dir: Path) -> str | None:
@@ -386,6 +386,13 @@ class ConnectApp(App):
         agent_selector.update_agents(agents, running)
 
         self._state.is_job_running = main_display_name in running
+
+        # Auto-select the first agent if nothing is selected yet.
+        # This handles live sessions where main.log may be empty at startup
+        # so select_first() in on_mount was a no-op, and agents only appear
+        # once the first timer tick reads new log content.
+        if self._selected_agent is None and agents:
+            agent_selector.select_first()
 
     def _update_status_bar(self) -> None:
         """Update the status bar."""
