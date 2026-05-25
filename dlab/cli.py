@@ -42,7 +42,7 @@ app = typer.Typer(
     name="dlab",
     help="Run opencode in automated mode, sandboxed with Docker",
     no_args_is_help=False,
-    add_completion=False,
+    add_completion=True,
     suggest_commands=True,
 )
 
