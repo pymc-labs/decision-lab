@@ -41,10 +41,14 @@ services:
       - "4318:4318"   # OTLP/HTTP receiver (traces + logs)
     environment:
       INIT_DB_HOST: clickhouse
-      INIT_DB_PORT: "9000"
+      INIT_DB_PORT: "8123"
       INIT_DB_DATABASE: openlit
       INIT_DB_USERNAME: default
       INIT_DB_PASSWORD: ""
+      SQLITE_DATABASE_URL: "file:/app/client/data/data.db"
+    volumes:
+      - openlit_data:/app/client/data
+      - ./otel-collector-config.yaml:/etc/otel/otel-collector-config.yaml:ro
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -52,3 +56,4 @@ services:
 
 volumes:
   clickhouse_data:
+  openlit_data:

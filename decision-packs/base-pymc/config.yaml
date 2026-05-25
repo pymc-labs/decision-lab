@@ -16,11 +16,11 @@ description: >
 docker_image_name: dlab-base-pymc
 
 # Default LLM model for orchestrator and all agents.
-default_model: anthropic/claude-sonnet-4-5
+default_model: anthropic/claude-sonnet-4-6
 
 # No external data file required — dataset is loaded from seaborn at runtime.
 requires_data: false
-
-# The user can pass --prompt to specify a custom modeling question.
-# If omitted, the orchestrator falls back to the default penguins analysis.
-requires_prompt: false
+# Prompt is required — use the default penguins analysis or describe your own
+# Bayesian modeling question. Example:
+#   dlab --dpack decision-packs/base-pymc --prompt "run the default penguins analysis"
+requires_prompt: true
