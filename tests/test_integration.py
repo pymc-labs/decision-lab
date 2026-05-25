@@ -8,7 +8,6 @@ Run with:
     ~/miniconda3/envs/mmm-docker/bin/python -m pytest tests/test_integration.py -v
 """
 
-import argparse
 import shutil
 import subprocess
 import uuid
@@ -18,7 +17,7 @@ from typing import Any, Generator
 import pytest
 import yaml
 
-from dlab.cli import cmd_run, create_parser
+from dlab.cli import cmd_run
 from dlab.config import load_dpack_config
 from dlab.docker import (
     build_image,
@@ -30,7 +29,6 @@ from dlab.docker import (
     stop_container,
 )
 from dlab.session import create_session
-
 
 REPO_ROOT: Path = Path(__file__).parent.parent.resolve()
 POEM_DPACK_DIR: str = str(REPO_ROOT / "decision-packs" / "poem")
@@ -130,12 +128,17 @@ class TestPipelineIntegration:
 
     @pytest.fixture
     def session_work_dir(
-        self, tmp_path: Path, poem_config: dict[str, Any], empty_data_dir: Path,
+        self,
+        tmp_path: Path,
+        poem_config: dict[str, Any],
+        empty_data_dir: Path,
     ) -> Path:
         """Create a session and return the work directory path."""
         work_dir: Path = tmp_path / "work"
         state: dict[str, Any] = create_session(
-            poem_config, str(empty_data_dir), work_dir=str(work_dir),
+            poem_config,
+            str(empty_data_dir),
+            work_dir=str(work_dir),
         )
         return Path(state["work_dir"])
 
@@ -172,7 +175,8 @@ class TestPipelineIntegration:
         start_container(integration_image, str(session_work_dir), container_name)
         try:
             exit_code, stdout, stderr = exec_command(
-                container_name, ["opencode", "--version"],
+                container_name,
+                ["opencode", "--version"],
             )
             assert exit_code == 0
             assert stdout.strip()
@@ -189,7 +193,8 @@ class TestPipelineIntegration:
         start_container(integration_image, str(session_work_dir), container_name)
         try:
             exit_code, stdout, stderr = exec_command(
-                container_name, ["node", "--version"],
+                container_name,
+                ["node", "--version"],
             )
             assert exit_code == 0
             assert stdout.strip().startswith("v")
@@ -197,12 +202,17 @@ class TestPipelineIntegration:
             stop_container(container_name)
 
     def test_create_session_with_poem_dpack(
-        self, poem_config: dict[str, Any], empty_data_dir: Path, tmp_path: Path,
+        self,
+        poem_config: dict[str, Any],
+        empty_data_dir: Path,
+        tmp_path: Path,
     ) -> None:
         """Session should set up the full poem directory structure."""
         work_dir: Path = tmp_path / "session-test"
         state: dict[str, Any] = create_session(
-            poem_config, str(empty_data_dir), work_dir=str(work_dir),
+            poem_config,
+            str(empty_data_dir),
+            work_dir=str(work_dir),
         )
         work_path: Path = Path(state["work_dir"])
 
@@ -248,7 +258,8 @@ class TestPipelineIntegration:
     def test_container_has_workspace_mount(self, running_container: str) -> None:
         """Container should have the session work directory mounted at /workspace."""
         exit_code, stdout, stderr = exec_command(
-            running_container, ["ls", "/workspace/.opencode/agents/"],
+            running_container,
+            ["ls", "/workspace/.opencode/agents/"],
         )
         assert exit_code == 0
         assert "literary-agent.md" in stdout
@@ -256,7 +267,9 @@ class TestPipelineIntegration:
         assert "popo-poet.md" in stdout
 
     def test_container_has_logs_mount(
-        self, running_container: str, session_work_dir: Path,
+        self,
+        running_container: str,
+        session_work_dir: Path,
     ) -> None:
         """Writes to /_opencode_logs inside container should appear on host."""
         exit_code, stdout, stderr = exec_command(
@@ -270,13 +283,17 @@ class TestPipelineIntegration:
         assert "test-log-content" in host_log.read_text()
 
     def test_needs_rebuild_false_after_build(
-        self, integration_image: str, poem_config: dict[str, Any],
+        self,
+        integration_image: str,
+        poem_config: dict[str, Any],
     ) -> None:
         """After building, needs_rebuild should return False."""
         should_rebuild: bool
         reason: str
         should_rebuild, reason = needs_rebuild(
-            POEM_DPACK_DIR, integration_image, poem_config["opencode_version"],
+            POEM_DPACK_DIR,
+            integration_image,
+            poem_config["opencode_version"],
         )
         assert should_rebuild is False
         assert reason == "image is up to date"
@@ -312,17 +329,14 @@ class TestEndToEnd:
         data_dir: Path = tmp_path / "empty-data"
         data_dir.mkdir()
 
-        parser: argparse.ArgumentParser = create_parser()
-        args: argparse.Namespace = parser.parse_args([
-            "--dpack", str(e2e_dpack_dir),
-            "--data", str(data_dir),
-            "--prompt", "Write me a short poem about the ocean.",
-            "--work-dir", str(work_dir),
-            "--env-file", ENV_FILE,
-            "--model", "anthropic/claude-sonnet-4-5",
-        ])
-
-        exit_code: int = cmd_run(args)
+        exit_code: int = cmd_run(
+            dpack=str(e2e_dpack_dir),
+            data=[str(data_dir)],
+            prompt="Write me a short poem about the ocean.",
+            work_dir=str(work_dir),
+            env_file=ENV_FILE,
+            model="anthropic/claude-sonnet-4-5",
+        )
 
         assert exit_code == 0
 
@@ -346,7 +360,8 @@ class TestEndToEnd:
 
         logs_dir: Path = work_dir / "_opencode_logs"
         parallel_log_dirs: list[Path] = [
-            d for d in logs_dir.iterdir()
+            d
+            for d in logs_dir.iterdir()
             if d.is_dir() and d.name.startswith("poet-parallel-run-")
         ]
         assert len(parallel_log_dirs) >= 1, "Expected at least one parallel poet run"
@@ -375,7 +390,8 @@ class TestEndToEnd:
         assert parallel_dir.exists(), "Expected parallel/ directory"
 
         run_dirs: list[Path] = [
-            d for d in parallel_dir.iterdir()
+            d
+            for d in parallel_dir.iterdir()
             if d.is_dir() and d.name.startswith("run-")
         ]
         assert len(run_dirs) >= 1
@@ -402,7 +418,9 @@ class TestEndToEnd:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(not _has_google_key(), reason="No GOOGLE_GENERATIVE_AI_API_KEY in .env")
+@pytest.mark.skipif(
+    not _has_google_key(), reason="No GOOGLE_GENERATIVE_AI_API_KEY in .env"
+)
 class TestOpenCodeLatest:
     """
     End-to-end test with opencode latest (no pinned version).
@@ -438,20 +456,19 @@ class TestOpenCodeLatest:
         _remove_image(f"{self.LATEST_IMAGE_NAME}-base")
 
     def test_poem_with_opencode_latest(
-        self, latest_dpack_dir: Path, tmp_path: Path,
+        self,
+        latest_dpack_dir: Path,
+        tmp_path: Path,
     ) -> None:
         """Full poem run with opencode latest — catches yaml import issues."""
         work_dir: Path = tmp_path / "latest-test"
 
-        parser: argparse.ArgumentParser = create_parser()
-        args: argparse.Namespace = parser.parse_args([
-            "--dpack", str(latest_dpack_dir),
-            "--prompt", "Write a haiku about the sea.",
-            "--work-dir", str(work_dir),
-            "--env-file", ENV_FILE,
-        ])
-
-        exit_code: int = cmd_run(args)
+        exit_code: int = cmd_run(
+            dpack=str(latest_dpack_dir),
+            prompt="Write a haiku about the sea.",
+            work_dir=str(work_dir),
+            env_file=ENV_FILE,
+        )
 
         assert exit_code == 0, (
             f"Poem run with opencode latest failed (exit {exit_code}). "
