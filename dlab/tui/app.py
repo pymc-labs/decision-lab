@@ -252,9 +252,6 @@ class ConnectApp(App):
         self._watcher = LogWatcher(self._logs_dir)
         self._watcher.start()
 
-        # Poll for initial events (populates queue before processing)
-        self._watcher.poll()
-
         # Process initial events
         self._process_pending_events()
 

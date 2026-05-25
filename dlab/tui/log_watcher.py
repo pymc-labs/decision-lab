@@ -9,7 +9,8 @@ from pathlib import Path
 from queue import Queue
 from typing import Any, Callable
 
-from dlab.opencode_logparser import LogEvent as ParsedEvent, parse_line
+from dlab.opencode_logparser import LogEvent as ParsedEvent
+from dlab.opencode_logparser import parse_line
 
 
 class LogWatcher:
@@ -156,8 +157,13 @@ class LogWatcher:
         if self._running:
             return
 
-        # Read existing content
-        for log_path in self._logs_dir.rglob("*.log"):
+        # Read existing content; guard against permission errors on unreadable
+        # subdirectories (e.g. Docker-owned dirs when running as a regular user).
+        try:
+            log_paths = list(self._logs_dir.rglob("*.log"))
+        except (PermissionError, OSError):
+            log_paths = []
+        for log_path in log_paths:
             for source, event in self._read_new_lines(log_path):
                 self._event_queue.put((source, event))
 
@@ -176,7 +182,11 @@ class LogWatcher:
         if not self._running:
             return
 
-        for log_path in self._logs_dir.rglob("*.log"):
+        try:
+            log_paths = list(self._logs_dir.rglob("*.log"))
+        except (PermissionError, OSError):
+            log_paths = []
+        for log_path in log_paths:
             for source, event in self._read_new_lines(log_path):
                 self._event_queue.put((source, event))
 
