@@ -16,9 +16,13 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
-from dhub.cli.config import build_headers, get_api_url, get_optional_token, raise_for_status
 import httpx
 import yaml
+
+try:
+    from dhub.cli.config import build_headers, get_api_url, get_optional_token, raise_for_status
+except ImportError:
+    build_headers = get_api_url = get_optional_token = raise_for_status = None  # type: ignore[assignment]
 
 
 def _load_bundled_models() -> dict[str, Any]:
