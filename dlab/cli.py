@@ -273,31 +273,6 @@ def create_parser() -> argparse.ArgumentParser:
         help="Path to session work directory (default: cwd if it has _opencode_logs)",
     )
 
-    # Trace subcommand — export session to OTEL/OpenLIT
-    trace_parser = subparsers.add_parser(
-        "trace",
-        help="Export a completed session as OpenTelemetry traces and logs",
-    )
-    trace_parser.add_argument(
-        "work_dir",
-        metavar="WORK_DIR",
-        nargs="?",
-        default=None,
-        help="Path to session work directory (default: cwd if it has _opencode_logs)",
-    )
-    trace_parser.add_argument(
-        "--endpoint",
-        default="http://localhost:4318",
-        metavar="URL",
-        help="OTLP/HTTP endpoint URL (default: http://localhost:4318)",
-    )
-    trace_parser.add_argument(
-        "--service",
-        default="dlab",
-        metavar="NAME",
-        help="OTEL service.name attribute (default: dlab)",
-    )
-
     # View subcommand (browser-based session viewer)
     view_parser = subparsers.add_parser(
         "view",
@@ -1029,63 +1004,6 @@ def cmd_timeline(args: argparse.Namespace) -> int:
     return run_timeline(work_dir)
 
 
-def cmd_trace(args: argparse.Namespace) -> int:
-    """
-    Handle trace mode - export session to OpenTelemetry traces and logs.
-
-    Parameters
-    ----------
-    args : argparse.Namespace
-        Parsed command-line arguments.
-
-    Returns
-    -------
-    int
-        Exit code (0 for success, non-zero for failure).
-    """
-    console = _make_console()
-
-    # Resolve work_dir: explicit arg, or cwd if it has _opencode_logs
-    if args.work_dir:
-        work_dir = Path(args.work_dir).resolve()
-    else:
-        cwd = Path.cwd()
-        if (cwd / "_opencode_logs").exists():
-            work_dir = cwd
-        else:
-            console.print("[bold red]Error:[/bold red] No work directory specified and current directory has no _opencode_logs/")
-            console.print("Usage: dlab trace <work-dir>")
-            return 1
-
-    if not work_dir.exists():
-        console.print(f"[bold red]Error:[/bold red] Work directory not found: {work_dir}")
-        return 1
-
-    endpoint: str = args.endpoint
-    service: str = args.service
-
-    console.print(f"[bold]dlab trace[/bold] [dim]·[/dim] {work_dir.name}")
-    console.print(f"  [dim]endpoint:[/dim] {endpoint}")
-    console.print()
-
-    try:
-        from dlab.otel_exporter import export_session
-        console.print("  [dim]Exporting traces...[/dim]")
-        export_session(work_dir, otlp_endpoint=endpoint, service_name=service)
-        console.print("  [bold green]Done.[/bold green]")
-        console.print(f"  Open [cyan]{endpoint.replace('4318', '3000')}[/cyan] to view in OpenLIT")
-        return 0
-    except ImportError as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
-        return 1
-    except FileNotFoundError as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
-        return 1
-    except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
-        return 1
-
-
 def cmd_create_dpack(args: argparse.Namespace) -> int:
     """
     Handle create-dpack mode - launch TUI wizard.
@@ -1237,8 +1155,6 @@ def main() -> None:
         exit_code = cmd_create_dpack(args)
     elif args.command == "timeline":
         exit_code = cmd_timeline(args)
-    elif args.command == "trace":
-        exit_code = cmd_trace(args)
     elif args.command == "view":
         exit_code = cmd_view(args)
     elif args.dpack or args.data or args.prompt or args.prompt_file or args.continue_dir:
