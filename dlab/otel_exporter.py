@@ -68,6 +68,47 @@ def _get_dlab_end(events: list[LogEvent]) -> dict[str, Any] | None:
     return None
 
 
+def _accumulate_usage(events: list[LogEvent]) -> dict[str, Any]:
+    """
+    Sum token counts and cost from all step_finish events.
+
+    Returns a dict with gen_ai.usage.* keys ready to set as span attributes:
+      gen_ai.usage.input_tokens   (int)
+      gen_ai.usage.output_tokens  (int)
+      gen_ai.usage.cost           (float, USD)
+      dlab.usage.cache_read_tokens (int)
+      dlab.usage.cache_write_tokens (int)
+    """
+    input_tokens = 0
+    output_tokens = 0
+    cost = 0.0
+    cache_read = 0
+    cache_write = 0
+
+    for ev in events:
+        if ev.event_type != "step_finish":
+            continue
+        tokens = ev.part.get("tokens") or {}
+        input_tokens += tokens.get("input", 0) or 0
+        output_tokens += tokens.get("output", 0) or 0
+        cache_obj = tokens.get("cache") or {}
+        cache_read += cache_obj.get("read", 0) or 0
+        cache_write += cache_obj.get("write", 0) or 0
+        cost += ev.part.get("cost", 0.0) or 0.0
+
+    attrs: dict[str, Any] = {}
+    if input_tokens or output_tokens:
+        attrs["gen_ai.usage.input_tokens"] = input_tokens
+        attrs["gen_ai.usage.output_tokens"] = output_tokens
+    if cost:
+        attrs["gen_ai.usage.cost"] = round(cost, 6)
+    if cache_read:
+        attrs["dlab.usage.cache_read_tokens"] = cache_read
+    if cache_write:
+        attrs["dlab.usage.cache_write_tokens"] = cache_write
+    return attrs
+
+
 def _session_start_ns(events: list[LogEvent]) -> int:
     """Return the timestamp of the first timed event in nanoseconds."""
     for ev in events:
@@ -125,7 +166,6 @@ def export_session(
         from opentelemetry.sdk._logs import LoggerProvider
         from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
         from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
-        from opentelemetry.sdk._logs import LogRecord
         from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
     except ImportError as exc:
         raise ImportError(
@@ -169,11 +209,21 @@ def export_session(
 
     root_attrs: dict[str, Any] = {
         "gen_ai.system": "opencode",
+        "gen_ai.operation.name": "chat",
         "dlab.session.work_dir": str(work_dir),
         "dlab.session.outcome": outcome,
     }
     if graph.model:
         root_attrs["gen_ai.request.model"] = graph.model
+
+    # Aggregate usage across ALL nodes for the session-level rollup
+    def _all_events(node: SessionNode) -> list[LogEvent]:
+        evs = list(node.events)
+        for child in node.children:
+            evs.extend(_all_events(child))
+        return evs
+
+    root_attrs.update(_accumulate_usage(_all_events(graph)))
 
     with tracer.start_as_current_span(
         f"session:{work_dir.name}",
@@ -221,12 +271,15 @@ def _export_node(
 
     agent_attrs: dict[str, Any] = {
         "gen_ai.system": "opencode",
+        "gen_ai.operation.name": "chat",
         "gen_ai.agent.name": node.agent_name or node.name,
-        "dlab.agent.is_consolidator": node.is_consolidator,
-        "dlab.agent.log": node.log_path,
+        "dlab.agent.is_consolidator": str(node.is_consolidator).lower(),
     }
     if node.model:
         agent_attrs["gen_ai.request.model"] = node.model
+
+    # Per-agent token/cost rollup from step_finish events
+    agent_attrs.update(_accumulate_usage(events))
 
     span_name = f"agent:{node.agent_name or node.name}"
 
@@ -236,6 +289,7 @@ def _export_node(
         span_name,
         context=ctx,
         start_time=start_ns,
+        kind=trace.SpanKind.CLIENT,
         attributes=agent_attrs,
     ) as agent_span:
         # Emit tool spans
@@ -283,11 +337,11 @@ def _emit_tool_spans(
             f"tool:{tool_name}",
             context=ctx,
             start_time=start_ns,
-            attributes={
-                "gen_ai.tool.name": tool_name,
-                "gen_ai.tool.call_id": call_id,
-                "dlab.tool.state": call_events[-1].part.get("state", "unknown"),
-            },
+                attributes={
+                    "gen_ai.tool.name": tool_name,
+                    "gen_ai.tool.call_id": call_id,
+                    "dlab.tool.state": str(call_events[-1].part.get("state", "unknown")),
+                },
         ) as tool_span:
             tool_span.end(end_time=end_ns)
 
@@ -316,9 +370,10 @@ def _emit_log_records(
     span: Any,
 ) -> None:
     """Emit one OTEL log record per LogEvent, attached to span context."""
-    from opentelemetry import trace
-    from opentelemetry.sdk._logs import LogRecord
     from opentelemetry._logs.severity import SeverityNumber
+    from opentelemetry import context as otel_context
+    from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+    from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
 
     span_ctx = span.get_span_context()
 
@@ -336,16 +391,26 @@ def _emit_log_records(
         if ev.session_id:
             attrs["session.id"] = ev.session_id
 
-        record = LogRecord(
-            timestamp=_ms_to_ns(ev.timestamp),
-            observed_timestamp=_ms_to_ns(ev.timestamp),
-            trace_id=span_ctx.trace_id,
-            span_id=span_ctx.span_id,
-            trace_flags=span_ctx.trace_flags,
-            severity_number=SeverityNumber(severity),
-            severity_text=SeverityNumber(severity).name,
-            body=str(body),
-            attributes=attrs,
-            resource=otel_logger._instrumentation_scope if hasattr(otel_logger, "_instrumentation_scope") else None,
+        # Attach log record to the span context
+        ctx = otel_context.attach(
+            otel_context.set_value(
+                "current-span",
+                NonRecordingSpan(SpanContext(
+                    trace_id=span_ctx.trace_id,
+                    span_id=span_ctx.span_id,
+                    is_remote=False,
+                    trace_flags=TraceFlags(TraceFlags.SAMPLED),
+                )),
+            )
         )
-        otel_logger.emit(record)
+        try:
+            otel_logger.emit(
+                timestamp=_ms_to_ns(ev.timestamp),
+                observed_timestamp=_ms_to_ns(ev.timestamp),
+                severity_number=SeverityNumber(severity),
+                severity_text=SeverityNumber(severity).name,
+                body=str(body),
+                attributes=attrs,
+            )
+        finally:
+            otel_context.detach(ctx)
