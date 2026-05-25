@@ -1,0 +1,15 @@
+[project]
+name = "base-pymc"
+channels = ["conda-forge"]
+# linux-64  = x86_64 cloud / CI hosts
+# linux-aarch64 = ARM (AWS Graviton, Docker on Apple Silicon)
+platforms = ["linux-64", "linux-aarch64"]
+
+[dependencies]
+python = "3.11.*"
+pymc = ">=5.10,<6"
+arviz = ">=0.18"
+pandas = ">=2.0"
+numpy = ">=1.26"
+matplotlib = ">=3.8"
+seaborn = ">=0.13"   # ships Palmer Penguins via seaborn.load_dataset("penguins")
