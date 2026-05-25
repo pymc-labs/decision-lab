@@ -142,6 +142,6 @@ Evaluator agent cross-references every claim in `summary.md` against actual outp
 Catches fabricated R-hats, unsupported recommendations, overclaimed intervals.
 Scores flow into `dlab trace` → OpenLIT hallucination widget. EU AI Act ready.
 
-![w:300](https://i.imgflip.com/2fm6x.jpg)
+![w:300](https://i.imgflip.com/3si4.jpg)
 
 > *Shut up and take my money.*
