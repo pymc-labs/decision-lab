@@ -17,7 +17,7 @@ timeout_minutes: 15
 # Keep running other instances if one fails or diverges
 failure_behavior: continue
 
-default_model: "anthropic/claude-sonnet-4-5"
+default_model: "anthropic/claude-sonnet-4-6"
 
 max_instances: 3
 
@@ -58,4 +58,4 @@ summarizer_prompt: |
 
   Do NOT pick a winner. Do NOT make recommendations. Present observations only.
 
-summarizer_model: "anthropic/claude-sonnet-4-5"
+summarizer_model: "anthropic/claude-sonnet-4-6"
