@@ -370,14 +370,25 @@ class ConnectApp(App):
         main_display_name = self._get_display_name("main")
 
         # Check if main agent is complete — if so, all sub-agents are done
-        # (sub-agents may lack a clean stop event if the container was killed)
+        # (sub-agents may lack a clean stop event if the container was killed).
+        # Cache the result on AgentState so we never re-parse a completed file.
         main_log = self._get_log_path("main")
-        main_complete = main_log.exists() and is_log_complete(main_log)
+        main_agent_state = self._state.agents.get(main_display_name)
+        if main_agent_state and main_agent_state.is_complete:
+            main_complete = True
+        else:
+            main_complete = main_log.exists() and is_log_complete(main_log)
+            if main_complete and main_agent_state:
+                main_agent_state.is_complete = True
 
         if not main_complete:
             for name in self._state.agents.keys():
-                log_path = self._get_log_path(name)
-                if log_path.exists() and not is_log_complete(log_path):
+                agent_state = self._state.agents[name]
+                if not agent_state.is_complete:
+                    log_path = self._get_log_path(name)
+                    if log_path.exists() and is_log_complete(log_path):
+                        agent_state.is_complete = True
+                if not agent_state.is_complete:
                     running.add(name)
 
         agent_selector.update_agents(agents, running)
