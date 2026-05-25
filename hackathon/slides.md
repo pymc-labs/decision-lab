@@ -321,6 +321,89 @@ Scores flow into `dlab trace` → OpenLIT hallucination widget lights up.
 
 <!-- _class: center -->
 
+# 🏢 Why Enterprise Clients Care
+
+---
+
+## The Hosted Observability Problem
+
+Every major observability SaaS — Datadog, New Relic, Grafana Cloud — requires your telemetry to **leave your network.**
+
+For a bank running credit risk models, or a pharma company running trial analysis:
+
+> *"Your model inputs, prompts, and outputs are going to a US SaaS vendor's servers."*
+
+That conversation ends the procurement process.
+
+**GDPR. HIPAA. Internal data classification. Model risk management.**
+These aren't bureaucratic obstacles — they're the reason the deal doesn't close.
+
+---
+
+## This Stack Is Entirely Self-Hosted
+
+```
+Your infrastructure
+├── decision-lab agents          (your cluster / laptop)
+├── ClickHouse                   (your Docker / your cloud)
+└── OpenLIT UI                   (your Docker / your cloud)
+
+External dependencies: zero.
+No data leaves. Ever.
+```
+
+`dlab trace` emits OTLP locally. ClickHouse stores it locally.
+OpenLIT queries it locally.
+
+**The compliance answer is architectural, not contractual.**
+You don't need a DPA, a BAA, or an infosec review of a vendor.
+You just point the exporter at your own endpoint.
+
+---
+
+## OpenTelemetry as the Enterprise Unlock
+
+Most enterprise engineering orgs already have an OTLP pipeline.
+
+```bash
+# Point at your existing stack instead of OpenLIT
+dlab trace <work-dir> --endpoint https://otel.your-company.com
+```
+
+`dlab trace` emits **standard CNCF OpenTelemetry** — not a proprietary format.
+
+| Existing stack | Works with `dlab trace`? |
+|---|---|
+| Datadog (OTLP ingest) | ✅ |
+| Grafana + Tempo | ✅ |
+| Elastic APM | ✅ |
+| Jaeger | ✅ |
+| OpenLIT (self-hosted) | ✅ turnkey default |
+
+No lock-in. Plug into what you already pay for.
+
+---
+
+## The Governance Story
+
+The EU AI Act and internal model risk frameworks are converging on one requirement:
+
+> *"Show us what your model did and how you validated it."*
+
+The evaluator agent + `dlab trace` pipeline produces exactly this:
+
+- **Audit trail**: every agent action, tool call, and cost — immutable in ClickHouse
+- **Hallucination scores**: which agent claims were verified vs asserted
+- **Reproducibility**: session work directory is a complete artefact — code, outputs, logs
+- **Human review gate**: orchestrator stops on conflict, doesn't paper over uncertainty
+
+This isn't observability bolted on after the fact.
+**It's governance built into the methodology.**
+
+---
+
+<!-- _class: center -->
+
 # Let's build it. 🚀
 
 > *The best DX is the one you never have to think about.*
