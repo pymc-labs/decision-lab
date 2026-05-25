@@ -50,9 +50,9 @@ style: |
 
 | | What breaks today | What we fix |
 |---|---|---|
-| 🛠️ **CLI** *(Daniel)* | Creating a dpack is still mostly manual | Agent-driven scaffolding CLI |
-| 📦 **Pixi** *(Daniel)* | Environments are brittle, unreproducible | `pixi.toml` as single source of truth |
-| 🔭 **OTEL** *(Pablo)* | You can't see what your agents did | `dlab trace` → OpenLIT observability |
+| 🛠️ **CLI** | Creating a dpack is still mostly manual | Agent-driven scaffolding CLI |
+| 📦 **Pixi** | Environments are brittle, unreproducible | `pixi.toml` as single source of truth |
+| 🔭 **OTEL** | You can't see what your agents did | `dlab trace` → OpenLIT observability |
 
 > One branch. One PR. `hackathon-devex`
 
