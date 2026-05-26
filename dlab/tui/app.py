@@ -3,6 +3,8 @@ Main Textual application for dlab connect TUI.
 """
 
 import json
+import logging
+import traceback
 from pathlib import Path
 
 from textual.app import App, ComposeResult
@@ -11,12 +13,9 @@ from textual.containers import Horizontal, Vertical
 from textual.timer import Timer
 from textual.widgets import Footer, Header, Static, TabbedContent, TabPane
 
-from dlab.timeline import (
-    discover_agents,
-    is_log_complete,
-)
+from dlab.timeline import is_log_complete
 from dlab.tui.log_watcher import LogWatcher
-from dlab.tui.models import LogEvent, SessionState
+from dlab.tui.models import AgentState, LogEvent, SessionState
 from dlab.tui.widgets.agent_list import AgentSelector
 from dlab.tui.widgets.artifacts_pane import ArtifactList, FileViewer
 from dlab.tui.widgets.log_view import LogView
@@ -204,11 +203,27 @@ class ConnectApp(App):
         self._state = SessionState(work_dir=work_dir)
         self._watcher: LogWatcher | None = None
         self._selected_agent: str | None = None
-        self._known_agents: set[str] = set()
         self._update_timer: Timer | None = None
         self._default_agent = load_default_agent(work_dir)
         self._search_matches: list[int] = []
         self._current_match_index: int = 0
+        self._logger = self._make_logger(work_dir)
+
+    @staticmethod
+    def _make_logger(work_dir: Path) -> logging.Logger:
+        """Create a file logger that writes to <work_dir>/.dlab_tui_debug.log."""
+        log_file = work_dir / ".dlab_tui_debug.log"
+        logger = logging.getLogger(f"dlab.tui.{log_file}")
+        logger.setLevel(logging.DEBUG)
+        if not logger.handlers:
+            handler = logging.FileHandler(log_file, mode="w", encoding="utf-8")
+            handler.setFormatter(
+                logging.Formatter(
+                    "%(asctime)s %(levelname)-8s %(funcName)s: %(message)s"
+                )
+            )
+            logger.addHandler(handler)
+        return logger
 
     def compose(self) -> ComposeResult:
         """Create child widgets."""
@@ -233,31 +248,63 @@ class ConnectApp(App):
 
     async def on_mount(self) -> None:
         """Initialize on app mount."""
-        self.title = f"dlab connect - {self._work_dir.name}"
+        try:
+            await self._mount_impl()
+        except Exception:  # noqa: BLE001
+            crash_log = self._work_dir / ".dlab_tui_crash.log"
+            crash_log.write_text(traceback.format_exc())
+            # Show a visible error in the status bar so the UI isn't silently dead.
+            try:
+                status_bar = self.query_one("#status-bar", StatusBar)
+                status_bar.update_status(
+                    is_running=False,
+                    cost=0.0,
+                    duration=0.0,
+                    agent=f"INIT ERROR — see {crash_log.name}",
+                )
+            except Exception:
+                pass
+            # Still start the timer so the app remains interactive.
+            self._update_timer = self.set_interval(0.5, self._on_update_tick)
 
-        # Discover known agents
-        opencode_dir = self._work_dir / ".opencode"
-        if opencode_dir.exists():
-            self._known_agents = discover_agents(opencode_dir)
+    async def _mount_impl(self) -> None:
+        """Core mount logic — called by on_mount inside a try/except."""
+        self._logger.info("mount start | logs_dir=%s", self._logs_dir)
+        self.title = f"dlab connect - {self._work_dir.name}"
 
         # Check if job is running
         main_log = self._logs_dir / "main.log"
-        self._state.is_job_running = main_log.exists() and not is_log_complete(main_log)
+        self._logger.info("main.log exists=%s", main_log.exists())
+        try:
+            self._state.is_job_running = main_log.exists() and not is_log_complete(
+                main_log
+            )
+            self._logger.info("is_job_running=%s", self._state.is_job_running)
+        except Exception:
+            self._logger.exception("is_log_complete(main_log) failed")
+            self._state.is_job_running = True  # assume still running if we can't tell
 
         # Get global start timestamp from main.log FIRST
         # This is the authoritative reference for all relative timestamps
         self._state.global_start_ts = get_global_start_ts(self._logs_dir)
+        self._logger.info("global_start_ts=%s", self._state.global_start_ts)
 
         # Start log watcher
         self._watcher = LogWatcher(self._logs_dir)
         self._watcher.start()
+        initial_events = self._watcher.get_events()
+        self._logger.info("watcher.start() produced %d events", len(initial_events))
+        # Re-queue the events we just drained for inspection
+        for item in initial_events:
+            self._watcher._event_queue.put(item)
 
         # Process initial events
         self._process_pending_events()
-
-        # Select first agent
-        agent_selector = self.query_one("#agent-selector", AgentSelector)
-        agent_selector.select_first()
+        self._logger.info(
+            "after process_pending: %d agents, total_cost=%.4f",
+            len(self._state.agents),
+            self._state.total_cost,
+        )
 
         # Show placeholder in file viewer
         file_viewer = self.query_one("#file-viewer", FileViewer)
@@ -271,6 +318,7 @@ class ConnectApp(App):
 
         # Start periodic update timer
         self._update_timer = self.set_interval(0.5, self._on_update_tick)
+        self._logger.info("mount complete — timer started")
 
     async def on_unmount(self) -> None:
         """Cleanup on app unmount."""
@@ -324,7 +372,12 @@ class ConnectApp(App):
                     log_view.append_event(event)
 
         if events:
-            self._update_agent_list()
+            try:
+                self._update_agent_list()
+            except Exception:
+                self._logger.exception(
+                    "_update_agent_list failed (agents=%d)", len(self._state.agents)
+                )
             self._update_status_bar()
 
     def _get_log_path(self, display_name: str) -> Path:
@@ -354,6 +407,16 @@ class ConnectApp(App):
 
         return log_path
 
+    def _is_agent_complete_in_memory(self, agent_state: AgentState) -> bool:
+        """Check completion from already-loaded events — no disk I/O."""
+        for event in reversed(agent_state.events):
+            if event.event_type == "error":
+                return True
+            if event.event_type == "step_finish":
+                reason = event.raw.get("part", {}).get("reason", "")
+                return reason in ("stop", "error")
+        return False
+
     def _update_agent_list(self) -> None:
         """Update the agent selector with current state."""
         agent_selector = self.query_one("#agent-selector", AgentSelector)
@@ -371,22 +434,22 @@ class ConnectApp(App):
 
         # Check if main agent is complete — if so, all sub-agents are done
         # (sub-agents may lack a clean stop event if the container was killed).
-        # Cache the result on AgentState so we never re-parse a completed file.
-        main_log = self._get_log_path("main")
+        # Uses in-memory events; no disk I/O.
         main_agent_state = self._state.agents.get(main_display_name)
         if main_agent_state and main_agent_state.is_complete:
             main_complete = True
-        else:
-            main_complete = main_log.exists() and is_log_complete(main_log)
-            if main_complete and main_agent_state:
+        elif main_agent_state is not None:
+            main_complete = self._is_agent_complete_in_memory(main_agent_state)
+            if main_complete:
                 main_agent_state.is_complete = True
+        else:
+            main_complete = False
 
         if not main_complete:
             for name in self._state.agents.keys():
                 agent_state = self._state.agents[name]
                 if not agent_state.is_complete:
-                    log_path = self._get_log_path(name)
-                    if log_path.exists() and is_log_complete(log_path):
+                    if self._is_agent_complete_in_memory(agent_state):
                         agent_state.is_complete = True
                 if not agent_state.is_complete:
                     running.add(name)
@@ -413,18 +476,25 @@ class ConnectApp(App):
         )
 
     def _on_update_tick(self) -> None:
-        """Periodic update tick."""
-        # Poll log files directly as fallback for unreliable watchdog events
-        # (especially on macOS where FSEvents can miss Docker/atomic writes)
-        if self._watcher:
-            self._watcher.poll()
+        """Periodic update tick — all sub-calls are guarded so one failure never kills the timer."""
+        try:
+            if self._watcher:
+                self._watcher.poll()
+            self._process_pending_events()
+        except Exception:
+            self._logger.exception("_on_update_tick: poll/process failed")
 
-        self._process_pending_events()
-        self._update_status_bar()
+        # Always refresh status bar so the UI doesn't freeze if process_pending throws.
+        try:
+            self._update_status_bar()
+        except Exception:
+            self._logger.exception("_on_update_tick: _update_status_bar failed")
 
-        # Refresh artifacts periodically (detect new files created during execution)
-        artifact_list = self.query_one("#artifact-list", ArtifactList)
-        artifact_list.refresh_if_changed()
+        try:
+            artifact_list = self.query_one("#artifact-list", ArtifactList)
+            artifact_list.refresh_if_changed()
+        except Exception:
+            self._logger.exception("_on_update_tick: artifact refresh failed")
 
     def on_agent_selector_agent_selected(
         self, event: AgentSelector.AgentSelected

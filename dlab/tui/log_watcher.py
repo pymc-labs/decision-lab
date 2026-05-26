@@ -36,6 +36,8 @@ class LogWatcher:
         self._file_inodes: dict[Path, int] = {}  # Track inode for replacement detection
         self._lock = threading.Lock()
         self._running = False
+        self._known_log_paths: list[Path] = []
+        self._logs_dir_mtime: float = 0.0
 
     def _get_source_name(self, log_path: Path) -> str:
         """
@@ -173,6 +175,19 @@ class LogWatcher:
         """Stop watching."""
         self._running = False
 
+    def _refresh_log_paths(self) -> None:
+        """Re-scan for log files only when the directory tree has changed."""
+        try:
+            current_mtime = self._logs_dir.stat().st_mtime
+        except OSError:
+            return
+        if current_mtime != self._logs_dir_mtime:
+            try:
+                self._known_log_paths = list(self._logs_dir.rglob("*.log"))
+            except (PermissionError, OSError):
+                pass
+            self._logs_dir_mtime = current_mtime
+
     def poll(self) -> None:
         """
         Poll all log files for new content.
@@ -182,11 +197,8 @@ class LogWatcher:
         if not self._running:
             return
 
-        try:
-            log_paths = list(self._logs_dir.rglob("*.log"))
-        except (PermissionError, OSError):
-            log_paths = []
-        for log_path in log_paths:
+        self._refresh_log_paths()
+        for log_path in self._known_log_paths:
             for source, event in self._read_new_lines(log_path):
                 self._event_queue.put((source, event))
 
