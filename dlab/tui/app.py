@@ -207,7 +207,7 @@ class ConnectApp(App):
         self._default_agent = load_default_agent(work_dir)
         self._search_matches: list[int] = []
         self._current_match_index: int = 0
-        self._logger = self._make_logger(work_dir)
+        self._file_logger = self._make_logger(work_dir)
 
     @staticmethod
     def _make_logger(work_dir: Path) -> logging.Logger:
@@ -269,38 +269,38 @@ class ConnectApp(App):
 
     async def _mount_impl(self) -> None:
         """Core mount logic — called by on_mount inside a try/except."""
-        self._logger.info("mount start | logs_dir=%s", self._logs_dir)
+        self._file_logger.info("mount start | logs_dir=%s", self._logs_dir)
         self.title = f"dlab connect - {self._work_dir.name}"
 
         # Check if job is running
         main_log = self._logs_dir / "main.log"
-        self._logger.info("main.log exists=%s", main_log.exists())
+        self._file_logger.info("main.log exists=%s", main_log.exists())
         try:
             self._state.is_job_running = main_log.exists() and not is_log_complete(
                 main_log
             )
-            self._logger.info("is_job_running=%s", self._state.is_job_running)
+            self._file_logger.info("is_job_running=%s", self._state.is_job_running)
         except Exception:
-            self._logger.exception("is_log_complete(main_log) failed")
+            self._file_logger.exception("is_log_complete(main_log) failed")
             self._state.is_job_running = True  # assume still running if we can't tell
 
         # Get global start timestamp from main.log FIRST
         # This is the authoritative reference for all relative timestamps
         self._state.global_start_ts = get_global_start_ts(self._logs_dir)
-        self._logger.info("global_start_ts=%s", self._state.global_start_ts)
+        self._file_logger.info("global_start_ts=%s", self._state.global_start_ts)
 
         # Start log watcher
         self._watcher = LogWatcher(self._logs_dir)
         self._watcher.start()
         initial_events = self._watcher.get_events()
-        self._logger.info("watcher.start() produced %d events", len(initial_events))
+        self._file_logger.info("watcher.start() produced %d events", len(initial_events))
         # Re-queue the events we just drained for inspection
         for item in initial_events:
             self._watcher._event_queue.put(item)
 
         # Process initial events
         self._process_pending_events()
-        self._logger.info(
+        self._file_logger.info(
             "after process_pending: %d agents, total_cost=%.4f",
             len(self._state.agents),
             self._state.total_cost,
@@ -318,7 +318,7 @@ class ConnectApp(App):
 
         # Start periodic update timer
         self._update_timer = self.set_interval(0.5, self._on_update_tick)
-        self._logger.info("mount complete — timer started")
+        self._file_logger.info("mount complete — timer started")
 
     async def on_unmount(self) -> None:
         """Cleanup on app unmount."""
@@ -375,7 +375,7 @@ class ConnectApp(App):
             try:
                 self._update_agent_list()
             except Exception:
-                self._logger.exception(
+                self._file_logger.exception(
                     "_update_agent_list failed (agents=%d)", len(self._state.agents)
                 )
             self._update_status_bar()
@@ -482,19 +482,19 @@ class ConnectApp(App):
                 self._watcher.poll()
             self._process_pending_events()
         except Exception:
-            self._logger.exception("_on_update_tick: poll/process failed")
+            self._file_logger.exception("_on_update_tick: poll/process failed")
 
         # Always refresh status bar so the UI doesn't freeze if process_pending throws.
         try:
             self._update_status_bar()
         except Exception:
-            self._logger.exception("_on_update_tick: _update_status_bar failed")
+            self._file_logger.exception("_on_update_tick: _update_status_bar failed")
 
         try:
             artifact_list = self.query_one("#artifact-list", ArtifactList)
             artifact_list.refresh_if_changed()
         except Exception:
-            self._logger.exception("_on_update_tick: artifact refresh failed")
+            self._file_logger.exception("_on_update_tick: artifact refresh failed")
 
     def on_agent_selector_agent_selected(
         self, event: AgentSelector.AgentSelected
