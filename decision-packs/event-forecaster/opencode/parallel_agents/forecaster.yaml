@@ -1,0 +1,106 @@
+name: forecaster
+description: "Run independent research-paired forecasting agents. Each received its own researcher's findings and chose its own method autonomously."
+timeout_minutes: 60
+failure_behavior: continue
+
+default_model: "anthropic/claude-haiku-4-5"
+max_instances: 5
+
+subagent_suffix_prompt: |
+  ---
+
+  When you are done, write summary.md following the schema in your system prompt.
+  Also write forecast.json with machine-readable probability estimates at every
+  horizon date, and outputs/check_<name>.json for each calibration check you ran.
+
+  If fitting failed entirely, use the failure schema in your system prompt and
+  still write summary.md so the orchestrator can read your diagnosis.
+
+summarizer_prompt: |
+  You are a consolidator reviewing N independent research-forecasting pairs.
+  Each pair autonomously chose its own modelling approach — methods will likely
+  be heterogeneous. Your job: surface the most defensible estimates and identify
+  convergence across independent paths.
+
+  Read these summary files (paths provided above — do NOT search for others):
+  {summary_paths}
+
+  Write the consolidated comparison to the output path provided above.
+
+  ---
+
+  ## Step 1 — Approach inventory
+
+  For each pair, record:
+
+  | Pair | Method chosen | P(mid-horizon) | Median days | Evidence score | Calibration |
+  |---|---|---|---|---|---|
+
+  **Evidence score (0–3)**:
+  - 3: Method choice directly supported by named research findings with specific values and sources
+  - 2: Method choice reasonably argued from domain knowledge or general research
+  - 1: Method choice stated without clear justification
+  - 0: Method failed or summary is missing
+
+  **DO NOT penalise**: non-standard methods, ignoring research findings, novel implementations.
+
+  ---
+
+  ## Step 2 — Technical quality
+
+  For Bayesian methods: check R-hat, ESS, divergence rate from the summary.
+  - PASS: R-hat < 1.05, ESS bulk > 50 (relaxed — short chains)
+  - MARGINAL: R-hat < 1.10, ESS > 20
+  - FAIL: worse
+
+  For analytic methods: note whether PriorSensitivity and ConsistencyCheck were run.
+
+  For novel/non-standard methods: assess whether uncertainty is quantified and
+  the result is in a defensible range given the question.
+
+  Standard score adjustments:
+  - Convergence FAIL → −4; MARGINAL → −1; PASS/N_A → 0
+  - PriorSensitivity FAIL → −3; WARN → −1; PASS → 0
+  - ConsistencyCheck FAIL → −3; PASS → 0
+  - ReferenceClassCongruence FAIL → −2; WARN → −1; PASS → 0
+  - Evidence score bonus: add evidence_score − 1 (so score 3 = +2, score 2 = +1, score 1 = 0, score 0 = −1)
+
+  ---
+
+  ## Step 3 — Comparison of results
+
+  Describe the range of methods chosen and probability estimates produced:
+  - List all methods used across pairs
+  - Note the range of P(event at mid-horizon) estimates: [min, max]
+  - Note the range of median days-to-event estimates
+  - If multiple pairs chose structurally similar methods, describe this factually
+    (e.g., "three of five pairs used scenario decomposition")
+
+  Do NOT treat method agreement between pairs as a quality signal. Multiple pairs
+  independently choosing the same approach does not validate that approach —
+  they may all share the same blind spot or prior. Each pair is evaluated on its
+  own evidence quality and technical calibration only.
+
+  ---
+
+  ## Step 4 — Primary recommendation
+
+  Select the headline estimate. Prefer, in order:
+  1. Highest individual evidence score (research findings supporting the method choice)
+  2. Best technical calibration (convergence, prior sensitivity, consistency)
+  3. Most interpretable and auditable method
+
+  State clearly: which pair(s) drive the headline, why they were selected, and
+  what the dissenting pairs found.
+
+  ---
+
+  ## Required output sections
+
+  1. **Approach inventory table** (all pairs)
+  2. **Technical quality summary** (scores and calibration status)
+  3. **Comparison of results** — methods used, range of estimates
+  4. **Primary recommendation** — headline estimate with full justification
+  5. **Key uncertainties** — 2–3 factors most affecting the reliability of the headline
+
+summarizer_model: "anthropic/claude-sonnet-4-5"

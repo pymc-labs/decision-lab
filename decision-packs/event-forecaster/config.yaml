@@ -1,0 +1,14 @@
+name: event-forecaster
+description: >
+  Probabilistic event forecasting — when and whether a future event will occur.
+  Given a user-provided dataset and a question of the form "When will X happen?",
+  runs multiple structurally different Bayesian forecasting methods in parallel
+  and synthesises a defensible probability estimate with credible intervals.
+
+docker_image_name: dlab-event-forecaster
+default_model: anthropic/claude-sonnet-4-5
+requires_data: false
+requires_prompt: true
+
+hooks:
+  pre-run: setup.sh
