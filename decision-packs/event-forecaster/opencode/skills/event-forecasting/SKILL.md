@@ -20,11 +20,13 @@ The skill is agnostic to domain. It applies equally to geopolitical events, regu
 | Explicit scenario tree (discrete resolution paths identifiable) | `references/scenario_decomposition.md` |
 | Structural model of causal drivers | `references/causal_mechanism.md` |
 | Continuous driver time-series + threshold crossing | `references/continuous_driver_model.md` |
+| Continuous driver with discrete shocks / fat tails + threshold crossing | `references/jump_diffusion_model.md` |
 | Event may never resolve (permanent non-resolution possible) | `references/cure_rate_model.md` |
 | Event triggered by a driver crossing a latent estimated threshold | `references/threshold_crossing.md` |
+| Discrete regimes with historical transitions (calm → crisis → resolved) | `references/markov_state_model.md` |
 | Validating and calibrating any forecast | `references/calibration_checks.md` |
 
-## Eight methods in this skill
+## Ten methods in this skill
 
 | Method | Data requirement | Appropriate when |
 |---|---|---|
@@ -34,7 +36,9 @@ The skill is agnostic to domain. It applies equally to geopolitical events, regu
 | `ScenarioDecomposition` | Domain knowledge + expert judgment | Question has identifiable discrete paths to resolution |
 | `CausalMechanismModel` | Structural knowledge of causal drivers | Key causal factors and direction of influence are known |
 | `ContinuousDriverModel` | Continuous driver time-series (≥ 100 obs) + computable threshold | Event operationalised as driver crossing a threshold derived from data or domain knowledge |
+| `JumpDiffusionModel` | Continuous driver time-series (≥ ~100 obs) with discrete shocks / fat tails + threshold | Event is a threshold crossing and the driver moves by sudden jumps that a Gaussian model would understate |
 | `ThresholdCrossingModel` | Driver time-series + ≥ 1 historical case with known driver level | Event triggered when driver exceeds a **latent estimated** threshold; works with N=1 |
+| `MarkovStateModel` | Historical transitions / dwell times across discrete regimes | Situation moves through identifiable intermediate states; want transition-rate dynamics, not a static scenario snapshot |
 | `CureRateModel` | Any (works without data) | Significant probability exists that the event will NEVER resolve; standard survival models assign zero probability to permanent non-resolution |
 
 **Each forecaster selects ONE method** that best fits the data and research findings. Choose the method that is most appropriate for the available evidence — you do not need to run multiple methods. The ensemble of parallel forecasters provides coverage across methods.
@@ -44,6 +48,8 @@ The skill is agnostic to domain. It applies equally to geopolitical events, regu
 | Method | Interface | Reason |
 |---|---|---|
 | `ContinuousDriverModel` | Raw PyMC | OU/RWD/SV/LL/LLT structures; Bambi cannot express them directly — see `references/continuous_driver_model.md` |
+| `JumpDiffusionModel` | Raw PyMC | Two-component jump mixture + Monte-Carlo first passage; Bambi cannot express it |
+| `MarkovStateModel` | Raw PyMC | Custom transition-rate (generator) matrix + matrix exponential, not a regression |
 | `HazardModel` | Bambi | `censored()` formula handles right-censoring cleanly |
 | `IndicatorModel` | Bambi | Formula syntax, auto-priors, `predict()` for probability |
 | `ReferenceClassModel` | Raw PyMC | Custom Beta-Beta hierarchy, not a regression |

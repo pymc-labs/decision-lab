@@ -33,7 +33,9 @@ Inspect every available data file, then answer:
 | Historical durations of N ≥ 5 analogous events | `HazardModel` (primary) |
 | Historical analogues even if durations are rough | `ReferenceClassModel` (always) |
 | Time-series of a measurable continuous driver + ≥ 1 historical case | `ContinuousDriverModel`, `ThresholdCrossingModel` |
+| Continuous driver with discrete shocks / fat-tailed increments (≥ ~100 obs) + threshold | `JumpDiffusionModel` |
 | Time-series of relevant leading indicators (updated regularly) | `IndicatorModel` |
+| Historical transitions / dwell times across discrete regimes (calm → crisis → resolved) | `MarkovStateModel` |
 | Domain knowledge of decision-makers or resolution mechanisms | `ScenarioDecomposition`, `CausalMechanismModel` |
 | Little data, open-ended question | `ReferenceClassModel` + `ScenarioDecomposition` |
 

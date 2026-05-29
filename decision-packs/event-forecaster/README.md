@@ -35,7 +35,9 @@ See `opencode/skills/event-forecasting/SKILL.md` for the full method menu:
 - `ScenarioDecomposition` — explicit scenario tree
 - `CausalMechanismModel` — structural causal model
 - `ContinuousDriverModel` — continuous driver + first-passage time (OU/RWD/SV/LL/LLT)
+- `JumpDiffusionModel` — jump-diffusion driver + first-passage time, with EVT/POT tail cross-check
 - `ThresholdCrossingModel` — latent threshold from N≥1 historical cases
+- `MarkovStateModel` — continuous-time Markov / multi-state transitions across discrete regimes
 - `CureRateModel` — long-term survivor (event may never occur)
 
 ## Python environment
