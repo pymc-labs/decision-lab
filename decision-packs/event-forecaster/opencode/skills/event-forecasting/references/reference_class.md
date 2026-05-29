@@ -148,7 +148,7 @@ p_remaining = 1 - np.exp(-lambda_samples * T_days)   # this IS the conditional i
 
 For non-exponential hazard rates (increasing or decreasing hazard), use `HazardModel` which handles right-censoring and the current duration correctly.
 
-## Calibration checks
+## Model checks
 
 **PriorSensitivity** — perturb the Beta prior concentration parameter. If changing
 the concentration from 5 to 2 shifts P(event by T_mid) by > 10pp, the reference

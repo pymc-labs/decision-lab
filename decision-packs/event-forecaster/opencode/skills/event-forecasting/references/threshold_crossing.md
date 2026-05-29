@@ -284,7 +284,7 @@ log_threshold_adjusted = pm.Deterministic(
 
 Only add the signal adjustment if you have actual market microstructure data. Do NOT fabricate signal values.
 
-## Calibration checks
+## Model checks
 
 **PriorSensitivity on threshold** — critical. The threshold estimate from N=1 is
 inherently uncertain. Perturb the threshold prior mean by ±15% and re-run. If

@@ -88,7 +88,7 @@ Do NOT include more than 5–7 indicator features without strong justification. 
 - Regularisation: use `pm.Laplace("betas", mu=0, b=0.5)` (Laplace prior = soft L1 regularisation).
 - Hierarchical: pool feature effects when multiple indicators are from the same domain.
 
-## Calibration checks
+## Model checks
 
 **HistoricalCalibration** — primary check for this method. Apply the model to
 historical labelled episodes (leave-one-out or hold-out set). Compute Brier score

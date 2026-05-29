@@ -132,7 +132,7 @@ Document explicitly: where did each P(scenario) come from? Where did each condit
 - The aggregate P(event in 365d) should be within ~2× of the `ReferenceClassModel` base rate. If they diverge by more, re-examine scenario probabilities or conditional probs.
 - Conditional probabilities must be monotonically non-decreasing across horizons for each scenario (P(event by 6mo | S) ≥ P(event by 3mo | S)).
 
-## Calibration checks
+## Model checks
 
 **ConsistencyCheck** — primary check. Verify:
 1. Scenario probabilities sum to 1.0 (±0.02 tolerance)

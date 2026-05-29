@@ -103,12 +103,12 @@ total_draws   = int(idata.sample_stats.sizes["chain"] * idata.sample_stats.sizes
 divergence_rate = divergences / total_draws
 ```
 
-## Calibration checks
+## Model checks
 
 **HistoricalCalibration** — primary check. Apply the model to past events in your
 reference class (leave-one-out or hold-out): did the model assign high probability
 to the events that resolved quickly and low probability to those that took longer?
-See `calibration_checks.md` for Brier score implementation.
+See `model_checks.md` for Brier score implementation.
 
 **PriorSensitivity** — perturb the Weibull shape and scale priors. If P(event by T_mid)
 changes by > 10pp, the forecast is prior-dominated (likely due to small N).
