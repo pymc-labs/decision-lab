@@ -361,7 +361,7 @@ with open("forecast.json", "w") as f:
 idata.to_netcdf("outputs/idata.nc")
 ```
 
-## Step 7 — Calibration: PriorSensitivity on τ
+## Step 7 — Model checks: PriorSensitivity on τ
 
 The most important calibration check for this model is sensitivity to the threshold choice. Perturb τ by ±10-20% and re-run the forward simulation (no resampling needed — just change `tau_scaled` and re-simulate).
 
@@ -393,10 +393,10 @@ print(f"PriorSensitivity on τ: {delta_pp:.1f}pp change with 10% threshold pertu
 - **Verify units.** If the driver is in USD/bbl, ensure τ is also in USD/bbl before logging/scaling.
 - **The driver may have already crossed τ.** If `current_value <= tau` (for `falls_below`), the event has already fired by this metric. Re-examine whether a different threshold or a different event definition is appropriate.
 
-## Calibration checks for ContinuousDriverModel
+## Model checks for ContinuousDriverModel
 
 **PriorSensitivity on τ (threshold)** — most important check for all variants.
-Perturb the threshold by ±10% and recompute P(event). See `calibration_checks.md`.
+Perturb the threshold by ±10% and recompute P(event). See `model_checks.md`.
 - PASS: < 10pp change
 - WARN: 10–20pp change  
 - FAIL: > 20pp change — forecast is threshold-dominated, not data-driven

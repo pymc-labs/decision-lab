@@ -1,6 +1,6 @@
-# Calibration Checks
+# Model Checks
 
-Five checks for validating and stress-testing forecasts. Run the checks specified by the orchestrator. Always run `PriorSensitivity` and `ConsistencyCheck` on every method.
+Five checks for validating and stress-testing forecasts. Run the checks specified by the orchestrator. Always run `PriorSensitivity` and `ConsistencyCheck` on every method. See each method's reference file for the specific checks recommended for that method.
 
 ---
 

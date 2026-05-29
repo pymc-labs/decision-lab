@@ -135,7 +135,7 @@ Include two extra fields beyond the standard schema:
 }
 ```
 
-## Calibration checks
+## Model checks
 
 **PriorSensitivity on π** — most important. Perturb the cure rate prior (try
 Beta(1,4), Beta(2,8), Beta(4,16)) and check how much the long-run P(event ever)

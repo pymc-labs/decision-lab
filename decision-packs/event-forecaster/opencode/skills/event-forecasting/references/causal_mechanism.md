@@ -146,7 +146,7 @@ with causal_model:
 
 Report this as a sensitivity analysis in `summary.md`.
 
-## Calibration checks
+## Model checks
 
 **PriorSensitivity** — most important check. The causal model depends heavily on
 elicited driver values and their uncertainties. Perturb each driver's current_mu

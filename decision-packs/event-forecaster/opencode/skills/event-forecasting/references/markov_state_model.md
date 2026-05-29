@@ -222,7 +222,7 @@ divergence_rate = divergences / total_draws
 **PriorSensitivity** — always run. Perturb `rate_prior_mu` (e.g. halve and double
 it, or widen the Gamma sigma) and refit. If P(event by T_mid) changes by > 10pp,
 the rates are weakly identified (usually too few observed transitions) — report
-WARN/FAIL. See `calibration_checks.md`.
+WARN/FAIL. See `model_checks.md`.
 
 **ConsistencyCheck** — verify:
 1. Each row of every sampled `Q` sums to ~0 (`np.allclose(Q.sum(axis=1), 0)`).

@@ -9,22 +9,42 @@ This skill provides methodology for estimating **probability distributions over 
 
 The skill is agnostic to domain. It applies equally to geopolitical events, regulatory decisions, market regime changes, clinical endpoints, supply chain resolutions, and any other time-to-event question.
 
-## When to use which reference
+## Method selection
 
-| Task | Read first |
+Answer these questions in order to identify which method fits your situation.
+
+### 1. What kind of question is this?
+
+| Question form | Implication |
 |---|---|
-| Deciding which methods to run | `references/method_selection.md` |
-| Historical durations of analogous events available | `references/hazard_model.md` |
-| Base rate from historical analogues + Bayesian updating | `references/reference_class.md` |
-| Leading indicator regression (relevant time series available) | `references/indicator_model.md` |
-| Explicit scenario tree (discrete resolution paths identifiable) | `references/scenario_decomposition.md` |
-| Structural model of causal drivers | `references/causal_mechanism.md` |
-| Continuous driver time-series + threshold crossing | `references/continuous_driver_model.md` |
-| Continuous driver with discrete shocks / fat tails + threshold crossing | `references/jump_diffusion_model.md` |
-| Event may never resolve (permanent non-resolution possible) | `references/cure_rate_model.md` |
-| Event triggered by a driver crossing a latent estimated threshold | `references/threshold_crossing.md` |
-| Discrete regimes with historical transitions (calm → crisis → resolved) | `references/markov_state_model.md` |
-| Validating and calibrating any forecast | `references/calibration_checks.md` |
+| "When will X happen?" | Time-to-event. Fit a survival curve. |
+| "Will X happen by date Y?" | P(event in window). All methods can answer this. |
+| "How likely is X in the next N months?" | Probability over a horizon. All methods can answer this. |
+| "What factors control when X happens?" | Causal structure matters. Prioritise `CausalMechanismModel`. |
+
+### 2. How many historical cases of this exact event exist?
+
+| Historical cases (N) | Implication |
+|---|---|
+| N = 0 | No historical case. `HazardModel` impossible. Must use broader analogues for `ReferenceClassModel`. |
+| N = 1 | One case. `HazardModel` not viable. Use as threshold / calibration anchor for `ThresholdCrossingModel`. Force-broaden reference class. |
+| N = 2–4 | Too few for reliable survival analysis. `HazardModel` is very prior-dominated; only run with explicit caveat. |
+| N ≥ 5 | `HazardModel` is viable as a primary method. |
+
+### 3. What data is available?
+
+Inspect every available data file, then answer:
+
+| Data available | Methods unlocked |
+|---|---|
+| Historical durations of N ≥ 5 analogous events | `HazardModel` (primary) |
+| Historical analogues even if durations are rough | `ReferenceClassModel` (always) |
+| Time-series of a measurable continuous driver + ≥ 1 historical case | `ContinuousDriverModel`, `ThresholdCrossingModel` |
+| Continuous driver with discrete shocks / fat-tailed increments (≥ ~100 obs) + threshold | `JumpDiffusionModel` |
+| Time-series of relevant leading indicators (updated regularly) | `IndicatorModel` |
+| Historical transitions / dwell times across discrete regimes (calm → crisis → resolved) | `MarkovStateModel` |
+| Domain knowledge of decision-makers or resolution mechanisms | `ScenarioDecomposition`, `CausalMechanismModel` |
+| Little data, open-ended question | `ReferenceClassModel` + `ScenarioDecomposition` |
 
 ## Ten methods in this skill
 
@@ -67,9 +87,26 @@ When only **one historical case** of the event exists, `HazardModel` is not viab
 - **Do NOT run `HazardModel`** — report "not applicable: N=1, insufficient data".
 - `PriorSensitivity` becomes especially important; flag WARN or FAIL prominently.
 
+## When to use which reference
+
+| Task | Read first |
+|---|---|
+| Historical durations of analogous events available | `references/hazard_model.md` |
+| Base rate from historical analogues + Bayesian updating | `references/reference_class.md` |
+| Leading indicator regression (relevant time series available) | `references/indicator_model.md` |
+| Explicit scenario tree (discrete resolution paths identifiable) | `references/scenario_decomposition.md` |
+| Structural model of causal drivers | `references/causal_mechanism.md` |
+| Continuous driver time-series + threshold crossing | `references/continuous_driver_model.md` |
+| Continuous driver with discrete shocks / fat tails + threshold crossing | `references/jump_diffusion_model.md` |
+| Event triggered by a driver crossing a latent estimated threshold | `references/threshold_crossing.md` |
+| Discrete regimes with historical transitions (calm → crisis → resolved) | `references/markov_state_model.md` |
+| Event may never resolve (permanent non-resolution possible) | `references/cure_rate_model.md` |
+| Model checking protocols, JSON schemas, Brier score | `references/model_checks.md` |
+| Output schema, convergence thresholds, agreement criteria | `references/output_schema.md` |
+
 ## Core output contract
 
-Every method must produce `forecast.json`. Full schema in `references/method_selection.md`. Mandatory fields:
+Every method must produce `forecast.json`. Full schema in `references/output_schema.md`. Mandatory fields:
 
 - `p_event_by_horizon` — P(event by date) for each horizon specified in the prompt
 - `median_days_to_event` with `p10_days` / `p90_days`
