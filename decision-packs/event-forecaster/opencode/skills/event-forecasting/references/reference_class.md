@@ -38,7 +38,7 @@ When broadening, explicitly note:
 ```python
 import pymc as pm
 import numpy as np
-import arviz as az
+import xarray as xr
 
 # --- inputs (fill from your historical research) ---
 # Broad reference class (prior evidence)
@@ -71,12 +71,16 @@ with pm.Model() as reference_model:
     # Optional: current-conditions adjustment (see below)
 
     idata = pm.sample(
-        draws=200, tune=200, chains=2,
-        target_accept=0.9,
-        nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True, "log_prior": True},
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.9},
         # do NOT pass random_seed
     )
+    pm.stats.compute_log_likelihood(idata, model=reference_model)
+    pm.stats.compute_log_prior(idata, model=reference_model)
 ```
 
 ## Extracting the forecast
@@ -103,6 +107,13 @@ for t in horizon_days:
 median_days = float(np.mean(np.log(2) / lambda_samples))
 p10_days    = float(np.percentile(np.log(2) / lambda_samples, 10))
 p90_days    = float(np.percentile(np.log(2) / lambda_samples, 90))
+
+# Derived quantities for PriorSensitivity (psense)
+t = xr.DataArray(horizon_days, dims="horizon", coords={"horizon": horizon_days})
+lambda_post = -np.log(1 - idata.posterior["p_narrow"] + 1e-9) / T_days
+p_by_h = 1.0 - np.exp(-t * lambda_post)
+p_by_h = p_by_h.transpose("chain", "draw", "horizon")
+idata.posterior["p_event_by_horizon"] = p_by_h
 ```
 
 ## Adding a current-conditions signal

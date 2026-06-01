@@ -22,7 +22,6 @@ Decompose the question into a set of mutually exclusive, collectively exhaustive
 ```python
 import pymc as pm
 import numpy as np
-import arviz as az
 
 # --- Define your scenarios (fill from domain analysis) ---
 # Replace these with scenarios appropriate to your specific question.
@@ -78,12 +77,16 @@ with pm.Model() as scenario_model:
         pm.math.dot(scenario_probs, cond_probs))
 
     idata = pm.sample(
-        draws=200, tune=200, chains=2,
-        target_accept=0.9,
-        nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True, "log_prior": True},
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.9},
         # do NOT pass random_seed
     )
+    pm.stats.compute_log_likelihood(idata, model=scenario_model)
+    pm.stats.compute_log_prior(idata, model=scenario_model)
 ```
 
 ## Extracting the forecast
@@ -101,6 +104,10 @@ lambda_samples = -np.log(1 - p_event_flat[:, -1] + 1e-9) / horizons_days[-1]
 median_days    = float(np.mean(np.log(2) / lambda_samples))
 p10_days       = float(np.percentile(np.log(2) / lambda_samples, 10))
 p90_days       = float(np.percentile(np.log(2) / lambda_samples, 90))
+
+# Derived quantities for PriorSensitivity (psense)
+# Prior-only model: psense requires log_likelihood — use analytic fallback below instead
+idata.posterior["p_event_by_horizon"] = idata.posterior["p_event"]
 ```
 
 ## Writing the scenario narrative

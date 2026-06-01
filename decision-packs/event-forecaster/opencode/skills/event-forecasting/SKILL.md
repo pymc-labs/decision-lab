@@ -65,7 +65,7 @@ Inspect every available data file, then answer:
 
 ### Implementation backend
 
-All ten methods use **raw PyMC** — explicit priors, custom likelihoods (censoring, state-space, mixtures), `pm.Deterministic` derived quantities for forecasts and psense, and `pm.sample_prior_predictive` / `pm.sample_posterior_predictive` when needed. See each method's reference file under `references/`.
+All ten methods use **raw PyMC >= 6.0** — explicit priors, custom likelihoods (censoring, state-space, mixtures), `pm.Deterministic` derived quantities for forecasts and psense, Nutpie sampling with Numba backend, and `pm.sample_prior_predictive` / `pm.sample_posterior_predictive` when needed. Diagnostics use **ArviZ >= 1.0** (`arviz_stats`, `arviz_plots`). See each method's reference file under `references/`.
 
 ### Special case: N=1 historical event
 

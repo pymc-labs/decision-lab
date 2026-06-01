@@ -47,7 +47,7 @@ As T → ∞:  P(event) → (1 − π)   [not 1!]
 ```python
 import pymc as pm
 import numpy as np
-import arviz as az
+import xarray as xr
 
 # --- inputs ---
 # durations: array of event durations (or current elapsed time for censored)
@@ -83,11 +83,15 @@ with pm.Model() as cure_model:
     pm.Potential("censored_lik", pm.math.log(p_censored + 1e-9).sum())
 
     idata = pm.sample(
-        draws=200, tune=200, chains=2,
-        target_accept=0.92,
-        nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True, "log_prior": True},
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.92},
     )
+    pm.stats.compute_log_likelihood(idata, model=cure_model)
+    pm.stats.compute_log_prior(idata, model=cure_model)
 ```
 
 ## Extracting the forecast
@@ -122,6 +126,13 @@ print(f"P(event ever resolves) = {p_ever:.2%} [{p_ever_ci[0]:.2%}, {p_ever_ci[1]
 # median = beta * (-ln(0.5))^(1/alpha), but only for the non-cured fraction
 t_med_samples = beta_samples * (np.log(2) ** (1.0 / alpha_samples))
 median_days = float(np.mean(t_med_samples))
+
+# Derived quantities for PriorSensitivity (psense)
+t = xr.DataArray(horizon_days, dims="horizon", coords={"horizon": horizon_days})
+weibull_cdf = 1.0 - np.exp(-((t / idata.posterior["beta"]) ** idata.posterior["alpha"]))
+p_by_h = (1 - idata.posterior["pi"]) * weibull_cdf
+p_by_h = p_by_h.transpose("chain", "draw", "horizon")
+idata.posterior["p_event_by_horizon"] = p_by_h
 ```
 
 ## `forecast.json` additions

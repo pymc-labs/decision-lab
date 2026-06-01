@@ -4,7 +4,7 @@ Use measurable, regularly updated time-series signals to predict whether the eve
 
 ## When to use
 
-- You have ≥ 2 years of indicator data (oil prices, diplomatic sentiment scores, trade volumes, military activity indices, news sentiment, sanctions severity, etc.).
+- You have ≥ 2 years of indicator time-series (leading signals, sentiment indices, activity metrics, market variables, etc.).
 - The indicators vary over time and are updated at least weekly.
 - Historical episodes give you labelled examples: indicator values at time t, event (resolved or not) within the next W days.
 - Do NOT use this method if the only indicator data comes from the current episode with no historical comparators.
@@ -27,7 +27,7 @@ Building the labels: for each historical episode, generate labelled rows for the
 ```python
 import pymc as pm
 import numpy as np
-import arviz as az
+from arviz_stats import summary
 import pandas as pd
 
 # --- inputs ---
@@ -52,11 +52,15 @@ with pm.Model() as indicator_model:
     obs = pm.Bernoulli("obs", p=p, observed=y_train)
 
     idata = pm.sample(
-        draws=500, tune=500, chains=4,
-        target_accept=0.9,
-        nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True, "log_prior": True},
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.9},
     )
+    pm.stats.compute_log_likelihood(idata, model=indicator_model)
+    pm.stats.compute_log_prior(idata, model=indicator_model)
 ```
 
 ## Prediction at current indicator values
@@ -84,12 +88,24 @@ After sampling, attach per-draw probabilities for PriorSensitivity:
 ```python
 import xarray as xr
 
-# Current indicators X_current; one fit per horizon W
+# Current indicators X_current; fit at reference horizon W_ref, then stack horizons
+horizon_days = np.array([...])  # orchestrator horizons in days
+W_ref = float(horizon_days[0])  # reference window used in the base fit (e.g. shortest horizon)
+
 logit_p = idata.posterior["alpha"] + (
     idata.posterior["betas"] @ xr.DataArray(X_current.flatten(), dims="feature")
 )
-p_draw = 1 / (1 + np.exp(-logit_p))
-idata.posterior["p_event_h0"] = p_draw.squeeze()  # name per horizon index, e.g. p_event_h1
+p_W = 1 / (1 + np.exp(-logit_p))
+
+p_by_h_list = []
+for W in horizon_days:
+    wk = W / W_ref
+    p_h = 1 - (1 - p_W) ** wk  # survival approximation; refit per W if feasible
+    p_by_h_list.append(p_h.squeeze())
+
+p_by_h = xr.concat(p_by_h_list, dim=xr.DataArray(horizon_days, dims="horizon"))
+p_by_h = p_by_h.transpose("chain", "draw", "horizon")
+idata.posterior["p_event_by_horizon"] = p_by_h
 ```
 
 See [`prior_sensitivity_psense.md`](prior_sensitivity_psense.md). Approximation only if refit is infeasible:
@@ -97,7 +113,7 @@ See [`prior_sensitivity_psense.md`](prior_sensitivity_psense.md). Approximation 
 
 ## Feature selection
 
-Do NOT include more than 5–7 indicator features without strong justification. With ≤ 50 historical labelled rows (common for rare geopolitical events), more features will overfit. Options:
+Do NOT include more than 5–7 indicator features without strong justification. With ≤ 50 historical labelled rows (common for rare events), more features will overfit. Options:
 - Domain-selection: pick the 3–5 causally most plausible indicators.
 - Regularisation: use `pm.Laplace("betas", mu=0, b=0.5)` (Laplace prior = soft L1 regularisation).
 - Hierarchical: pool feature effects when multiple indicators are from the same domain.
@@ -110,8 +126,8 @@ vs. naive baseline. If Brier skill < 0.05, the indicators do not improve over th
 base rate and the method should be downgraded or replaced.
 
 **PriorSensitivity** — derived `p_event_by_horizon` via psense per
-[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md) (sample with
-`log_prior` and `log_likelihood`). WARN/FAIL at T_mid: disclose prior dependence
+[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md) (sample with Nutpie,
+then `compute_log_likelihood` / `compute_log_prior`). WARN/FAIL at T_mid: disclose prior dependence
 (small N / weak signal); justify in `summary.md`.
 
 **ConsistencyCheck** — verify that increasing each indicator value in the "positive"

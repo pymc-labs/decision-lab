@@ -1,8 +1,10 @@
 # Prior sensitivity via ArviZ power-scaling (psense)
 
-Use this reference for **PyMC** forecasting methods (all methods in this skill use raw PyMC). Implements Check 1 in [`model_checks.md`](model_checks.md). Derived quantities are added to `idata.posterior` after sampling.
+Use this reference for **PyMC >= 6.0** forecasting methods (all methods in this skill use raw PyMC). Implements Check 1 in [`model_checks.md`](model_checks.md). Derived quantities are added to `idata.posterior` after sampling.
 
 **Method:** Kallioinen et al., power-scaling + PSIS ([EABM Ch. 6](https://arviz-devs.github.io/EABM/Chapters/Sensitivity_checks.html), [API](https://python.arviz.org/projects/stats/en/latest/api/generated/arviz_stats.psense_summary.html)).
+
+**Stack:** PyMC >= 6.0.0, ArviZ >= 1.0.0 (`arviz-stats`, `arviz-plots`).
 
 ---
 
@@ -10,20 +12,29 @@ Use this reference for **PyMC** forecasting methods (all methods in this skill u
 
 ```python
 import pymc as pm
-import arviz as az
-from arviz_stats import psense_summary  # or az.psense_summary if re-exported
+from arviz_stats import psense_summary
+from arviz_plots import plot_psense_quantities
 ```
 
-Sample with log densities stored:
+Sample with Nutpie (Numba backend) and compute log densities **after** sampling — Nutpie ignores `idata_kwargs`:
 
 ```python
-idata = pm.sample(
-    draws=1000,
-    chains=4,
-    idata_kwargs={"log_likelihood": True, "log_prior": True},
-    random_seed=42,
-)
+with model:
+    idata = pm.sample(
+        draws=500,
+        tune=500,                   # required — nutpie defaults to 400 if omitted
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.9},
+        # do NOT pass random_seed
+    )
+    pm.stats.compute_log_likelihood(idata, model=model)
+    pm.stats.compute_log_prior(idata, model=model)
 ```
+
+**Fallback:** if Nutpie fails (discrete parameters, incompatible transforms), use
+`nuts_sampler="numpyro"` with `idata_kwargs={"log_likelihood": True, "log_prior": True}`.
 
 ---
 
@@ -49,14 +60,16 @@ beta = post["beta"]
 # Weibull: P(T <= t) = 1 - exp(-(t/beta)^alpha)  — adjust to your parameterisation
 t = xr.DataArray(horizon_days, dims="horizon", coords={"horizon": horizon_days})
 # Broadcast: survival prob S(t); event by t is 1 - S(t)
-p_by_h = 1.0 - np.exp(-((t / beta) ** alpha))  # shape: chain, draw, horizon
+p_by_h = 1.0 - np.exp(-((t / beta) ** alpha))
+# xarray broadcasts horizon first; psense expects (chain, draw, horizon)
+p_by_h = p_by_h.transpose("chain", "draw", "horizon")
 
 idata.posterior["p_event_by_horizon"] = p_by_h
 ```
 
 ### Example: path simulation (ContinuousDriverModel)
 
-For each draw, you already simulate paths; compute fraction of paths with first passage before each horizon day count, then stack into `p_event_by_horizon` with dims `(chain, draw, horizon)`.
+For each draw, simulate paths; compute fraction of paths with first passage before each horizon day count, then stack into `p_event_by_horizon` with dims `(chain, draw, horizon)`.
 
 ### Naming for `psense_summary`
 
@@ -103,9 +116,10 @@ Columns: `prior`, `likelihood`, `diagnosis` (`✓`, `prior-data conflict`, `stro
 Orchestrator tier uses **percentage-point** change at T_mid. Option A: visual/quantile check via plots:
 
 ```python
-az.plot_psense_quantities(
+plot_psense_quantities(
     idata,
     var_names=["p_event_h1"],  # index of mid-horizon
+    quantities=["mean"],
 )
 ```
 
@@ -144,7 +158,7 @@ Add `psense_summary` on **named interpretable** parameters (driver levels, effec
 Compute `log_prior` only for **top-level** hyperparameters when using parameter-level psense:
 
 ```python
-pm.compute_log_prior(idata, var_names=["mu", "sigma", ...])  # omit group-level random effects
+pm.stats.compute_log_prior(idata, var_names=["mu", "sigma", ...], model=model)  # omit group-level random effects
 ```
 
 ---

@@ -32,9 +32,9 @@ Use **power-scaling sensitivity** on **derived predictions**, not refits on indi
 
 **Workflow (summary):**
 
-1. Sample once with `idata_kwargs={"log_likelihood": True, "log_prior": True}`.
+1. Sample with Nutpie (`backend="numba"`, `draws=500`, `tune=500`, `chains=6`); then `pm.stats.compute_log_likelihood` and `pm.stats.compute_log_prior` (see prior_sensitivity_psense.md).
 2. Per MCMC draw, compute `p_event_by_horizon` for all horizons; add to `idata.posterior` (see prior_sensitivity_psense.md).
-3. `arviz_stats.psense_summary` on all horizon derived variables; optional `plot_psense_quantities`.
+3. `arviz_stats.psense_summary` on all horizon derived variables; optional `arviz_plots.plot_psense_quantities`.
 4. Set top-level `status` from **T_mid** (mid-horizon index) using pp movement (canonical) or document CJS in `by_horizon`.
 5. Use per-horizon results in `note` / `by_horizon` for narratives such as: *short-horizon forecast data-dominated; 12-month forecast prior-sensitive*.
 
