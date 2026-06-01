@@ -104,7 +104,7 @@ Three model variants are available. Choose based on your driver's behaviour:
 
 ```python
 import pymc as pm
-import arviz as az
+from arviz_stats import summary
 
 with pm.Model() as ou_model:
     # Long-run mean on standardised scale (prior centred at 0 after standardisation)
@@ -125,12 +125,16 @@ with pm.Model() as ou_model:
     pm.Normal("obs", mu=mu_step, sigma=sigma, observed=y[1:])
 
     idata = pm.sample(
-        draws=200, tune=200, chains=2,          # short chains for quick runs
-        target_accept=0.9,
-        nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True, "log_prior": True},
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.9},
         # do NOT pass random_seed
     )
+    pm.stats.compute_log_likelihood(idata, model=ou_model)
+    pm.stats.compute_log_prior(idata, model=ou_model)
 ```
 
 ### Variant RWD — Random Walk with Drift
@@ -143,8 +147,16 @@ with pm.Model() as rwd_model:
                           sigma=0.5)
     sigma = pm.Deterministic("sigma", pm.math.exp(log_sigma))
     pm.Normal("obs", mu=mu, sigma=sigma, observed=np.diff(y))
-    idata = pm.sample(draws=200, tune=200, chains=2, target_accept=0.92,
-                      nuts_sampler="numpyro", idata_kwargs={"log_likelihood": True, "log_prior": True})
+    idata = pm.sample(
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.92},
+    )
+    pm.stats.compute_log_likelihood(idata, model=rwd_model)
+    pm.stats.compute_log_prior(idata, model=rwd_model)
 ```
 
 ## Variant: ContinuousDriverModel-RWD (Random Walk with Drift)
@@ -176,10 +188,15 @@ with pm.Model() as rwd_model:
     pm.Normal("obs", mu=mu, sigma=sigma, observed=np.diff(y))
 
     idata = pm.sample(
-        draws=200, tune=200, chains=2, target_accept=0.92,
-        nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True, "log_prior": True},
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.92},
     )
+    pm.stats.compute_log_likelihood(idata, model=rwd_model)
+    pm.stats.compute_log_prior(idata, model=rwd_model)
 ```
 
 ### Forward simulation
@@ -214,10 +231,15 @@ sigma_mean = float(np.mean(sigma_s))
 a = float(y[-1] - tau_scaled)  # must be positive (threshold below current level)
 
 if mu_mean < 0 and a > 0:
-    ig_mean  = a / abs(mu_mean)
+    # First-passage time for BM with drift mu_mean, vol sigma_mean, barrier distance a.
+    # scipy.stats.invgauss: mean = mu * scale; set scale = a^2/sigma^2, mu = (a/|mu_mean|)/scale
+    ig_mean = a / abs(mu_mean)
     ig_shape = a**2 / sigma_mean**2
-    # Compare analytic CDF to Monte Carlo at e.g. horizon=63 steps
-    analytic_p = invgauss.cdf(63, mu=ig_mean / ig_shape, scale=ig_shape)
+    scale = ig_shape
+    shape_param = ig_mean / scale  # scipy "mu" is shape, not the distribution mean
+    analytic_p = invgauss.cdf(63, mu=shape_param, scale=scale)
+    # Sanity: mean first-passage ≈ ig_mean when drift is negative toward barrier
+    assert abs(invgauss.mean(mu=shape_param, scale=scale) - ig_mean) < 0.01 * ig_mean
     mc_p = float(np.mean(fp_days <= 63))
     print(f"Analytic: {analytic_p:.3f}  |  Monte Carlo: {mc_p:.3f}")
     if abs(analytic_p - mc_p) > 0.05:
@@ -235,16 +257,24 @@ with pm.Model() as sv_model:
     h = pm.GaussianRandomWalk("h", sigma=sigma_h, shape=len(r))
     nu = pm.Exponential("nu", lam=1/10)
     pm.StudentT("r", nu=nu, mu=0.0, sigma=pm.math.exp(h/2), observed=r)
-    idata = pm.sample(draws=200, tune=200, chains=2, target_accept=0.95,
-                      nuts_sampler="numpyro", idata_kwargs={"log_likelihood": True, "log_prior": True})
+    idata = pm.sample(
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.95},
+    )
+    pm.stats.compute_log_likelihood(idata, model=sv_model)
+    pm.stats.compute_log_prior(idata, model=sv_model)
 ```
 
 ## Step 4 — Convergence diagnostics
 
 ```python
-summary         = az.summary(idata)
-rhat_max        = float(summary["r_hat"].max())
-ess_bulk_min    = float(summary["ess_bulk"].min())
+summary_df      = summary(idata)
+rhat_max        = float(summary_df["r_hat"].max())
+ess_bulk_min    = float(summary_df["ess_bulk"].min())
 divergences     = int(idata.sample_stats["diverging"].sum())
 total_draws     = int(idata.sample_stats.sizes["chain"] * idata.sample_stats.sizes["draw"])
 divergence_rate = divergences / total_draws
@@ -260,7 +290,7 @@ mu_s    = idata.posterior["mu_tilde"].values.flatten()
 sigma_s = idata.posterior["sigma"].values.flatten()
 n_post  = len(kappa_s)
 
-n_paths      = 25         # increase for production runs
+n_paths      = 100        # minimum 25 for smoke tests; increase for production
 horizon_days = 63         # trading days; adjust to your problem
 y_current    = float(y[-1])
 
@@ -292,6 +322,21 @@ p_any_event     = float(np.mean(np.isfinite(fp_days)))
 median_days_fp  = float(np.median(finite_fp)) if len(finite_fp) > 0 else float("nan")
 p10_fp          = float(np.percentile(finite_fp, 10)) if len(finite_fp) > 0 else float("nan")
 p90_fp          = float(np.percentile(finite_fp, 90)) if len(finite_fp) > 0 else float("nan")
+
+# Derived quantities for PriorSensitivity (psense)
+import xarray as xr
+
+horizon_trading_days = [21, 42, 63, 126, 252]   # same as Step 6
+n_chains, n_draws = idata.posterior.sizes["chain"], idata.posterior.sizes["draw"]
+p_by_h = np.array([
+    [float(np.mean(fp_days[i] <= h)) for h in horizon_trading_days]
+    for i in range(n_post)
+]).reshape(n_chains, n_draws, len(horizon_trading_days))
+idata.posterior["p_event_by_horizon"] = xr.DataArray(
+    p_by_h,
+    dims=("chain", "draw", "horizon"),
+    coords={"horizon": horizon_trading_days},
+)
 ```
 
 ## Step 6 — Extract horizon probabilities and write outputs
@@ -315,9 +360,17 @@ horizon_dates = [
 def empirical_cdf(fp_days_flat, horizons):
     return np.array([np.mean(fp_days_flat <= h) for h in horizons])
 
-# fp_days is (n_post, n_paths); flatten all paths
+# fp_days is (n_post, n_paths); flatten all paths for marginal CDF
 all_fp = fp_days.flatten()
 cdf_vals = empirical_cdf(all_fp, horizon_trading_days)
+
+# Per-horizon CIs from posterior draws (p_by_h already attached above)
+ci_low_by_horizon  = [
+    float(np.percentile(p_by_h.values[:, :, h], 3)) for h in range(len(horizon_trading_days))
+]
+ci_high_by_horizon = [
+    float(np.percentile(p_by_h.values[:, :, h], 97)) for h in range(len(horizon_trading_days))
+]
 
 forecast = {
     "method":                 "ContinuousDriverModel",
@@ -332,8 +385,8 @@ forecast = {
     "current_driver_value":   float(current_value),
     "horizon_dates":          horizon_dates,
     "p_event_by_horizon":     cdf_vals.tolist(),
-    "ci_low_by_horizon":      [],   # compute via bootstrap across posterior if needed
-    "ci_high_by_horizon":     [],
+    "ci_low_by_horizon":      ci_low_by_horizon,
+    "ci_high_by_horizon":     ci_high_by_horizon,
     "ci_level":               0.94,
     "median_days_to_event":   median_days_fp,
     "p10_days":               p10_fp,
@@ -391,7 +444,7 @@ print(f"Structural τ perturbation: {delta_pp:.1f}pp change at T_mid with 10% th
 
 - **Crossing direction matters critically.** `<=` vs `>=` produces the inverse forecast. State the direction explicitly and verify a sample path manually.
 - **Standardisation must be consistent.** Apply the same transform to both the driver series (`y`) and the threshold (`tau_scaled`). Mixing raw and scaled values is a silent bug.
-- **Short chains underestimate uncertainty.** With `draws=200, chains=2`, credible intervals are approximate. Use `draws=1000+, chains=4` for production.
+- **Posterior uncertainty.** With `draws=500, chains=6`, credible intervals are reasonably stable. Increase `n_paths` (forward simulation) for tighter first-passage estimates.
 - **Verify units.** If the driver is in USD/bbl, ensure τ is also in USD/bbl before logging/scaling.
 - **The driver may have already crossed τ.** If `current_value <= tau` (for `falls_below`), the event has already fired by this metric. Re-examine whether a different threshold or a different event definition is appropriate.
 
@@ -440,7 +493,7 @@ y_t   = μ_t + ε_t,    ε_t ~ N(0, σ_obs²)   [observation equation]
 ```python
 import pymc as pm
 import numpy as np
-import arviz as az
+from arviz_stats import summary
 
 # y: standardised driver series (use same standardisation as other variants)
 
@@ -469,12 +522,16 @@ with pm.Model() as ll_model:
     pm.Normal("obs", mu=lvl, sigma=sigma_obs, observed=y)
 
     idata = pm.sample(
-        draws=200, tune=200, chains=2,
-        target_accept=0.92,
-        nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True, "log_prior": True},
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.92},
         # do NOT pass random_seed
     )
+    pm.stats.compute_log_likelihood(idata, model=ll_model)
+    pm.stats.compute_log_prior(idata, model=ll_model)
 ```
 
 ### Forward simulation from the last filtered level
@@ -512,7 +569,7 @@ fp_days = np.where(crossed.any(axis=2),
 
 ### Gotchas
 
-- **GaussianRandomWalk geometry**: NUTS can struggle with long chains of latent states. Use `target_accept=0.92` and monitor divergences. If divergence rate > 5%, try fewer states by downsampling the driver series first.
+- **GaussianRandomWalk geometry**: NUTS can struggle with long chains of latent states. Use `nuts={"target_accept": 0.92}` and monitor divergences. If divergence rate > 5%, try fewer states by downsampling the driver series first.
 - **Identifiability**: `σ_obs` and `σ_lvl` can be hard to separate with short series. If posteriors for both are very wide, the model may be weakly identified — report WARN and widen the PriorSensitivity check to ±20%.
 - **Initialisation**: PyMC's GaussianRandomWalk may need a good starting point on long series. Add `initvals={"lvl": np.zeros(len(y))}` if sampling is slow to warm up.
 - **Comparison with OU**: If the posterior `σ_lvl` is very small relative to `σ_obs`, the latent level is nearly constant — effectively a model with no mean reversion and negligible drift. In this case, OU or RWD may be more interpretable.
@@ -555,19 +612,25 @@ with pm.Model() as llt_model:
     # Latent slope (trend) as a Gaussian random walk
     slope = pm.GaussianRandomWalk("slope", sigma=sigma_slp, shape=n)
 
-    # Latent level: advances by the current slope each step
-    # Use scan or cumulative sum approximation
-    level_increments = slope[:-1]  # slope drives level changes
-    level = pm.Deterministic("level",
-        pm.math.concatenate([[y[0]], y[0] + pm.math.cumsum(level_increments)]))
+    # Level: mu_t = mu_{t-1} + nu_{t-1} + eta_t  (eta_t ~ N(0, sigma_lvl^2))
+    level_noise = pm.Normal("level_noise", mu=0, sigma=sigma_lvl, shape=n - 1)
+    level = pm.Deterministic(
+        "level",
+        pm.math.concatenate([[y[0]], y[0] + pm.math.cumsum(slope[:-1] + level_noise)]),
+    )
 
     pm.Normal("obs", mu=level, sigma=sigma_obs, observed=y)
 
     idata = pm.sample(
-        draws=200, tune=200, chains=2, target_accept=0.95,
-        nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True, "log_prior": True},
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.95},
     )
+    pm.stats.compute_log_likelihood(idata, model=llt_model)
+    pm.stats.compute_log_prior(idata, model=llt_model)
 ```
 
 ### Forward simulation
@@ -597,6 +660,6 @@ fp_days = first_passage_times(paths, tau_scaled)
 
 ### Gotchas
 
-- **Three GaussianRandomWalk chains**: LLT is harder to sample than LL. Expect more divergences. Use `target_accept=0.95` and increase `tune` if needed.
+- **Three GaussianRandomWalk chains**: LLT is harder to sample than LL. Expect more divergences. Use `nuts={"target_accept": 0.95}` and increase `tune` if needed.
 - **Identifiability**: σ_lvl and σ_slp can be weakly identified. If both posteriors are very wide, simplify to LL (drop the slope).
 - **Over-smoothing**: Very small σ_slp produces a nearly linear trend. Check whether the fitted level tracks the data by plotting `level` posterior mean vs `y`.

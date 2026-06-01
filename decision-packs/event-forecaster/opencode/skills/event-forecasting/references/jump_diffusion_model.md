@@ -8,7 +8,7 @@ cross-check on the exceedance probability.
 
 This is the discontinuous-path counterpart to `ContinuousDriverModel`. That model's
 variants (OU/RWD/SV/LL/LLT) all assume **Gaussian increments** — continuous paths.
-Geopolitical drivers (oil price, risk premia, shipping insurance) move by **discrete
+Geopolitical drivers (risk premia, shipping insurance, commodity indices) move by **discrete
 shocks**, and the threshold-crossing probability is dominated by the fat right tail
 those jumps create. A pure-diffusion model systematically understates P(event) when
 the event is a tail crossing.
@@ -94,7 +94,7 @@ robust approximation — a "no-jump" component and a "jump" component, mixed by
 
 ```python
 import pymc as pm
-import arviz as az
+from arviz_stats import summary
 
 r = np.diff(y)            # standardised increments
 
@@ -123,12 +123,16 @@ with pm.Model() as jd_model:
                observed=r)
 
     idata = pm.sample(
-        draws=200, tune=200, chains=2,
-        target_accept=0.92,
-        nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True, "log_prior": True},
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.92},
         # do NOT pass random_seed
     )
+    pm.stats.compute_log_likelihood(idata, model=jd_model)
+    pm.stats.compute_log_prior(idata, model=jd_model)
 
 # Recover the jump intensity λ (per step) for documentation / simulation
 lam_per_step = idata.posterior["p_jump"].values.flatten()   # ≈ λ·dt
@@ -137,9 +141,9 @@ lam_per_step = idata.posterior["p_jump"].values.flatten()   # ≈ λ·dt
 ## Step 3 — Convergence diagnostics
 
 ```python
-summary         = az.summary(idata, var_names=["mu", "sigma", "p_jump", "mu_J", "sigma_J"])
-rhat_max        = float(summary["r_hat"].max())
-ess_bulk_min    = float(summary["ess_bulk"].min())
+summary_df      = summary(idata, var_names=["mu", "sigma", "p_jump", "mu_J", "sigma_J"])
+rhat_max        = float(summary_df["r_hat"].max())
+ess_bulk_min    = float(summary_df["ess_bulk"].min())
 divergences     = int(idata.sample_stats["diverging"].sum())
 total_draws     = int(idata.sample_stats.sizes["chain"] * idata.sample_stats.sizes["draw"])
 divergence_rate = divergences / total_draws
@@ -241,6 +245,24 @@ can replace `genpareto.fit` if you want a posterior on the tail.
 
 ## Step 6 — Extract horizon probabilities and write `forecast.json`
 
+Attach derived quantities for PriorSensitivity (psense) before writing `forecast.json`:
+
+```python
+import xarray as xr
+
+horizon_trading_days = [21, 42, 63, 126, 252]      # adjust to your problem
+n_chains, n_draws = idata.posterior.sizes["chain"], idata.posterior.sizes["draw"]
+p_by_h = np.array([
+    [float(np.mean(fp_days[i] <= h)) for h in horizon_trading_days]
+    for i in range(n_post)
+]).reshape(n_chains, n_draws, len(horizon_trading_days))
+idata.posterior["p_event_by_horizon"] = xr.DataArray(
+    p_by_h,
+    dims=("chain", "draw", "horizon"),
+    coords={"horizon": horizon_trading_days},
+)
+```
+
 ```python
 import json, os
 from datetime import date, timedelta
@@ -255,6 +277,13 @@ horizon_dates = [(date.today() + timedelta(days=int(h * cal_per_tday))).isoforma
 all_fp   = fp_days.flatten()
 cdf_vals = np.array([np.mean(all_fp <= h) for h in horizon_trading_days])
 
+ci_low_by_horizon  = [
+    float(np.percentile(p_by_h[:, :, h], 3)) for h in range(len(horizon_trading_days))
+]
+ci_high_by_horizon = [
+    float(np.percentile(p_by_h[:, :, h], 97)) for h in range(len(horizon_trading_days))
+]
+
 forecast = {
     "method":                 "JumpDiffusionModel",
     "model_variant":          "JD-Normal-jumps",     # or JD-Laplace-jumps / JD-StudentT-jumps
@@ -268,8 +297,8 @@ forecast = {
     "current_driver_value":   float(current_value),
     "horizon_dates":          horizon_dates,
     "p_event_by_horizon":     cdf_vals.tolist(),
-    "ci_low_by_horizon":      [],   # bootstrap across posterior draws if needed
-    "ci_high_by_horizon":     [],
+    "ci_low_by_horizon":      ci_low_by_horizon,
+    "ci_high_by_horizon":     ci_high_by_horizon,
     "ci_level":               0.94,
     "median_days_to_event":   median_days_fp,
     "p10_days":               p10_fp,
