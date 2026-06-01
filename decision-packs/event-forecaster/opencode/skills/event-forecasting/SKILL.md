@@ -50,7 +50,7 @@ Inspect every available data file, then answer:
 
 | Method | Data requirement | Appropriate when |
 |---|---|---|
-| `HazardModel` | Historical durations of analogous events | N ≥ 5 past events with known resolution times |
+| `HazardModel` | Historical durations of analogous events | N ≥ 5 past events; default Weibull AFT; use discrete-time cloglog variant if parametric hazard fits poorly |
 | `ReferenceClassModel` | Historical analogues (even rough ones) | Always useful as a baseline; tolerates sparse data |
 | `IndicatorModel` | Time-series of relevant signals | Leading indicators are measurable and updated regularly |
 | `ScenarioDecomposition` | Domain knowledge + expert judgment | Question has identifiable discrete paths to resolution |

@@ -154,6 +154,7 @@ should never increase). Check P(event by T1) ≤ P(event by T2) for all T1 < T2.
 | Variant | When | Change |
 |---|---|---|
 | Weibull (default) | Parametric hazard; N ≥ 5; standard case | Primary PyMC block above |
+| Discrete-time cloglog | Non-monotonic or irregular baseline hazard; parametric misfit | Person-period + cloglog (see below) |
 | Exponential | Constant hazard expected | Set `alpha = 1` (constant) or use `pm.Exponential` directly |
 | Log-normal | Roughly symmetric on log scale | Replace Weibull with `pm.LogNormal` |
 | Mixture | Two distinct resolution modes | Add a `pm.Mixture` with two Weibull components |
@@ -180,6 +181,96 @@ intercept — do not confuse with our direct `alpha`/`beta` parameterization.
 
 For PH vs AFT interpretation, Weibull-vs-exponential comparison, and conceptual
 background, see the [Bambi continuous-time survival notebook](https://bambinos.github.io/bambi/notebooks/survival_continuous_time_notebook.html).
+
+### Discrete-time survival (flexible baseline hazard)
+
+Use when a parametric family (Weibull, log-logistic) fits poorly — e.g. hazard rises
+then falls, or resolution risk is concentrated in specific windows. Discretizes time
+into bins and estimates a separate period hazard for each bin (non-parametric baseline).
+
+Conceptual background: [Bambi discrete-time survival notebook](https://bambinos.github.io/bambi/notebooks/survival_discrete_time_notebook.html)
+(person-period data structure, cloglog link motivation). Implemented here in raw PyMC
+so `compute_log_prior` / psense work without a Bambi dependency.
+
+**Person-period transform** — expand each event into one row per time bin at risk:
+
+```python
+def to_person_period(durations, censored, bin_days=30):
+    """One row per (event, period-at-risk). event=1 only in terminal period if resolved."""
+    period_idx = []
+    event_col = []
+    for dur, cens in zip(durations, censored):
+        n_periods = max(1, int(np.ceil(dur / bin_days)))
+        for t in range(1, n_periods + 1):
+            period_idx.append(t - 1)  # 0-indexed into alpha_t
+            event_col.append(1 if (t == n_periods and not cens) else 0)
+    return np.array(period_idx, dtype=int), np.array(event_col, dtype=int)
+
+
+bin_days = 30  # monthly bins — coarser for small N, finer for larger N
+period_idx, event_col = to_person_period(durations, censored, bin_days=bin_days)
+n_periods = max(1, int(np.ceil(durations.max() / bin_days)))
+```
+
+**PyMC model** — Bernoulli with complementary log-log link (same as Bambi
+`family="bernoulli", link="cloglog"`):
+
+```python
+with pm.Model() as discrete_hazard:
+    # Shrinkage prior — essential with small N and many period dummies
+    alpha_t = pm.Normal("alpha_t", mu=0, sigma=1, shape=n_periods)
+
+    eta = alpha_t[period_idx]
+    p_period = 1.0 - pm.math.exp(-pm.math.exp(eta))  # cloglog inverse link
+    pm.Bernoulli("event", p=p_period, observed=event_col)
+
+    idata = pm.sample(
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.9},
+    )
+    pm.stats.compute_log_likelihood(idata, model=discrete_hazard)
+    pm.stats.compute_log_prior(idata, model=discrete_hazard)
+```
+
+**Forecast extraction** — cumulative probability by horizon:
+
+For horizon day `t`, let `k = ceil(t / bin_days)`. Per-period hazards
+`h_j = 1 - exp(-exp(alpha_t[j]))`. Then:
+
+\[
+P(\text{event by } t) = 1 - \prod_{j=1}^{k} (1 - h_j)
+\]
+
+```python
+import xarray as xr
+
+horizon_days = np.array([...])  # orchestrator horizons in days
+h_j = 1.0 - np.exp(-np.exp(idata.posterior["alpha_t"]))
+period_dim = [d for d in h_j.dims if d not in ("chain", "draw")][0]
+
+p_list = []
+for t in horizon_days:
+    k = min(int(np.ceil(t / bin_days)), h_j.sizes[period_dim])
+    surv = (1 - h_j.isel({period_dim: slice(0, k)})).prod(dim=period_dim)
+    p_list.append(1 - surv)
+
+p_by_h = xr.concat(p_list, dim="horizon").assign_coords(horizon=horizon_days)
+p_by_h = p_by_h.transpose("chain", "draw", "horizon")
+idata.posterior["p_event_by_horizon"] = p_by_h
+```
+
+**Gotchas for discrete-time:**
+
+- **Small N (5–10 events):** many period dummies relative to data — use coarser
+  `bin_days`, strong shrinkage on `alpha_t`, and flag prior-dominated posteriors.
+- **Bin width:** finer bins = more flexible hazard but more parameters; default monthly
+  is a reasonable starting point for durations measured in days.
+- **Current event:** include as right-censored person-period rows (same as continuous model).
+- **ConsistencyCheck:** verify P(event by T1) ≤ P(event by T2) for all T1 < T2.
 
 ### Log-logistic survival (non-monotonic hazard)
 
