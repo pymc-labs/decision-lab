@@ -245,22 +245,16 @@ can replace `genpareto.fit` if you want a posterior on the tail.
 
 ## Step 6 — Extract horizon probabilities and write `forecast.json`
 
-Attach derived quantities for PriorSensitivity (psense) before writing `forecast.json`:
+Compute per-draw horizon probabilities for CIs (do **not** attach to `idata.posterior`
+for psense — use Tier B resampled re-simulation for PriorSensitivity):
 
 ```python
-import xarray as xr
-
 horizon_trading_days = [21, 42, 63, 126, 252]      # adjust to your problem
 n_chains, n_draws = idata.posterior.sizes["chain"], idata.posterior.sizes["draw"]
 p_by_h = np.array([
     [float(np.mean(fp_days[i] <= h)) for h in horizon_trading_days]
     for i in range(n_post)
 ]).reshape(n_chains, n_draws, len(horizon_trading_days))
-idata.posterior["p_event_by_horizon"] = xr.DataArray(
-    p_by_h,
-    dims=("chain", "draw", "horizon"),
-    coords={"horizon": horizon_trading_days},
-)
 ```
 
 ```python
@@ -329,11 +323,12 @@ idata.to_netcdf("outputs/idata.nc")
 
 ## Calibration checks
 
-**PriorSensitivity** — primary: derived `p_event_by_horizon` via psense per
-[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md). Optional **structural**
-check: perturb τ by ±10% and re-evaluate crossings on fixed paths (document in JSON
-`note` as `structural_tau`). WARN/FAIL at T_mid: disclose threshold/prior dependence;
-expected when jumps are rare — lean on EVT cross-check.
+**PriorSensitivity** — primary: **resampled re-simulation** (Tier B) per
+[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md). Do not run psense on
+MC-noisy per-draw `p_event_by_horizon`. Optional **structural** check: perturb τ by ±10%
+and re-evaluate crossings on fixed paths (document in JSON `note` as `structural_tau`).
+WARN/FAIL at T_mid: disclose threshold/prior dependence; expected when jumps are rare —
+lean on EVT cross-check.
 
 **ConsistencyCheck** — verify P(event by T) is monotonically non-decreasing across
 horizons and all values are in [0, 1].

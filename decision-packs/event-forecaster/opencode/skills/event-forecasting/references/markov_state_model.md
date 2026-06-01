@@ -191,13 +191,14 @@ idata.posterior["p_event_by_horizon"] = xr.DataArray(
     coords={"horizon": horizon_days},
 )
 
-# Optional thinning for speed when computing median days
+# Point estimates and CIs from full posterior draws (same array used for psense)
+p_event_by_horizon = [float(np.mean(p_event_draws[:, h])) for h in range(len(horizon_days))]
+ci_low_by_horizon  = [float(np.percentile(p_event_draws[:, h], 3))  for h in range(len(horizon_days))]
+ci_high_by_horizon = [float(np.percentile(p_event_draws[:, h], 97)) for h in range(len(horizon_days))]
+
+# Optional thinning for speed when computing median days only
 thin = max(1, n_post // 2000)
 idx = np.arange(0, n_post, thin)
-p_event_thinned = p_event_draws[idx]
-p_event_by_horizon = [float(np.mean(p_event_thinned[:, h])) for h in range(len(horizon_days))]
-ci_low_by_horizon  = [float(np.percentile(p_event_thinned[:, h], 3))  for h in range(len(horizon_days))]
-ci_high_by_horizon = [float(np.percentile(p_event_thinned[:, h], 97)) for h in range(len(horizon_days))]
 
 # Median days to event: per draw, solve P(resolved by t) = 0.5 on a time grid
 grid = np.arange(1, 365 * 5, 7)        # weekly grid out to 5 years; extend if needed

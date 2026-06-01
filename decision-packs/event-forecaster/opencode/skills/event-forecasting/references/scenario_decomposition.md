@@ -105,9 +105,7 @@ median_days    = float(np.mean(np.log(2) / lambda_samples))
 p10_days       = float(np.percentile(np.log(2) / lambda_samples, 10))
 p90_days       = float(np.percentile(np.log(2) / lambda_samples, 90))
 
-# Derived quantities for PriorSensitivity (psense)
-# Prior-only model: psense requires log_likelihood — use analytic fallback below instead
-idata.posterior["p_event_by_horizon"] = idata.posterior["p_event"]
+# PriorSensitivity: Tier C analytic perturbation only (prior-only model — do not use psense)
 ```
 
 ## Writing the scenario narrative

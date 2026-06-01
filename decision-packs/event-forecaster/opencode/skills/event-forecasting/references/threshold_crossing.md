@@ -260,16 +260,10 @@ median_days = float(np.nanmean(median_weeks_arr) * 7)
 p10_days    = float(np.nanpercentile(median_weeks_arr * 7, 10))
 p90_days    = float(np.nanpercentile(median_weeks_arr * 7, 90))
 
-# Derived quantities for PriorSensitivity (psense)
-import xarray as xr
-
+# Per-draw horizon probabilities for CIs (do NOT attach to idata.posterior for psense —
+# MC path noise invalidates standard psense; use Tier B resampled re-simulation instead)
 n_chains, n_draws = idata.posterior.sizes["chain"], idata.posterior.sizes["draw"]
 p_by_h = p_by_horizon.reshape(n_chains, n_draws, len(horizon_days))
-idata.posterior["p_event_by_horizon"] = xr.DataArray(
-    p_by_h,
-    dims=("chain", "draw", "horizon"),
-    coords={"horizon": horizon_days},
-)
 ```
 
 ## Informed-actor signal as a threshold indicator
@@ -302,11 +296,11 @@ Only add the signal adjustment if you have actual market microstructure data. Do
 
 ## Model checks
 
-**PriorSensitivity** — derived `p_event_by_horizon` via psense per
-[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md). With N=1, threshold
-posteriors are prior-heavy; WARN/FAIL at T_mid is **expected** — disclose in
-`summary.md`, do not treat as invalidation. Optional: perturb threshold prior mean
-±15% as structural check in JSON `note`.
+**PriorSensitivity** — primary: **resampled re-simulation** (Tier B) per
+[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md). Do not run psense on
+MC-noisy per-draw `p_event_by_horizon`. With N=1, threshold posteriors are prior-heavy;
+WARN/FAIL at T_mid is **expected** — disclose in `summary.md`, do not treat as invalidation.
+Optional: perturb threshold prior mean ±15% as structural check in JSON `note`.
 
 **ReferenceClassCongruence** — compare P(event by T_mid) to a historical base rate.
 If the ratio exceeds 4×, document why the threshold model diverges from analogues.

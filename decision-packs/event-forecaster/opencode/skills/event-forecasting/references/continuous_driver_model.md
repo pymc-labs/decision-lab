@@ -323,20 +323,14 @@ median_days_fp  = float(np.median(finite_fp)) if len(finite_fp) > 0 else float("
 p10_fp          = float(np.percentile(finite_fp, 10)) if len(finite_fp) > 0 else float("nan")
 p90_fp          = float(np.percentile(finite_fp, 90)) if len(finite_fp) > 0 else float("nan")
 
-# Derived quantities for PriorSensitivity (psense)
-import xarray as xr
-
+# Per-draw horizon probabilities for CIs (do NOT attach to idata.posterior for psense —
+# MC path noise invalidates standard psense; use Tier B resampled re-simulation instead)
 horizon_trading_days = [21, 42, 63, 126, 252]   # same as Step 6
 n_chains, n_draws = idata.posterior.sizes["chain"], idata.posterior.sizes["draw"]
 p_by_h = np.array([
     [float(np.mean(fp_days[i] <= h)) for h in horizon_trading_days]
     for i in range(n_post)
 ]).reshape(n_chains, n_draws, len(horizon_trading_days))
-idata.posterior["p_event_by_horizon"] = xr.DataArray(
-    p_by_h,
-    dims=("chain", "draw", "horizon"),
-    coords={"horizon": horizon_trading_days},
-)
 ```
 
 ## Step 6 — Extract horizon probabilities and write outputs
@@ -364,7 +358,7 @@ def empirical_cdf(fp_days_flat, horizons):
 all_fp = fp_days.flatten()
 cdf_vals = empirical_cdf(all_fp, horizon_trading_days)
 
-# Per-horizon CIs from posterior draws (p_by_h already attached above)
+# Per-horizon CIs from posterior draws (p_by_h computed above; not attached for psense)
 ci_low_by_horizon  = [
     float(np.percentile(p_by_h.values[:, :, h], 3)) for h in range(len(horizon_trading_days))
 ]
@@ -414,11 +408,17 @@ with open("forecast.json", "w") as f:
 idata.to_netcdf("outputs/idata.nc")
 ```
 
-## Step 7 — Structural check: threshold τ (optional)
+## Step 7 — Prior sensitivity and structural check
 
-In addition to psense on `p_event_by_horizon` (see `prior_sensitivity_psense.md`), you may
-perturb elicited τ by ±10–20% and re-run forward simulation (no resampling — change
-`tau_scaled` and re-evaluate crossings on paths).
+**PriorSensitivity (Tier B):** resampled re-simulation per
+[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md) Tier B — resample posterior
+draws at power-scaled α ∈ {0.8, 1.25}, re-run forward simulation with `n_paths ≥ 500`,
+compare P(event by T_mid). Write `check_prior_sensitivity.json` with
+`"method": "resampled_simulation"`.
+
+**Optional structural check:** perturb elicited τ by ±10–20% and re-run forward simulation
+(no resampling — change `tau_scaled` and re-evaluate crossings on paths). Document in JSON
+`note` as `structural_perturbation`; does not set tier status.
 
 ```python
 # Perturb threshold by 10% and recompute P(event)
@@ -437,7 +437,7 @@ p_mid_original  = float(cdf_vals[2])
 
 delta_pp = abs(p_mid_perturbed - p_mid_original) * 100
 print(f"Structural τ perturbation: {delta_pp:.1f}pp change at T_mid with 10% threshold shift")
-# Document in check_prior_sensitivity.json note; tier still from psense at T_mid unless τ-only fallback
+# Document in check_prior_sensitivity.json note as structural_perturbation
 ```
 
 ## Gotchas
@@ -450,10 +450,11 @@ print(f"Structural τ perturbation: {delta_pp:.1f}pp change at T_mid with 10% th
 
 ## Model checks for ContinuousDriverModel
 
-**PriorSensitivity** — primary: derived `p_event_by_horizon` via psense per
-[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md). Optional **structural**
-τ perturbation (±10–20%, re-simulate paths): see Step 7 below; document in JSON `note`.
-Tier on T_mid per [`model_checks.md`](model_checks.md); WARN/FAIL = disclose dependence.
+**PriorSensitivity** — primary: **resampled re-simulation** (Tier B) per
+[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md). Do not run psense on
+MC-noisy per-draw `p_event_by_horizon`. Optional **structural** τ perturbation (±10–20%,
+re-simulate paths): document in JSON `note`. Tier on T_mid per [`model_checks.md`](model_checks.md);
+WARN/FAIL = disclose dependence.
 
 **ReferenceClassCongruence** — compare P(event by T_mid) to a historical base rate
 from analogous events. A ratio > 4× or < 0.25× warrants explicit justification.

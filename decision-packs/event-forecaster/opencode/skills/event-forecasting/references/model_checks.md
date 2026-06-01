@@ -24,19 +24,36 @@ Parallel reviewers use FAIL/WARN as **review urgency** ([forecaster.yaml](../../
 
 ---
 
-### Primary path (PyMC / Bayesian methods)
+### Sensitivity tiers
 
-Use **power-scaling sensitivity** on **derived predictions**, not refits on individual parameter priors. Full implementation: [`prior_sensitivity_psense.md`](prior_sensitivity_psense.md).
+Full implementation: [`prior_sensitivity_psense.md`](prior_sensitivity_psense.md).
+
+| Tier | Methods | `method` in JSON |
+|------|---------|------------------|
+| **A** — standard psense | HazardModel, CausalMechanismModel, IndicatorModel, CureRateModel, MarkovStateModel, ReferenceClassModel | `psense` |
+| **B** — resampled re-simulation | ContinuousDriverModel, JumpDiffusionModel, ThresholdCrossingModel | `resampled_simulation` |
+| **C** — analytic perturbation | ScenarioDecomposition | `analytic_perturbation` |
 
 **Default scope:** cumulative **P(event by T)** at **each** `horizon_dates` entry (same definition as `forecast.json` `p_event_by_horizon`). Do **not** run psense on every latent, spline, or GP coefficient unless the user asks for causal interpretation (see below).
 
-**Workflow (summary):**
+**Tier A workflow (deterministic derived quantity):**
 
-1. Sample with Nutpie (`backend="numba"`, `draws=500`, `tune=500`, `chains=6`); then `pm.stats.compute_log_likelihood` and `pm.stats.compute_log_prior` (see prior_sensitivity_psense.md).
-2. Per MCMC draw, compute `p_event_by_horizon` for all horizons; add to `idata.posterior` (see prior_sensitivity_psense.md).
+1. Sample with Nutpie (`backend="numba"`, `draws=500`, `tune=500`, `chains=6`); then `pm.stats.compute_log_likelihood` and `pm.stats.compute_log_prior`.
+2. Per MCMC draw, compute **deterministic** `p_event_by_horizon` for all horizons; add to `idata.posterior`.
 3. `arviz_stats.psense_summary` on all horizon derived variables; optional `arviz_plots.plot_psense_quantities`.
-4. Set top-level `status` from **T_mid** (mid-horizon index) using pp movement (canonical) or document CJS in `by_horizon`.
-5. Use per-horizon results in `note` / `by_horizon` for narratives such as: *short-horizon forecast data-dominated; 12-month forecast prior-sensitive*.
+4. Set top-level `status` from **T_mid** using pp movement at α=0.8 vs 1.25.
+
+**Tier B workflow (path-simulation forecast):**
+
+1. Sample and compute log densities as above.
+2. Build baseline forecast with forward simulation (`n_paths=100` acceptable).
+3. **Do not** attach MC-noisy `p_event_by_horizon` to `idata.posterior` for psense.
+4. Resample posterior draws at power-scaled α ∈ {0.8, 1.25}; re-run forward simulation with `n_paths ≥ 500`.
+5. Compare weighted mean P(event by T_mid) across α levels for tier classification.
+
+**Tier C workflow:** perturb Dirichlet/Beta concentration ±50%; compare P(event) at each horizon.
+
+Use per-horizon results in `note` / `by_horizon` for narratives such as: *short-horizon forecast data-dominated; 12-month forecast prior-sensitive*.
 
 **Unless the user asks for causal interpretation** (mechanism, driver importance, coefficient stability, “why” not just “when”): keep PriorSensitivity **prediction-only**. Method name alone does not trigger parameter-level psense — e.g. `CausalMechanismModel` with a headline-probability-only brief uses prediction-only; `HazardModel` with “which factors drive timing?” adds psense on **named interpretable** parameters listed in the question. See [`causal_mechanism.md`](causal_mechanism.md).
 
@@ -56,17 +73,17 @@ On WARN/FAIL: explain in `summary.md` **why** sensitivity is plausible (small N,
 
 Per-horizon `status` in `by_horizon` may use the same pp thresholds independently for reporting; top-level `status` remains T_mid unless the orchestrator designates another horizon.
 
-### Fallback paths (non-PyMC or structural)
-
-Use when psense is not available:
+### Supplementary / fallback paths
 
 | Situation | Approach |
 |-----------|----------|
-| Analytic / closed form (`ReferenceClassModel`, `ScenarioDecomposition`) | Perturb prior concentration (e.g. Beta κ ±50%, Dirichlet concentration ±50%); compare P(event) at each horizon |
+| Path-simulation forecast (Tier B) | Resampled re-simulation at power-scaled α; `method: resampled_simulation` |
+| Analytic / prior-only (`ScenarioDecomposition`, Tier C) | Dirichlet concentration ±50%; `method: analytic_perturbation` |
+| ReferenceClassModel (Tier A) | Standard psense on deterministic Beta-Binomial derived quantity, or analytic κ ±50% |
 | Elicited threshold τ not in posterior | Perturb τ ±10–20% and re-simulate paths (no MCMC refit); report separately in `note` as `structural_perturbation` |
 | `log_prior` cannot be stored | Manual prior weakening + single refit, or document skip |
 
-Avoid the legacy “pick 2–3 priors and refit” loop for PyMC when psense on derived quantities is feasible.
+Avoid the legacy “pick 2–3 priors and refit” loop for PyMC when Tier A psense or Tier B resampled re-simulation is feasible.
 
 ### Output: `outputs/check_prior_sensitivity.json`
 
@@ -74,7 +91,7 @@ Avoid the legacy “pick 2–3 priors and refit” loop for PyMC when psense on 
 {
   "check": "PriorSensitivity",
   "status": "PASS | WARN | FAIL",
-  "method": "psense | refit | analytic_perturbation | structural_tau",
+  "method": "psense | resampled_simulation | refit | analytic_perturbation | structural_tau",
   "t_mid_horizon": "<YYYY-MM-DD>",
   "original_p_mid_horizon": <float>,
   "absolute_change_pp": <float>,

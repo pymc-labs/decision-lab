@@ -31,8 +31,10 @@ with model:
 ```
 
 Do NOT pass `random_seed` — parallel instances must run with independent seeds.
-After sampling, attach `p_event_by_horizon` to `idata.posterior` per
-`event-forecasting/references/prior_sensitivity_psense.md` before running psense.
+Prior sensitivity uses three tiers — see `event-forecasting/references/prior_sensitivity_psense.md`:
+- **Tier A** (deterministic forecast): attach `p_event_by_horizon` to `idata.posterior`, run psense.
+- **Tier B** (path simulation): resampled re-simulation at power-scaled α — do **not** attach MC-noisy quantities for psense.
+- **Tier C** (ScenarioDecomposition): analytic Dirichlet perturbation only.
 
 ---
 
@@ -190,7 +192,10 @@ Write `forecast.json`:
 ### Step 6 — Run calibration checks
 
 Run whichever of these are appropriate for your method:
-- `PriorSensitivity`: for PyMC, power-scaling sensitivity on derived `p_event_by_horizon` (all horizons; tier on T_mid) per `event-forecasting/references/prior_sensitivity_psense.md`; analytic methods use concentration perturbation per `model_checks.md`
+- `PriorSensitivity` — tiered by method (see `prior_sensitivity_psense.md`):
+  - **Tier A** (Hazard, Causal, Indicator, CureRate, Markov, ReferenceClass): psense on deterministic `p_event_by_horizon`
+  - **Tier B** (ContinuousDriver, JumpDiffusion, ThresholdCrossing): resampled re-simulation at power-scaled α (`method: resampled_simulation`)
+  - **Tier C** (ScenarioDecomposition): analytic Dirichlet concentration perturbation
 - `ConsistencyCheck`: verify monotonicity and internal consistency
 - `ReferenceClassCongruence`: compare to historical base rate if one is available
 - `HistoricalCalibration`: if historical episodes exist
