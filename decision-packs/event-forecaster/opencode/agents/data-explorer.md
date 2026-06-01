@@ -58,7 +58,6 @@ print(df.null_count())
 if "date" in df.columns:
     print(df["date"].min(), df["date"].max())
 # Cast any Decimal columns before statistics
-import polars as pl
 df = df.with_columns([
     pl.col(c).cast(pl.Float64)
     for c in df.columns if df[c].dtype == pl.Decimal

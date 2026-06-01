@@ -72,7 +72,7 @@ Use `threshold_anchor` as the prior mean for `event_driver_value` in the model b
 
 ## Section B: Latent threshold estimated from N≥1 historical case (general)
 
-Model the event as occurring when a **key causal driver** (e.g., oil price, economic cost index, political pressure score) first crosses a latent threshold. Forecast the driver as a stochastic process; compute P(first passage before T) via Monte Carlo simulation.
+Model the event as occurring when a **key measurable driver** (e.g., cost index, pressure score, market metric) first crosses a latent threshold. Forecast the driver as a stochastic process; compute P(first passage before T) via Monte Carlo simulation.
 
 ## When to use
 
@@ -106,7 +106,7 @@ You need two components:
 | column | type | notes |
 |---|---|---|
 | `date` | datetime | Daily or weekly |
-| `driver_value` | float | e.g., oil price in USD/barrel |
+| `driver_value` | float | e.g., index level or normalised metric |
 
 **B. Historical event record (even N=1)**
 
@@ -123,7 +123,7 @@ If N = 1, the single case gives you a noisy observation of the threshold. The mo
 ```python
 import pymc as pm
 import numpy as np
-import arviz as az
+from arviz_stats import summary
 import pandas as pd
 
 # --- inputs ---
@@ -136,9 +136,9 @@ import pandas as pd
 # Step 1: Estimate stochastic process parameters from historical driver data
 # Using an Ornstein-Uhlenbeck (mean-reverting) process:
 #   d_driver = kappa * (mu - driver) * dt + sigma * sqrt(dt) * dW
-# This is appropriate for oil prices and many geopolitical cost indices.
+# Log scale is often appropriate for strictly positive drivers with multiplicative dynamics.
 
-log_driver = np.log(driver_history)  # model on log scale for oil prices
+log_driver = np.log(driver_history)
 
 # Approximate MLE for OU parameters from data (as prior initialisation)
 dt = 1.0  # weeks (adjust for your frequency)
@@ -183,11 +183,15 @@ with pm.Model() as threshold_model:
     )
 
     idata = pm.sample(
-        draws=500, tune=500, chains=4,
-        target_accept=0.92,
-        nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True, "log_prior": True},
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.92},
     )
+    pm.stats.compute_log_likelihood(idata, model=threshold_model)
+    pm.stats.compute_log_prior(idata, model=threshold_model)
 ```
 
 ## Monte Carlo first-passage simulation
@@ -255,6 +259,17 @@ ci_high_by_horizon = [float(np.percentile(p_by_horizon[:, j], 97)) for j in rang
 median_days = float(np.nanmean(median_weeks_arr) * 7)
 p10_days    = float(np.nanpercentile(median_weeks_arr * 7, 10))
 p90_days    = float(np.nanpercentile(median_weeks_arr * 7, 90))
+
+# Derived quantities for PriorSensitivity (psense)
+import xarray as xr
+
+n_chains, n_draws = idata.posterior.sizes["chain"], idata.posterior.sizes["draw"]
+p_by_h = p_by_horizon.reshape(n_chains, n_draws, len(horizon_days))
+idata.posterior["p_event_by_horizon"] = xr.DataArray(
+    p_by_h,
+    dims=("chain", "draw", "horizon"),
+    coords={"horizon": horizon_days},
+)
 ```
 
 ## Informed-actor signal as a threshold indicator
@@ -304,6 +319,6 @@ Any non-monotonicity indicates a bug in the Monte Carlo simulation.
 - **N=1 threshold observation**: With a single data point, the threshold posterior is dominated by the prior. Be explicit in `summary.md`. PriorSensitivity WARN/FAIL at T_mid usually reflects elicitation uncertainty — justify, do not discard the forecast.
 - **Log vs linear scale**: Strictly positive drivers (prices, rates, indices bounded below zero) are often better modelled on a log scale (multiplicative shocks, always positive). Use `np.log(driver)` throughout — but verify this matches your driver's distribution.
 - **OU mean reversion level**: `mu` is the long-run mean of the driver. If you believe the equilibrium has structurally shifted, update `mu` and document the assumption.
-- **Multiple thresholds**: The decision-maker may have multiple thresholds (e.g., "if oil is above X AND diplomatic talks stall, OR oil is above Y regardless"). If this is plausible, model two separate threshold components with a logical OR.
+- **Multiple thresholds**: The decision-maker may have multiple thresholds (e.g., "if metric A is above X AND condition B holds, OR metric A is above Y regardless"). If this is plausible, model two separate threshold components with a logical OR.
 - **Threshold stability**: The threshold from the one historical case may not apply today if the political economy has changed. This is the single biggest uncertainty — encode it in the prior sigma on `log_threshold`.
 - **Simulation efficiency**: For n_samples = 1000 and n_paths = 500, this is 500K path simulations. If slow, reduce `n_paths` to 200. The error from fewer paths is usually < 2 pp.

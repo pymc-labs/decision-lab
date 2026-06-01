@@ -43,9 +43,13 @@ Rules:
 | `MARGINAL` | All R-hat < 1.05 AND ESS bulk > 100 AND divergence rate < 2% |
 | `FAIL` | Anything worse |
 
-With short chains (draws=200, chains=2): relax to R-hat < 1.05, ESS > 50. Flag in summary.md.
-
 On `FAIL`, write the failure to `summary.md` and stop. Do NOT silently retry with different sampler parameters. The orchestrator decides Round 2.
+
+### Consolidator thresholds (relaxed)
+
+When the parallel consolidator scores Bayesian runs (short chains, many instances),
+it uses **relaxed** gates: PASS if R-hat < 1.05 and ESS bulk > 50; MARGINAL if R-hat < 1.10.
+Forecaster self-classification above uses stricter OK/MARGINAL cutoffs.
 
 ---
 

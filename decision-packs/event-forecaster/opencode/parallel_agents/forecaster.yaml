@@ -1,5 +1,5 @@
 name: forecaster
-description: "Run independent research-paired forecasting agents. Each received its own researcher's findings and chose its own method autonomously."
+description: "Run independent forecasting agents in parallel. Each chooses its own method autonomously."
 timeout_minutes: 60
 failure_behavior: continue
 
@@ -17,23 +17,24 @@ subagent_suffix_prompt: |
   still write summary.md so the orchestrator can read your diagnosis.
 
 summarizer_prompt: |
-  You are a consolidator reviewing N independent research-forecasting pairs.
-  Each pair autonomously chose its own modelling approach — methods will likely
+  You are a consolidator reviewing N independent forecasters.
+  Each forecaster autonomously chose its own modelling approach — methods will likely
   be heterogeneous. Your job: surface the most defensible estimates and identify
   convergence across independent paths.
 
   Read these summary files (paths provided above — do NOT search for others):
   {summary_paths}
 
-  Write the consolidated comparison to the output path provided above.
+  Write the consolidated comparison to the output path provided above
+  (typically `parallel/run-<timestamp>/consolidated_summary.md`).
 
   ---
 
   ## Step 1 — Approach inventory
 
-  For each pair, record:
+  For each forecaster, record:
 
-  | Pair | Method chosen | P(mid-horizon) | Median days | Evidence score | Calibration |
+  | Forecaster | Method chosen | P(mid-horizon) | Median days | Evidence score | Calibration |
   |---|---|---|---|---|---|
 
   **Evidence score (0–3)**:
@@ -71,15 +72,15 @@ summarizer_prompt: |
   ## Step 3 — Comparison of results
 
   Describe the range of methods chosen and probability estimates produced:
-  - List all methods used across pairs
+  - List all methods used across forecasters
   - Note the range of P(event at mid-horizon) estimates: [min, max]
   - Note the range of median days-to-event estimates
-  - If multiple pairs chose structurally similar methods, describe this factually
-    (e.g., "three of five pairs used scenario decomposition")
+  - If multiple forecasters chose structurally similar methods, describe this factually
+    (e.g., "three of five forecasters used scenario decomposition")
 
-  Do NOT treat method agreement between pairs as a quality signal. Multiple pairs
+  Do NOT treat method agreement between forecasters as a quality signal. Multiple forecasters
   independently choosing the same approach does not validate that approach —
-  they may all share the same blind spot or prior. Each pair is evaluated on its
+  they may all share the same blind spot or prior. Each forecaster is evaluated on its
   own evidence quality and technical calibration only.
 
   ---
@@ -91,14 +92,14 @@ summarizer_prompt: |
   2. Best technical calibration (convergence, prior sensitivity, consistency)
   3. Most interpretable and auditable method
 
-  State clearly: which pair(s) drive the headline, why they were selected, and
-  what the dissenting pairs found.
+  State clearly: which forecaster(s) drive the headline, why they were selected, and
+  what the dissenting forecasters found.
 
   ---
 
   ## Required output sections
 
-  1. **Approach inventory table** (all pairs)
+  1. **Approach inventory table** (all forecasters)
   2. **Technical quality summary** (scores and calibration status)
   3. **Comparison of results** — methods used, range of estimates
   4. **Primary recommendation** — headline estimate with full justification
