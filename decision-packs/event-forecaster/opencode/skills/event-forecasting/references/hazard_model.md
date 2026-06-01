@@ -4,7 +4,7 @@ Fit a parametric survival model to historical event-resolution durations. Predic
 
 ## When to use
 
-- You have N ≥ 5 historical events with **known or bounded durations** (e.g., past blockades, past crises, past sanctions episodes).
+- You have N ≥ 5 historical events with **known or bounded durations** (e.g., past analogous episodes with recorded resolution times).
 - Some events may be **right-censored** (still ongoing at the time of data collection) — the model handles this.
 - You want a full survival curve S(t), not just a point estimate.
 
@@ -25,7 +25,7 @@ The current event (the one you are forecasting) is always right-censored at its 
 ```python
 import pymc as pm
 import numpy as np
-import arviz as az
+from arviz_stats import summary
 
 # --- inputs (fill from your data) ---
 durations = np.array([...])   # days to resolution (or current duration if censored)
@@ -49,17 +49,21 @@ with pm.Model() as hazard_model:
                               observed=observed_dur)
 
     # Likelihood contribution for right-censored events: log P(T > t)
-    # P(T > t | Weibull) = exp(-(t/beta)^alpha)
-    log_surv = pm.math.log(pm.math.exp(-(censored_dur / beta) ** alpha))
+    # P(T > t | Weibull) = exp(-(t/beta)^alpha)  →  log-surv = -(t/beta)^alpha
+    log_surv = -(censored_dur / beta) ** alpha
     censored_potential = pm.Potential("censored", log_surv.sum())
 
     idata = pm.sample(
-        draws=500, tune=500, chains=4,
-        target_accept=0.92,
-        nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True, "log_prior": True},
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.92},
         # do NOT pass random_seed
     )
+    pm.stats.compute_log_likelihood(idata, model=hazard_model)
+    pm.stats.compute_log_prior(idata, model=hazard_model)
 ```
 
 ## Extracting the forecast
@@ -106,7 +110,8 @@ beta = idata.posterior["beta"]
 horizon_days = np.array([...])  # same as orchestrator horizons
 
 t = xr.DataArray(horizon_days, dims="horizon", coords={"horizon": horizon_days})
-p_by_h = 1.0 - np.exp(-((t / beta) ** alpha))  # dims: chain, draw, horizon
+p_by_h = 1.0 - np.exp(-((t / beta) ** alpha))
+p_by_h = p_by_h.transpose("chain", "draw", "horizon")
 
 idata.posterior["p_event_by_horizon"] = p_by_h
 ```
@@ -114,9 +119,9 @@ idata.posterior["p_event_by_horizon"] = p_by_h
 ## Convergence diagnostics
 
 ```python
-summary = az.summary(idata)
-rhat_max      = float(summary["r_hat"].max())
-ess_bulk_min  = float(summary["ess_bulk"].min())
+summary_df = summary(idata)
+rhat_max      = float(summary_df["r_hat"].max())
+ess_bulk_min  = float(summary_df["ess_bulk"].min())
 divergences   = int(idata.sample_stats["diverging"].sum())
 total_draws   = int(idata.sample_stats.sizes["chain"] * idata.sample_stats.sizes["draw"])
 divergence_rate = divergences / total_draws
@@ -176,9 +181,29 @@ with pm.Model() as loglogistic_model:
     log_surv = pm.math.log(1 - pm.math.invlogit((log_dur_cens - mu) / s) + 1e-9)
     pm.Potential("censored", log_surv.sum())
 
-    idata = pm.sample(draws=200, tune=200, chains=2, target_accept=0.9,
-                      nuts_sampler="numpyro",
-                      idata_kwargs={"log_likelihood": True, "log_prior": True})
+    idata = pm.sample(
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.9},
+    )
+    pm.stats.compute_log_likelihood(idata, model=loglogistic_model)
+    pm.stats.compute_log_prior(idata, model=loglogistic_model)
+```
+
+Attach per-draw cumulative probabilities for psense:
+
+```python
+import xarray as xr
+from scipy.special import expit
+
+horizon_days = np.array([...])
+t = xr.DataArray(horizon_days, dims="horizon", coords={"horizon": horizon_days})
+p_by_h = expit((np.log(t + 1e-9) - idata.posterior["mu"]) / idata.posterior["s"])
+p_by_h = p_by_h.transpose("chain", "draw", "horizon")
+idata.posterior["p_event_by_horizon"] = p_by_h
 ```
 
 ### Two-component Weibull mixture (fast and slow resolvers)
@@ -207,7 +232,32 @@ with pm.Model() as mixture_model:
                comp_dists=[weibull_fast, weibull_slow],
                observed=observed_dur)
 
-    idata = pm.sample(draws=200, tune=200, chains=2, target_accept=0.92,
-                      nuts_sampler="numpyro",
-                      idata_kwargs={"log_likelihood": True, "log_prior": True})
+    # Right-censored: mixture survival S(t) = w*S_fast(t) + (1-w)*S_slow(t)
+    if len(censored_dur) > 0:
+        surv_fast = pm.math.exp(-(censored_dur / beta_fast) ** alpha_fast)
+        surv_slow = pm.math.exp(-(censored_dur / beta_slow) ** alpha_slow)
+        log_surv = pm.math.log(w * surv_fast + (1 - w) * surv_slow + 1e-12)
+        pm.Potential("censored", log_surv.sum())
+
+    idata = pm.sample(
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.92},
+    )
+    pm.stats.compute_log_likelihood(idata, model=mixture_model)
+    pm.stats.compute_log_prior(idata, model=mixture_model)
+```
+
+For psense, attach mixture CDF per horizon (same pattern as Weibull, with component weights):
+
+```python
+t = xr.DataArray(horizon_days, dims="horizon", coords={"horizon": horizon_days})
+cdf_fast = 1.0 - np.exp(-((t / idata.posterior["beta_fast"]) ** idata.posterior["alpha_fast"]))
+cdf_slow = 1.0 - np.exp(-((t / idata.posterior["beta_slow"]) ** idata.posterior["alpha_slow"]))
+p_by_h = idata.posterior["w"] * cdf_fast + (1 - idata.posterior["w"]) * cdf_slow
+p_by_h = p_by_h.transpose("chain", "draw", "horizon")
+idata.posterior["p_event_by_horizon"] = p_by_h
 ```
