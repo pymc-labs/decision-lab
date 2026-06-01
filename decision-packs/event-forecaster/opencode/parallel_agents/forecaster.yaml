@@ -3,7 +3,7 @@ description: "Run independent forecasting agents in parallel. Each chooses its o
 timeout_minutes: 60
 failure_behavior: continue
 
-default_model: "anthropic/claude-haiku-4-5"
+# default_model and summarizer_model are injected from config.yaml at session setup
 max_instances: 5
 
 subagent_suffix_prompt: |
@@ -38,12 +38,12 @@ summarizer_prompt: |
   |---|---|---|---|---|---|
 
   **Evidence score (0–3)**:
-  - 3: Method choice directly supported by named research findings with specific values and sources
-  - 2: Method choice reasonably argued from domain knowledge or general research
+  - 3: Method choice directly supported by data summary, domain knowledge, or named sources from the prompt — with specific values cited
+  - 2: Method choice reasonably argued from domain knowledge or prompt context (without specific cited values)
   - 1: Method choice stated without clear justification
   - 0: Method failed or summary is missing
 
-  **DO NOT penalise**: non-standard methods, ignoring research findings, novel implementations.
+  **DO NOT penalise**: non-standard methods, not citing every prompt source, novel implementations.
 
   ---
 
@@ -88,7 +88,7 @@ summarizer_prompt: |
   ## Step 4 — Primary recommendation
 
   Select the headline estimate. Prefer, in order:
-  1. Highest individual evidence score (research findings supporting the method choice)
+  1. Highest individual evidence score (data summary, domain knowledge, or prompt sources supporting the method choice)
   2. Best technical calibration (convergence, prior sensitivity, consistency)
   3. Most interpretable and auditable method
 
@@ -105,4 +105,4 @@ summarizer_prompt: |
   4. **Primary recommendation** — headline estimate with full justification
   5. **Key uncertainties** — 2–3 factors most affecting the reliability of the headline
 
-summarizer_model: "anthropic/claude-sonnet-4-5"
+# summarizer_model is injected from config.yaml at session setup

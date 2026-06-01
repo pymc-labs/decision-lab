@@ -180,9 +180,12 @@ Write `forecast.json`:
   "ess_bulk_min": <float or null>,
   "divergence_rate": <float or null>,
   "key_assumptions": ["<string>", "..."],
-  "key_uncertainties": ["<string>", "..."]
+  "key_uncertainties": ["<string>", "..."],
+  "causal_structure_notes": ["<string>", "..."]
 }
 ```
+
+`causal_structure_notes` is **required** when `method` is `CausalMechanismModel` — omit for other methods. See `event-forecasting/references/causal_mechanism.md` for content guidance. For `CausalMechanismModel`, populate `key_assumptions` and `key_uncertainties` with causal-structure entries (confounders, ignorability, regime stability), not only sampling or data-quality assumptions.
 
 ### Step 6 — Run calibration checks
 
@@ -219,7 +222,7 @@ or your own judgment.>
 - Supplementary: <other sources from the prompt>
 
 ## Data used
-- File: data/<NAME> (or "none — domain knowledge / research findings only")
+- File: data/<NAME> (or "none — domain knowledge / prompt context only")
 - Description: <what it contains>
 
 ## Fit
@@ -247,6 +250,11 @@ or your own judgment.>
 
 ## Key assumptions
 <3–5 assumptions the forecast depends on most heavily>
+
+## Causal structure notes
+<Required when method is CausalMechanismModel; omit this section for other methods.
+Working DAG, measured drivers, confounders considered, structural limitations,
+identification caveat — see causal_mechanism.md.>
 
 ## Key uncertainties
 <2–3 factors that would most change the forecast if resolved>

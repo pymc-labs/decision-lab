@@ -92,8 +92,8 @@ are made by the orchestrator. Method selection is left entirely to each forecast
 ### Step 4 — Spawn N parallel forecasters
 
 Launch N forecasters in parallel. Each receives the question, horizon dates, the full
-`data_summary.md` content, and any context from the user's prompt. There is no
-researcher phase — forecasters work directly from the provided data.
+`data_summary.md` content, and any context from the user's prompt. Forecasters work
+directly from the data summary, local data files, and prompt context.
 
 **You MUST use `parallel-agents` here — NOT `task`.**
 

@@ -19,6 +19,60 @@ Causal driver C (e.g., resolution_signal)   ─┘
 
 The latent pressure variable represents "how much the system is being pushed toward resolution". When pressure exceeds a threshold (uncertain), the event occurs. Signed drivers lie in \([-1, 1]\) after applying direction; the threshold prior matches that scale.
 
+This diagram is a **working abstraction** — not a claim that only three factors matter. Before fitting, sketch the fuller causal graph and document what you are assuming away (see below).
+
+## Causal structure and DAG reasoning
+
+Think critically about the causal structure before choosing drivers. A forecast that treats correlated signals as independent causes can look precise while encoding the wrong mechanism.
+
+### When to expand beyond the simple diagram
+
+Add nodes (confounders, mediators, regime indicators, external shocks) when any of the following apply:
+
+- Two measured drivers move together because a **shared cause** drives both.
+- A driver affects the event **through** an intermediate step you can name but did not model (mediator).
+- A variable is caused by **both** drivers and the outcome (collider) — conditioning on it can distort inference.
+- **External shocks** (policy shifts, crises, institutional deadlines) plausibly affect both driver levels and resolution timing.
+- Past cases differ in ways that measured drivers do not capture (**unmeasured confounding** or regime change).
+
+Stay with the simple latent-pressure model when extra nodes would not change which variables you measure, how you set priors, or how you interpret counterfactuals. Complexity should buy identifiability or a more honest uncertainty story — not diagram decoration.
+
+### Common confounder patterns in event forecasting
+
+| Pattern | Structure (schematic) | Risk if ignored |
+|---|---|---|
+| External shock | Shock → multiple drivers; Shock → Event | Over-credit drivers jointly elevated by the same shock |
+| Institutional calendar | Deadline → urgency signals; Deadline → Event | Mistake deadline-driven activity for organic pressure |
+| Regime / phase | Regime → driver dynamics; Regime → baseline hazard | Drivers mean different things across phases |
+| Measurement overlap | True state → multiple proxies | Double-count one underlying factor as separate drivers |
+
+Domain-agnostic example — a latent shock affecting both drivers and the outcome directly:
+
+```
+External shock (unmeasured?) ──┬──→ driver_A ──┐
+                               ├──→ driver_B ──┤→ latent_pressure → Event
+                               └──→ (direct) ──┘
+```
+
+If `driver_A` and `driver_B` are proxies for the same shock, merge them or widen uncertainty; do not treat them as independent evidence.
+
+### Colliders, mediators, and unmeasured confounding
+
+- **Mediator** (Driver → Mediator → Event): Either include the mediator as a measured driver or state that you are modelling the **total effect** of the driver and omitting the pathway. Do not silently treat a mediator as an independent driver.
+- **Collider** (Driver A → Collider ← Driver B): Avoid conditioning on colliders unless the forecasting question requires it — doing so opens non-causal associations.
+- **Unmeasured confounder** (U → Drivers; U → Event): The fitted model assumes **conditional ignorability given measured drivers**. That assumption is almost always approximate — name what U might be and how it could bias the forecast.
+
+### What to disclose when confounders are unmeasured
+
+If a plausible confounder has no measurement:
+
+1. **Name it** and describe its hypothesized paths (e.g., "leadership intent affects both compliance signals and resolution timing").
+2. **Direction of bias**: Does omitting U likely inflate or deflate P(event) relative to a fully adjusted model? If unknown, say so.
+3. **Modelling choice**: Encode as a latent driver with a wide prior if it materially shifts the forecast; otherwise document under structural limitations and widen driver uncertainty.
+4. **Identification caveat**: Do not imply the forecast is **causally identified** from observables alone. Counterfactuals are **model-relative** — valid under the stated DAG, not ground truth.
+
+Surface these points in `## Causal structure notes` in `summary.md` and in `forecast.json` (`key_assumptions`, `key_uncertainties`, and `causal_structure_notes` when using this method).
+
 ## Data preparation
 
 You need current measurements of the causal drivers. Historical values are helpful for calibration but not strictly required.
@@ -208,9 +262,41 @@ driver_high[i] += current_sig[i]
 **ReferenceClassCongruence** — compare P(event by T_mid) to a historical base rate.
 A ratio > 4× suggests the causal model is overly optimistic/pessimistic.
 
+## Reporting causal structure (required)
+
+When using `CausalMechanismModel`, document DAG reasoning in **`summary.md`** and **`forecast.json`**. The orchestrator and consolidator rely on this to judge whether driver-level counterfactuals are trustworthy.
+
+### `summary.md` — `## Causal structure notes`
+
+```markdown
+## Causal structure notes
+- **Working DAG**: <nodes and directed edges — ASCII diagram or bullet list>
+- **Measured drivers used**: <which DAG nodes map to model drivers and why>
+- **Confounders considered**: <named confounders; controlled / unmeasured / ruled out>
+- **Structural limitations**: <colliders, omitted mediators, regime-change risk, proxy overlap>
+- **Identification caveat**: <what causal claim the forecast supports and what it does not>
+```
+
+### `forecast.json` fields
+
+- **`causal_structure_notes`**: array of short strings summarising the DAG, confounder handling, and main structural limitation (required for this method).
+- **`key_assumptions`**: include at least 2–3 entries on causal structure — e.g., ignorability given measured drivers, stability of driver directions, treatment of unmeasured confounders.
+- **`key_uncertainties`**: include confounding and structural uncertainty where material — e.g., unmeasured shock, regime flip, ambiguous driver direction.
+
+Example `causal_structure_notes` entries:
+
+```json
+"causal_structure_notes": [
+  "Working DAG: external_shock → {driver_A, driver_B} → latent_pressure → event; shock may also affect event directly.",
+  "driver_A and driver_B are compliance and enforcement proxies — treated as separate drivers with wide priors; correlation > 0.8 would warrant merging.",
+  "Unmeasured confounder 'institutional_priority' not observed; omitted — may inflate P(event) if priority drives both drivers.",
+  "Counterfactuals are conditional on measured drivers only; not identified for shock-level interventions."
+]
+```
+
 ## Gotchas
 
-- **Unmeasurable drivers**: If a key causal driver can't be measured (e.g., "leadership intent"), encode it as a latent variable with a wide prior rather than omitting it.
+- **Unmeasurable drivers**: If a key causal driver can't be measured (e.g., "leadership intent"), encode it as a latent variable with a wide prior rather than omitting it — and disclose it in `causal_structure_notes` (see **Reporting causal structure** above).
 - **Collinear drivers**: Correlated drivers (e.g., two measures of the same underlying stress) should be combined or modelled jointly. If correlation > 0.8, merge into a composite driver or include a correlation structure.
 - **Calibration without historical data**: If no labelled historical examples exist to calibrate against, all parameters are prior-driven. Widen all priors and report the model as *structural reasoning, not data-driven*.
 - **Direction reversal**: The direction of a driver's effect can flip under different regimes. Document this explicitly in the `key_assumptions` field of `forecast.json`.

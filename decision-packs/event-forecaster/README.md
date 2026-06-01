@@ -50,7 +50,31 @@ To install additional packages: `pixi add <package>` (conda-forge) or
 
 ## Model configuration
 
-Set `default_model` in `config.yaml` to control the orchestrator and data-explorer
-model. Set `default_model` and `summarizer_model` in
-`opencode/parallel_agents/forecaster.yaml` to control forecaster instances and
-the consolidator independently.
+All roles default to `default_model`. Uncomment optional overrides in `config.yaml`:
+
+```yaml
+default_model: anthropic/claude-sonnet-4-5
+
+# models:
+#   forecaster: anthropic/claude-haiku-4-5      # parallel instances only
+#   consolidator: anthropic/claude-sonnet-4-5   # consolidator only
+```
+
+| Role | Config key | Default |
+|------|------------|---------|
+| Orchestrator & data-explorer | `default_model` | set in config |
+| Parallel forecaster instances | `models.forecaster` | same as `default_model` |
+| Consolidator (summarizer) | `models.consolidator` | same as `default_model` |
+
+Example — use Haiku for cheap forecaster testing while keeping Sonnet elsewhere:
+
+```yaml
+default_model: anthropic/claude-sonnet-4-5
+
+models:
+  forecaster: anthropic/claude-haiku-4-5
+```
+
+At session setup, dlab injects `models.forecaster` and `models.consolidator` into
+`opencode/parallel_agents/forecaster.yaml`. Override the orchestrator for a single
+run with `dlab --model ...`.

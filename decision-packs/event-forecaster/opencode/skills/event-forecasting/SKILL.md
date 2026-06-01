@@ -61,7 +61,7 @@ Inspect every available data file, then answer:
 | `MarkovStateModel` | Historical transitions / dwell times across discrete regimes | Situation moves through identifiable intermediate states; want transition-rate dynamics, not a static scenario snapshot |
 | `CureRateModel` | Any (works without data) | Significant probability exists that the event will NEVER resolve; standard survival models assign zero probability to permanent non-resolution |
 
-**Each forecaster selects ONE method** that best fits the data and research findings. Choose the method that is most appropriate for the available evidence — you do not need to run multiple methods. The ensemble of parallel forecasters provides coverage across methods.
+**Each forecaster selects ONE method** that best fits the data summary, local data files, and prompt context. Choose the method that is most appropriate for the available evidence — you do not need to run multiple methods. The ensemble of parallel forecasters provides coverage across methods.
 
 ### Implementation backend
 

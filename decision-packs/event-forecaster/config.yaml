@@ -10,5 +10,12 @@ default_model: anthropic/claude-sonnet-4-5
 requires_data: false
 requires_prompt: true
 
+# Model roles — orchestrator and data-explorer use default_model (or dlab --model).
+# Uncomment models below to override parallel forecaster instances and/or consolidator;
+# omitted keys inherit default_model at session setup.
+# models:
+#   forecaster: anthropic/claude-haiku-4-5      # e.g. cheaper testing
+#   consolidator: anthropic/claude-sonnet-4-5
+
 hooks:
   pre-run: setup.sh

@@ -40,7 +40,7 @@ import pymc as pm
 import numpy as np
 import xarray as xr
 
-# --- inputs (fill from your historical research) ---
+# --- inputs (fill from data summary, domain knowledge, or prompt context) ---
 # Broad reference class (prior evidence)
 N_broad = ...      # total events in broad class
 k_broad = ...      # events that resolved within T days
