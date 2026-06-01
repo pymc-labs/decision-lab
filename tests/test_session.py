@@ -352,6 +352,36 @@ class TestSetupOpencodeConfig:
 
         assert not (work_dir / ".opencode" / "tools").exists()
 
+    def test_injects_models_from_dpack_config(self, tmp_path: Path) -> None:
+        """Should inject forecaster/consolidator models from config.yaml."""
+        config_dir: Path = tmp_path / "dpack"
+        config_dir.mkdir()
+        opencode_dir: Path = config_dir / "opencode"
+        parallel_dir: Path = opencode_dir / "parallel_agents"
+        parallel_dir.mkdir(parents=True)
+        (parallel_dir / "forecaster.yaml").write_text(
+            "name: forecaster\n"
+            "failure_behavior: continue\n"
+            "summarizer_prompt: |\n"
+            "  Compare results.\n"
+        )
+
+        work_dir: Path = tmp_path / "work"
+        work_dir.mkdir()
+
+        dpack_config: dict[str, Any] = {
+            "default_model": "anthropic/claude-sonnet-4-5",
+            "models": {"forecaster": "anthropic/claude-haiku-4-5"},
+        }
+        setup_opencode_config(
+            str(config_dir), str(work_dir),
+            dpack_config=dpack_config,
+        )
+
+        content: str = (work_dir / ".opencode" / "parallel_agents" / "forecaster.yaml").read_text()
+        assert 'default_model: "anthropic/claude-haiku-4-5"' in content
+        assert 'summarizer_model: "anthropic/claude-sonnet-4-5"' in content
+
 
 class TestCopyHookScripts:
     """Tests for copy_hook_scripts function."""

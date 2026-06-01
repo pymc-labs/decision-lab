@@ -2,6 +2,7 @@
 Configuration loading and validation for decision-pack config directories.
 """
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -188,3 +189,81 @@ def load_dpack_config(config_dir: str) -> dict[str, Any]:
     config["hooks"] = hooks
 
     return config
+
+
+def resolve_model_roles(config: dict[str, Any]) -> dict[str, str]:
+    """
+    Resolve orchestrator, forecaster, and consolidator models from config.
+
+    ``default_model`` is the orchestrator model. Optional ``models.forecaster``
+    and ``models.consolidator`` override parallel agent instance and
+    consolidator models; each falls back to ``default_model`` when omitted.
+    """
+    default: str = config["default_model"]
+    models: Any = config.get("models", {})
+    if not isinstance(models, dict):
+        models = {}
+    return {
+        "orchestrator": default,
+        "forecaster": models.get("forecaster", default),
+        "consolidator": models.get("consolidator", default),
+    }
+
+
+def upsert_yaml_scalar(
+    text: str,
+    key: str,
+    value: str,
+    *,
+    insert_after: str | None = None,
+    insert_before: str | None = None,
+) -> str:
+    """Set or insert a top-level YAML scalar key with a quoted value."""
+    quoted: str = f'"{value}"'
+    pattern: re.Pattern[str] = re.compile(rf"^{re.escape(key)}:\s*.+$", re.MULTILINE)
+    if pattern.search(text):
+        return pattern.sub(f"{key}: {quoted}", text, count=1)
+
+    new_line: str = f"{key}: {quoted}\n"
+    if insert_before:
+        before_pattern: re.Pattern[str] = re.compile(
+            rf"^{re.escape(insert_before)}:\s*", re.MULTILINE,
+        )
+        match: re.Match[str] | None = before_pattern.search(text)
+        if match:
+            return text[: match.start()] + new_line + text[match.start() :]
+
+    if insert_after:
+        after_pattern: re.Pattern[str] = re.compile(
+            rf"^{re.escape(insert_after)}:\s*.+\n", re.MULTILINE,
+        )
+        match = after_pattern.search(text)
+        if match:
+            return text[: match.end()] + new_line + text[match.end() :]
+
+    return new_line + text
+
+
+def apply_model_roles_to_opencode(opencode_dir: str, model_roles: dict[str, str]) -> None:
+    """
+    Inject forecaster and consolidator models into parallel agent YAML configs.
+
+    Writes ``default_model`` and ``summarizer_model`` in each file under
+    ``parallel_agents/`` from the resolved model roles in config.yaml.
+    """
+    parallel_dir: Path = Path(opencode_dir) / "parallel_agents"
+    if not parallel_dir.exists():
+        return
+
+    for yaml_path in sorted(parallel_dir.glob("*.yaml")):
+        text: str = yaml_path.read_text()
+        text = upsert_yaml_scalar(
+            text, "default_model", model_roles["forecaster"],
+            insert_after="failure_behavior",
+        )
+        if "summarizer_prompt" in text:
+            text = upsert_yaml_scalar(
+                text, "summarizer_model", model_roles["consolidator"],
+                insert_before="summarizer_prompt",
+            )
+        yaml_path.write_text(text)

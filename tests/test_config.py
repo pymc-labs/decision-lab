@@ -9,8 +9,11 @@ import pytest
 import yaml
 
 from dlab.config import (
+    apply_model_roles_to_opencode,
     load_config_yaml,
     load_dpack_config,
+    resolve_model_roles,
+    upsert_yaml_scalar,
     validate_config_structure,
 )
 
@@ -216,3 +219,77 @@ class TestHooksNormalization:
 
         assert config["hooks"]["pre-run"] == ["one.sh"]
         assert config["hooks"]["post-run"] == ["a.sh", "b.sh"]
+
+
+class TestResolveModelRoles:
+    """Tests for resolve_model_roles()."""
+
+    def test_defaults_all_to_default_model(self) -> None:
+        config: dict[str, Any] = {"default_model": "anthropic/claude-sonnet-4-5"}
+        roles: dict[str, str] = resolve_model_roles(config)
+        assert roles == {
+            "orchestrator": "anthropic/claude-sonnet-4-5",
+            "forecaster": "anthropic/claude-sonnet-4-5",
+            "consolidator": "anthropic/claude-sonnet-4-5",
+        }
+
+    def test_individual_overrides(self) -> None:
+        config: dict[str, Any] = {
+            "default_model": "anthropic/claude-sonnet-4-5",
+            "models": {
+                "forecaster": "anthropic/claude-haiku-4-5",
+                "consolidator": "anthropic/claude-opus-4-5",
+            },
+        }
+        roles: dict[str, str] = resolve_model_roles(config)
+        assert roles["orchestrator"] == "anthropic/claude-sonnet-4-5"
+        assert roles["forecaster"] == "anthropic/claude-haiku-4-5"
+        assert roles["consolidator"] == "anthropic/claude-opus-4-5"
+
+
+class TestUpsertYamlScalar:
+    """Tests for upsert_yaml_scalar()."""
+
+    def test_replaces_existing_key(self) -> None:
+        text: str = 'default_model: "old/model"\n'
+        result: str = upsert_yaml_scalar(text, "default_model", "new/model")
+        assert result == 'default_model: "new/model"\n'
+
+    def test_inserts_after_anchor(self) -> None:
+        text: str = "failure_behavior: continue\nmax_instances: 5\n"
+        result: str = upsert_yaml_scalar(
+            text, "default_model", "anthropic/claude-haiku-4-5",
+            insert_after="failure_behavior",
+        )
+        assert 'default_model: "anthropic/claude-haiku-4-5"' in result
+        assert result.index("failure_behavior") < result.index("default_model")
+
+
+class TestApplyModelRolesToOpencode:
+    """Tests for apply_model_roles_to_opencode()."""
+
+    def test_injects_models_into_parallel_yaml(self, tmp_path: Path) -> None:
+        opencode_dir: Path = tmp_path / ".opencode"
+        parallel_dir: Path = opencode_dir / "parallel_agents"
+        parallel_dir.mkdir(parents=True)
+        (parallel_dir / "forecaster.yaml").write_text(
+            "name: forecaster\n"
+            "failure_behavior: continue\n"
+            "max_instances: 5\n"
+            "summarizer_prompt: |\n"
+            "  Compare results.\n"
+        )
+
+        apply_model_roles_to_opencode(
+            str(opencode_dir),
+            {
+                "orchestrator": "anthropic/claude-sonnet-4-5",
+                "forecaster": "anthropic/claude-haiku-4-5",
+                "consolidator": "anthropic/claude-opus-4-5",
+            },
+        )
+
+        content: str = (parallel_dir / "forecaster.yaml").read_text()
+        assert 'default_model: "anthropic/claude-haiku-4-5"' in content
+        assert 'summarizer_model: "anthropic/claude-opus-4-5"' in content
+        assert content.index("default_model") < content.index("summarizer_model")

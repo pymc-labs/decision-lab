@@ -240,6 +240,27 @@ class TestPreflightCheck:
         ]
         assert len(google_warnings) == 1
 
+    def test_validates_models_from_config_yaml(self, tmp_path: Path) -> None:
+        """Forecaster/consolidator models from config.yaml should be validated."""
+        dpack: Path = tmp_path / "dpack"
+        (dpack / "opencode").mkdir(parents=True)
+        (dpack / "config.yaml").write_text(
+            "name: test\n"
+            "description: test\n"
+            "docker_image_name: test-img\n"
+            "default_model: anthropic/claude-opus-4-0\n"
+            "models:\n"
+            "  forecaster: google/gemini-2.0-flash\n"
+        )
+        env_file: Path = tmp_path / ".env"
+        env_file.write_text("ANTHROPIC_API_KEY=sk-123\n")
+
+        errors, warnings = preflight_check(
+            "anthropic/claude-opus-4-0", str(dpack), str(env_file),
+        )
+        assert errors == []
+        assert any("google/gemini-2.0-flash" in w for w in warnings)
+
 
 class TestApplyModelFallback:
     """Tests for apply_model_fallback()."""

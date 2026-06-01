@@ -466,7 +466,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 )
         fallback_msgs: list[str] = setup_opencode_config(
             config["config_dir"], work_dir, model, args.env_file,
-            no_sandboxing,
+            no_sandboxing, dpack_config=config,
         )
 
         # Refresh hook scripts from decision-pack

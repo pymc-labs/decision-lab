@@ -16,7 +16,9 @@ import difflib
 import os
 import re
 from pathlib import Path
+from typing import Any
 
+from dlab.config import load_config_yaml, resolve_model_roles
 from dlab.create_dpack import KNOWN_PROVIDER_ENVS, get_model_list, get_provider_env_vars
 
 
@@ -210,6 +212,18 @@ def preflight_check(
         return errors, warnings
 
     all_models: list[str] = _collect_models_from_dir(opencode_dir)
+
+    # Include forecaster/consolidator models from config.yaml (injected at session setup)
+    config_path: Path = Path(config_dir) / "config.yaml"
+    if config_path.exists():
+        try:
+            dpack_config: dict[str, Any] = load_config_yaml(config_dir)
+            roles: dict[str, str] = resolve_model_roles(dpack_config)
+            for role_model in (roles["forecaster"], roles["consolidator"]):
+                if role_model not in all_models:
+                    all_models.append(role_model)
+        except ValueError:
+            pass
 
     # Validate agent model names exist in known list
     for model in all_models:
