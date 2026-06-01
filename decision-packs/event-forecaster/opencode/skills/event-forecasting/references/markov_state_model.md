@@ -78,7 +78,7 @@ representation of a CTMC).
 ```python
 import pymc as pm
 import numpy as np
-import arviz as az
+from arviz_stats import summary
 
 # --- inputs (fill from your data) ---
 S = 4                      # number of states; absorbing "resolved" is index S-1
@@ -98,6 +98,17 @@ allowed = [(0, 1), (1, 0), (1, 2), (2, 1), (2, 3)]   # edit to your state graph
 # A rough per-rate prior mean: 1 / typical dwell time in days (e.g. ~1/30 for a month)
 rate_prior_mu = 1.0 / 30.0
 
+# Precompute branch indices (numpy, before pm.Model) — vectorized branch likelihood
+obs_mask = ~censored
+obs_from = from_state[obs_mask].astype(int)
+obs_to = to_state[obs_mask].astype(int)
+branch_rate_idx = np.fromiter(
+    (next(k for k, (a, b) in enumerate(allowed) if a == i and b == j)
+     for i, j in zip(obs_from, obs_to)),
+    dtype=int,
+    count=len(obs_from),
+)
+
 with pm.Model() as markov_model:
     # One positive rate per allowed transition
     rates = pm.Gamma("rates", mu=rate_prior_mu, sigma=rate_prior_mu,
@@ -111,37 +122,29 @@ with pm.Model() as markov_model:
     exit_rate = pm.math.stack(exit_rate)       # shape (S,)
 
     # Likelihood 1 — dwell times: time in a state ~ Exponential(exit_rate[from_state])
-    # Observed (transitioned) sojourns contribute the full Exponential logp;
-    # censored sojourns contribute the survival term log P(T > t) = -exit_rate * t.
-    obs_mask = ~censored
-    pm.Exponential("dwell_obs",
-                   lam=exit_rate[from_state[obs_mask]],
-                   observed=dwell_days[obs_mask])
+    pm.Exponential("dwell_obs", lam=exit_rate[obs_from], observed=dwell_days[obs_mask])
     if censored.any():
-        cens_rate = exit_rate[from_state[censored]]
-        pm.Potential("dwell_cens", (-cens_rate * dwell_days[censored]).sum())
+        cens_from = from_state[censored].astype(int)
+        pm.Potential("dwell_cens", (-exit_rate[cens_from] * dwell_days[censored]).sum())
 
-    # Likelihood 2 — which transition fired: given a move out of state i, the
-    # destination is Categorical with probs proportional to the outgoing rates.
-    # Build, for each observed transition, the prob of the realised (i -> j).
-    trans_logp = []
-    for n in np.where(obs_mask)[0]:
-        i, j = int(from_state[n]), int(to_state[n])
-        out_idx = [k for k, (a, _) in enumerate(allowed) if a == i]
-        out_rates = pm.math.stack([rates[k] for k in out_idx])
-        sel = out_idx.index([k for k in out_idx
-                             if allowed[k] == (i, j)][0])
-        p_branch = out_rates[sel] / pm.math.sum(out_rates)
-        trans_logp.append(pm.math.log(p_branch + 1e-12))
-    pm.Potential("branch", pm.math.sum(pm.math.stack(trans_logp)))
+    # Likelihood 2 — branch choice (vectorized): log q_ij - log exit_rate(i)
+    log_branch = (
+        pm.math.log(rates[branch_rate_idx] + 1e-12)
+        - pm.math.log(exit_rate[obs_from] + 1e-12)
+    )
+    pm.Potential("branch", log_branch.sum())
 
     idata = pm.sample(
-        draws=200, tune=200, chains=2,
-        target_accept=0.9,
-        nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True, "log_prior": True},
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.9},
         # do NOT pass random_seed
     )
+    pm.stats.compute_log_likelihood(idata, model=markov_model)
+    pm.stats.compute_log_prior(idata, model=markov_model)
 ```
 
 > The competing-exponentials factorisation above (dwell time × branch choice) is
@@ -172,20 +175,29 @@ def build_Q(rate_vec):
 horizon_days = [90, 180, 365]          # set from orchestrator horizons
 p_event_draws = np.zeros((n_post, len(horizon_days)))
 
-# Optional thinning for speed: expm on every draw can be slow for large n_post
-thin = max(1, n_post // 2000)
-idx = np.arange(0, n_post, thin)
-
-for d in idx:
+for d in range(n_post):
     Q = build_Q(rate_draws[d])
     for h, t in enumerate(horizon_days):
         P_t = expm(Q * t)
         p_event_draws[d, h] = P_t[start_state, absorbing]
 
-p_event_draws = p_event_draws[idx]
-p_event_by_horizon = [float(np.mean(p_event_draws[:, h])) for h in range(len(horizon_days))]
-ci_low_by_horizon  = [float(np.percentile(p_event_draws[:, h], 3))  for h in range(len(horizon_days))]
-ci_high_by_horizon = [float(np.percentile(p_event_draws[:, h], 97)) for h in range(len(horizon_days))]
+# Derived quantities for PriorSensitivity (psense)
+import xarray as xr
+
+n_chains, n_draws = idata.posterior.sizes["chain"], idata.posterior.sizes["draw"]
+idata.posterior["p_event_by_horizon"] = xr.DataArray(
+    p_event_draws.reshape(n_chains, n_draws, len(horizon_days)),
+    dims=("chain", "draw", "horizon"),
+    coords={"horizon": horizon_days},
+)
+
+# Optional thinning for speed when computing median days
+thin = max(1, n_post // 2000)
+idx = np.arange(0, n_post, thin)
+p_event_thinned = p_event_draws[idx]
+p_event_by_horizon = [float(np.mean(p_event_thinned[:, h])) for h in range(len(horizon_days))]
+ci_low_by_horizon  = [float(np.percentile(p_event_thinned[:, h], 3))  for h in range(len(horizon_days))]
+ci_high_by_horizon = [float(np.percentile(p_event_thinned[:, h], 97)) for h in range(len(horizon_days))]
 
 # Median days to event: per draw, solve P(resolved by t) = 0.5 on a time grid
 grid = np.arange(1, 365 * 5, 7)        # weekly grid out to 5 years; extend if needed
@@ -210,9 +222,9 @@ meaningful chance of not resolving in the modelled window — consider
 ## Convergence diagnostics
 
 ```python
-summary         = az.summary(idata)
-rhat_max        = float(summary["r_hat"].max())
-ess_bulk_min    = float(summary["ess_bulk"].min())
+summary_df      = summary(idata)
+rhat_max        = float(summary_df["r_hat"].max())
+ess_bulk_min    = float(summary_df["ess_bulk"].min())
 divergences     = int(idata.sample_stats["diverging"].sum())
 total_draws     = int(idata.sample_stats.sizes["chain"] * idata.sample_stats.sizes["draw"])
 divergence_rate = divergences / total_draws
