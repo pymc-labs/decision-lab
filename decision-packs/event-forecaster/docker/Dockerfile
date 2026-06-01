@@ -10,7 +10,7 @@ RUN pixi install --locked
 RUN pixi run python -c "import pymc; import arviz; print(f'PyMC {pymc.__version__} | ArviZ {arviz.__version__} OK')"
 RUN pixi run python -c "import polars; import numpy; import scipy; print('Polars / NumPy / SciPy OK')"
 RUN pixi run python -c "import jax; import numpyro; print(f'JAX {jax.__version__} | numpyro OK')"
-RUN pixi run python -c "from pymc.sampling.jax import sample_numpyro_nuts; print('PyMC numpyro sampler OK')"
+RUN pixi run python -c "import nutpie; print('nutpie OK')"
 
 # Set PIXI_PROJECT_MANIFEST globally so all pixi commands in the container
 # (pixi run, pixi add) automatically target /opt/pixi without agents needing

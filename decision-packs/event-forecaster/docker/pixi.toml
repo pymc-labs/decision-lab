@@ -7,8 +7,8 @@ platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 
 [dependencies]
 python = ">=3.11,<3.13"
-pymc = "*"
-arviz = "*"
+pymc = ">=6.0.0,<7"
+arviz = ">=1.0.0,<2"
 numpy = "*"
 pandas = "*"
 polars = "*"
@@ -25,6 +25,7 @@ fredapi = "*"
 jax = "*"
 jaxlib = "*"
 numpyro = "*"
+nutpie = "*"
 h5netcdf = "*"
 h5py = "*"
 markdown = ">=3.0"
