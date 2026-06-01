@@ -126,7 +126,7 @@ with pm.Model() as jd_model:
         draws=200, tune=200, chains=2,
         target_accept=0.92,
         nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True},
+        idata_kwargs={"log_likelihood": True, "log_prior": True},
         # do NOT pass random_seed
     )
 
@@ -300,14 +300,11 @@ idata.to_netcdf("outputs/idata.nc")
 
 ## Calibration checks
 
-**PriorSensitivity on τ** — most important. Perturb τ by ±10% and recompute P(event)
-with the same simulated paths (just change `tau_scaled` and re-evaluate the crossing).
-- PASS < 10pp | WARN 10–20pp | FAIL > 20pp (forecast is threshold-dominated).
-
-**PriorSensitivity on jump parameters** — perturb the `p_jump` prior (Beta(2,20) →
-Beta(1,10) and Beta(1,40)) and the `sigma_J` prior scale. If P(event by T_mid) shifts
-by > 10pp, the forecast is jump-prior-dominated — expected when jumps are rare in the
-data; report WARN and lean on the EVT cross-check.
+**PriorSensitivity** — primary: derived `p_event_by_horizon` via psense per
+[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md). Optional **structural**
+check: perturb τ by ±10% and re-evaluate crossings on fixed paths (document in JSON
+`note` as `structural_tau`). WARN/FAIL at T_mid: disclose threshold/prior dependence;
+expected when jumps are rare — lean on EVT cross-check.
 
 **ConsistencyCheck** — verify P(event by T) is monotonically non-decreasing across
 horizons and all values are in [0, 1].

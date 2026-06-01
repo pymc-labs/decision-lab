@@ -128,7 +128,7 @@ with pm.Model() as ou_model:
         draws=200, tune=200, chains=2,          # short chains for quick runs
         target_accept=0.9,
         nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True},
+        idata_kwargs={"log_likelihood": True, "log_prior": True},
         # do NOT pass random_seed
     )
 ```
@@ -144,7 +144,7 @@ with pm.Model() as rwd_model:
     sigma = pm.Deterministic("sigma", pm.math.exp(log_sigma))
     pm.Normal("obs", mu=mu, sigma=sigma, observed=np.diff(y))
     idata = pm.sample(draws=200, tune=200, chains=2, target_accept=0.92,
-                      nuts_sampler="numpyro", idata_kwargs={"log_likelihood": True})
+                      nuts_sampler="numpyro", idata_kwargs={"log_likelihood": True, "log_prior": True})
 ```
 
 ## Variant: ContinuousDriverModel-RWD (Random Walk with Drift)
@@ -178,7 +178,7 @@ with pm.Model() as rwd_model:
     idata = pm.sample(
         draws=200, tune=200, chains=2, target_accept=0.92,
         nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True},
+        idata_kwargs={"log_likelihood": True, "log_prior": True},
     )
 ```
 
@@ -236,7 +236,7 @@ with pm.Model() as sv_model:
     nu = pm.Exponential("nu", lam=1/10)
     pm.StudentT("r", nu=nu, mu=0.0, sigma=pm.math.exp(h/2), observed=r)
     idata = pm.sample(draws=200, tune=200, chains=2, target_accept=0.95,
-                      nuts_sampler="numpyro", idata_kwargs={"log_likelihood": True})
+                      nuts_sampler="numpyro", idata_kwargs={"log_likelihood": True, "log_prior": True})
 ```
 
 ## Step 4 — Convergence diagnostics
@@ -361,9 +361,11 @@ with open("forecast.json", "w") as f:
 idata.to_netcdf("outputs/idata.nc")
 ```
 
-## Step 7 — Model checks: PriorSensitivity on τ
+## Step 7 — Structural check: threshold τ (optional)
 
-The most important calibration check for this model is sensitivity to the threshold choice. Perturb τ by ±10-20% and re-run the forward simulation (no resampling needed — just change `tau_scaled` and re-simulate).
+In addition to psense on `p_event_by_horizon` (see `prior_sensitivity_psense.md`), you may
+perturb elicited τ by ±10–20% and re-run forward simulation (no resampling — change
+`tau_scaled` and re-evaluate crossings on paths).
 
 ```python
 # Perturb threshold by 10% and recompute P(event)
@@ -381,8 +383,8 @@ p_mid_perturbed = float(np.mean(fp_days_p <= horizon_trading_days[2]))
 p_mid_original  = float(cdf_vals[2])
 
 delta_pp = abs(p_mid_perturbed - p_mid_original) * 100
-print(f"PriorSensitivity on τ: {delta_pp:.1f}pp change with 10% threshold perturbation")
-# PASS: < 10pp | WARN: 10–20pp | FAIL: > 20pp
+print(f"Structural τ perturbation: {delta_pp:.1f}pp change at T_mid with 10% threshold shift")
+# Document in check_prior_sensitivity.json note; tier still from psense at T_mid unless τ-only fallback
 ```
 
 ## Gotchas
@@ -395,11 +397,10 @@ print(f"PriorSensitivity on τ: {delta_pp:.1f}pp change with 10% threshold pertu
 
 ## Model checks for ContinuousDriverModel
 
-**PriorSensitivity on τ (threshold)** — most important check for all variants.
-Perturb the threshold by ±10% and recompute P(event). See `model_checks.md`.
-- PASS: < 10pp change
-- WARN: 10–20pp change  
-- FAIL: > 20pp change — forecast is threshold-dominated, not data-driven
+**PriorSensitivity** — primary: derived `p_event_by_horizon` via psense per
+[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md). Optional **structural**
+τ perturbation (±10–20%, re-simulate paths): see Step 7 below; document in JSON `note`.
+Tier on T_mid per [`model_checks.md`](model_checks.md); WARN/FAIL = disclose dependence.
 
 **ReferenceClassCongruence** — compare P(event by T_mid) to a historical base rate
 from analogous events. A ratio > 4× or < 0.25× warrants explicit justification.
@@ -471,7 +472,7 @@ with pm.Model() as ll_model:
         draws=200, tune=200, chains=2,
         target_accept=0.92,
         nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True},
+        idata_kwargs={"log_likelihood": True, "log_prior": True},
         # do NOT pass random_seed
     )
 ```
@@ -565,7 +566,7 @@ with pm.Model() as llt_model:
     idata = pm.sample(
         draws=200, tune=200, chains=2, target_accept=0.95,
         nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True},
+        idata_kwargs={"log_likelihood": True, "log_prior": True},
     )
 ```
 

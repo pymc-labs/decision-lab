@@ -41,7 +41,7 @@ If a number is `NaN`, report `NaN` and explain why. Never substitute made-up val
 python script.py
 ```
 
-Pre-installed packages include: pymc, arviz, numpyro, polars, pyarrow, scipy, numpy, matplotlib, bambi, jax, pandas.
+Pre-installed packages include: pymc, arviz, numpyro, polars, pyarrow, scipy, numpy, matplotlib, jax, pandas.
 
 To install an **additional package** your method requires:
 - conda-forge: `pixi add <package>`
@@ -185,12 +185,12 @@ Write `forecast.json`:
 ### Step 7 — Run calibration checks
 
 Run whichever of these are appropriate for your method:
-- `PriorSensitivity`: perturb the prior; measure change in P(event at mid-horizon)
+- `PriorSensitivity`: for PyMC, power-scaling sensitivity on derived `p_event_by_horizon` (all horizons; tier on T_mid) per `event-forecasting/references/prior_sensitivity_psense.md`; analytic methods use concentration perturbation per `model_checks.md`
 - `ConsistencyCheck`: verify monotonicity and internal consistency
 - `ReferenceClassCongruence`: compare to historical base rate if one is available
 - `HistoricalCalibration`: if historical episodes exist
 
-Read `event-forecasting/references/calibration_checks.md` for implementation details. Write results to `outputs/check_<name>.json`.
+Read `event-forecasting/references/model_checks.md` for protocols and JSON schemas. Write results to `outputs/check_<name>.json`.
 
 ### Step 8 — Sanity check
 

@@ -63,19 +63,9 @@ Inspect every available data file, then answer:
 
 **Each forecaster selects ONE method** that best fits the data and research findings. Choose the method that is most appropriate for the available evidence — you do not need to run multiple methods. The ensemble of parallel forecasters provides coverage across methods.
 
-### Backend preference
+### Implementation backend
 
-| Method | Interface | Reason |
-|---|---|---|
-| `ContinuousDriverModel` | Raw PyMC | OU/RWD/SV/LL/LLT structures; Bambi cannot express them directly — see `references/continuous_driver_model.md` |
-| `JumpDiffusionModel` | Raw PyMC | Two-component jump mixture + Monte-Carlo first passage; Bambi cannot express it |
-| `MarkovStateModel` | Raw PyMC | Custom transition-rate (generator) matrix + matrix exponential, not a regression |
-| `HazardModel` | Bambi | `censored()` formula handles right-censoring cleanly |
-| `IndicatorModel` | Bambi | Formula syntax, auto-priors, `predict()` for probability |
-| `ReferenceClassModel` | Raw PyMC | Custom Beta-Beta hierarchy, not a regression |
-| `ScenarioDecomposition` | Raw PyMC | Dirichlet + Beta structure, not a regression |
-| `CausalMechanismModel` | Raw PyMC | Custom structural model |
-| `ThresholdCrossingModel` | Raw PyMC | OU process + Monte Carlo simulation |
+All ten methods use **raw PyMC** — explicit priors, custom likelihoods (censoring, state-space, mixtures), `pm.Deterministic` derived quantities for forecasts and psense, and `pm.sample_prior_predictive` / `pm.sample_posterior_predictive` when needed. See each method's reference file under `references/`.
 
 ### Special case: N=1 historical event
 
@@ -85,7 +75,7 @@ When only **one historical case** of the event exists, `HazardModel` is not viab
 - **If a dominant causal driver is measurable**: `ThresholdCrossingModel` — explicitly designed for the single-case situation.
 - **If resolution paths are identifiable**: `ScenarioDecomposition`.
 - **Do NOT run `HazardModel`** — report "not applicable: N=1, insufficient data".
-- `PriorSensitivity` becomes especially important; flag WARN or FAIL prominently.
+- `PriorSensitivity` becomes especially important; flag WARN or FAIL prominently and **justify** in `summary.md` (sensitivity is not automatically a defect — see `references/model_checks.md`).
 
 ## When to use which reference
 
@@ -102,6 +92,7 @@ When only **one historical case** of the event exists, `HazardModel` is not viab
 | Discrete regimes with historical transitions (calm → crisis → resolved) | `references/markov_state_model.md` |
 | Event may never resolve (permanent non-resolution possible) | `references/cure_rate_model.md` |
 | Model checking protocols, JSON schemas, Brier score | `references/model_checks.md` |
+| Prior sensitivity via ArviZ psense (PyMC) | `references/prior_sensitivity_psense.md` |
 | Output schema, convergence thresholds, agreement criteria | `references/output_schema.md` |
 
 ## Core output contract
@@ -121,3 +112,4 @@ Every method must produce `forecast.json`. Full schema in `references/output_sch
 5. **Causal awareness.** Prefer methods that explain *why* the event occurs over purely statistical approaches when causal structure is identifiable. Historical patterns can fail when the causal structure changes.
 6. **Reference class discipline.** When selecting a reference class, use the narrowest class with N ≥ 5 historical cases. Document why you chose it.
 7. **No domain-specific defaults.** Do not import threshold values, percentile choices, scenario structures, or reference class compositions from other forecasting tasks. Every number must be derived from the current question and data.
+8. **Prior sensitivity is diagnostic, not a veto.** Unless the user asks for causal interpretation, run PriorSensitivity on **derived** `p_event_by_horizon` (power-scaling / psense for PyMC), not on every model parameter. WARN/FAIL means disclose prior dependence — especially at long horizons — not that the forecast is invalid.

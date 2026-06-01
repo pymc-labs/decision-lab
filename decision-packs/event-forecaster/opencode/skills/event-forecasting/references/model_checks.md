@@ -6,21 +6,67 @@ Five checks for validating and stress-testing forecasts. Run the checks specifie
 
 ## Check 1: PriorSensitivity
 
-**Always run.** Tests whether the posterior changes materially when priors are weakened or shifted.
+**Always run.** Tests how much the **forecast** depends on the prior and likelihood under systematic perturbation.
 
-### Protocol
+### Prior sensitivity is not inherently bad
 
-1. Identify the 2–3 most influential priors in your model (the ones with the tightest effect on the posterior).
-2. Refit with each prior halved in concentration / doubled in sigma. Do NOT change the data.
-3. Compare P(event by T_mid) between the original and perturbed fits.
+This check measures **dependence and stability**, not model validity.
 
-### Classification
+| What it measures | What it does **not** mean |
+|------------------|---------------------------|
+| The forecast moves when priors/likelihood are perturbed | The model is wrong and must be refit |
+| `prior-data conflict` (ArviZ psense) | You must weaken the prior until the warning disappears |
+| `WARN` / `FAIL` on Δ P(event) at T_mid | The forecast is incorrect — it means **material prior dependence** under the perturbation, which must be **disclosed** |
+
+**Expected and acceptable** when: priors were intentionally informative (elicitation), N is small and the likelihood is weak, long horizons are prior/tail-dominated while short horizons are data-dominated, or structural quantities (threshold τ) were set by domain judgment.
+
+Parallel reviewers use FAIL/WARN as **review urgency** ([forecaster.yaml](../../parallel_agents/forecaster.yaml)), not as grounds to discard a method without written justification — same spirit as ReferenceClassCongruence FAIL below.
+
+---
+
+### Primary path (PyMC / Bayesian methods)
+
+Use **power-scaling sensitivity** on **derived predictions**, not refits on individual parameter priors. Full implementation: [`prior_sensitivity_psense.md`](prior_sensitivity_psense.md).
+
+**Default scope:** cumulative **P(event by T)** at **each** `horizon_dates` entry (same definition as `forecast.json` `p_event_by_horizon`). Do **not** run psense on every latent, spline, or GP coefficient unless the user asks for causal interpretation (see below).
+
+**Workflow (summary):**
+
+1. Sample once with `idata_kwargs={"log_likelihood": True, "log_prior": True}`.
+2. Per MCMC draw, compute `p_event_by_horizon` for all horizons; add to `idata.posterior` (see prior_sensitivity_psense.md).
+3. `arviz_stats.psense_summary` on all horizon derived variables; optional `plot_psense_quantities`.
+4. Set top-level `status` from **T_mid** (mid-horizon index) using pp movement (canonical) or document CJS in `by_horizon`.
+5. Use per-horizon results in `note` / `by_horizon` for narratives such as: *short-horizon forecast data-dominated; 12-month forecast prior-sensitive*.
+
+**Unless the user asks for causal interpretation** (mechanism, driver importance, coefficient stability, “why” not just “when”): keep PriorSensitivity **prediction-only**. Method name alone does not trigger parameter-level psense — e.g. `CausalMechanismModel` with a headline-probability-only brief uses prediction-only; `HazardModel` with “which factors drive timing?” adds psense on **named interpretable** parameters listed in the question. See [`causal_mechanism.md`](causal_mechanism.md).
+
+**Hierarchical models:** power-scale **top-level** hyperpriors only when doing parameter-level psense (EABM §6.4).
+
+### Classification (orchestrator tier — T_mid)
+
+Based on absolute change in P(event by **T_mid**) under power-scaling (pp movement at α=0.8 vs 1.0 vs 1.25 on the derived forecast, or equivalent psense quantity perturbation):
 
 | Status | Criterion |
-|---|---|
+|--------|-----------|
 | `PASS` | Absolute change in P(event by T_mid) < 10 percentage points |
 | `WARN` | Change is 10–20 pp |
 | `FAIL` | Change > 20 pp |
+
+On WARN/FAIL: explain in `summary.md` **why** sensitivity is plausible (small N, informative prior, long horizon, elicited τ). Do not treat FAIL as a veto.
+
+Per-horizon `status` in `by_horizon` may use the same pp thresholds independently for reporting; top-level `status` remains T_mid unless the orchestrator designates another horizon.
+
+### Fallback paths (non-PyMC or structural)
+
+Use when psense is not available:
+
+| Situation | Approach |
+|-----------|----------|
+| Analytic / closed form (`ReferenceClassModel`, `ScenarioDecomposition`) | Perturb prior concentration (e.g. Beta κ ±50%, Dirichlet concentration ±50%); compare P(event) at each horizon |
+| Elicited threshold τ not in posterior | Perturb τ ±10–20% and re-simulate paths (no MCMC refit); report separately in `note` as `structural_perturbation` |
+| `log_prior` cannot be stored | Manual prior weakening + single refit, or document skip |
+
+Avoid the legacy “pick 2–3 priors and refit” loop for PyMC when psense on derived quantities is feasible.
 
 ### Output: `outputs/check_prior_sensitivity.json`
 
@@ -28,13 +74,26 @@ Five checks for validating and stress-testing forecasts. Run the checks specifie
 {
   "check": "PriorSensitivity",
   "status": "PASS | WARN | FAIL",
+  "method": "psense | refit | analytic_perturbation | structural_tau",
+  "t_mid_horizon": "<YYYY-MM-DD>",
   "original_p_mid_horizon": <float>,
-  "perturbed_p_mid_horizon": <float>,
   "absolute_change_pp": <float>,
-  "prior_changed": "<description of which prior was perturbed>",
-  "note": "<one-line interpretation>"
+  "note": "<interpretation: e.g. short horizons data-dominated; long horizon prior-sensitive; prior-data conflict at 12mo>",
+  "by_horizon": [
+    {
+      "horizon_date": "<YYYY-MM-DD>",
+      "p_event": <float>,
+      "absolute_change_pp": <float>,
+      "prior_cjs": <float or null>,
+      "likelihood_cjs": <float or null>,
+      "psense_diagnosis": "<✓ | prior-data conflict | strong prior / weak likelihood | null>",
+      "status": "PASS | WARN | FAIL"
+    }
+  ]
 }
 ```
+
+`by_horizon` is **required** for PyMC methods using psense; optional for analytic fallbacks. Fields `perturbed_p_mid_horizon` and `prior_changed` from the old schema may be omitted when using psense; use `note` for perturbation type.
 
 ---
 
@@ -45,7 +104,7 @@ Five checks for validating and stress-testing forecasts. Run the checks specifie
 ### Rules to check
 
 | Rule | What to verify |
-|---|---|
+|------|----------------|
 | Monotonicity | P(event by T1) ≤ P(event by T2) for T1 < T2 |
 | MECE (scenario decomposition) | Scenario probabilities sum to 1.0 ± 0.02 |
 | Plausibility | P10 days < median days < P90 days |
@@ -94,7 +153,7 @@ brier_skill    = 1 - brier_score / brier_baseline  # >0 is better than naive
 ### Classification
 
 | Status | Criterion |
-|---|---|
+|--------|-----------|
 | `PASS` | Brier skill score > 0.05 (beats naive baseline) |
 | `WARN` | Brier skill score 0 to 0.05 (at par with naive) |
 | `FAIL` | Brier skill score < 0 (worse than always predicting the base rate) |
@@ -130,7 +189,7 @@ Tests whether the method's aggregate P(event) is consistent with the naive refer
 ### Classification
 
 | Status | Criterion |
-|---|---|
+|--------|-----------|
 | `PASS` | 0.4 ≤ ratio ≤ 2.5 |
 | `WARN` | 0.25 < ratio < 0.4 or 2.5 < ratio ≤ 4 |
 | `FAIL` | ratio ≤ 0.25 or ratio > 4 |
@@ -165,7 +224,7 @@ Compare the forecast to publicly available prediction market prices or expert co
 ### Classification
 
 | Status | Criterion |
-|---|---|
+|--------|-----------|
 | `PASS` | Difference < 15 pp |
 | `WARN` | Difference 15–30 pp |
 | `FAIL` | Difference > 30 pp (or market definition is incompatible with our question) |

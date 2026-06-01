@@ -11,7 +11,6 @@ RUN pixi run python -c "import pymc; import arviz; print(f'PyMC {pymc.__version_
 RUN pixi run python -c "import polars; import numpy; import scipy; print('Polars / NumPy / SciPy OK')"
 RUN pixi run python -c "import jax; import numpyro; print(f'JAX {jax.__version__} | numpyro OK')"
 RUN pixi run python -c "from pymc.sampling.jax import sample_numpyro_nuts; print('PyMC numpyro sampler OK')"
-RUN pixi run python -c "import bambi; print(f'Bambi {bambi.__version__} OK')"
 
 # Set PIXI_PROJECT_MANIFEST globally so all pixi commands in the container
 # (pixi run, pixi add) automatically target /opt/pixi without agents needing

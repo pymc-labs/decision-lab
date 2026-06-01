@@ -87,6 +87,7 @@ with pm.Model() as causal_model:
         draws=500, tune=500, chains=4,
         target_accept=0.92,
         nuts_sampler="numpyro",
+        idata_kwargs={"log_likelihood": True, "log_prior": True},
     )
 ```
 
@@ -148,10 +149,13 @@ Report this as a sensitivity analysis in `summary.md`.
 
 ## Model checks
 
-**PriorSensitivity** — most important check. The causal model depends heavily on
-elicited driver values and their uncertainties. Perturb each driver's current_mu
-by ±1 sigma and check how much P(event) changes. Any driver where a 1-sigma shift
-changes P(event) by > 15pp is a dominant uncertainty — flag it.
+**PriorSensitivity** — always run derived `p_event_by_horizon` via psense per
+[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md). **When the user asks for
+causal interpretation**, also run psense on named driver/effect parameters and keep
+the ±1σ driver perturbation check below. Prediction-only briefs skip parameter-level psense.
+
+Driver perturbation (causal narrative): shift each `current_mu` by ±1σ and check Δ P(event);
+> 15pp → dominant uncertainty — flag in `summary.md` (not automatic invalidation).
 
 **ConsistencyCheck** — verify that the causal direction is as expected:
 increasing each driver with direction=+1 should increase P(event), and

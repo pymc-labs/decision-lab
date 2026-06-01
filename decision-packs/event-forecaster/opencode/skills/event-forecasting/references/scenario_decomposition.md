@@ -81,6 +81,7 @@ with pm.Model() as scenario_model:
         draws=200, tune=200, chains=2,
         target_accept=0.9,
         nuts_sampler="numpyro",
+        idata_kwargs={"log_likelihood": True, "log_prior": True},
         # do NOT pass random_seed
     )
 ```
@@ -144,9 +145,9 @@ ReferenceClassModel base rate. A ratio > 4× or < 0.25× means your scenario wei
 or conditional probabilities are inconsistent with historical analogues.
 Document and justify any large divergence.
 
-**PriorSensitivity** — perturb the Dirichlet concentration vector by ±50% and
-re-run. If P(event by T_mid) changes by > 10pp, the forecast is sensitive to
-scenario weight assumptions. Report as WARN.
+**PriorSensitivity** — analytic fallback: perturb Dirichlet concentration by ±50%
+at each horizon per [`model_checks.md`](model_checks.md). WARN/FAIL at T_mid means
+disclose sensitivity to scenario weights, not automatic invalidation.
 
 ## Gotchas
 

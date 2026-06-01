@@ -57,6 +57,7 @@ with pm.Model() as hazard_model:
         draws=500, tune=500, chains=4,
         target_accept=0.92,
         nuts_sampler="numpyro",
+        idata_kwargs={"log_likelihood": True, "log_prior": True},
         # do NOT pass random_seed
     )
 ```
@@ -92,6 +93,24 @@ p10_days    = float(np.percentile(t_med_samples, 10))
 p90_days    = float(np.percentile(t_med_samples, 90))
 ```
 
+### Derived quantities for PriorSensitivity (psense)
+
+Attach per-draw cumulative probabilities to `idata.posterior` before running
+[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md):
+
+```python
+import xarray as xr
+
+alpha = idata.posterior["alpha"]
+beta = idata.posterior["beta"]
+horizon_days = np.array([...])  # same as orchestrator horizons
+
+t = xr.DataArray(horizon_days, dims="horizon", coords={"horizon": horizon_days})
+p_by_h = 1.0 - np.exp(-((t / beta) ** alpha))  # dims: chain, draw, horizon
+
+idata.posterior["p_event_by_horizon"] = p_by_h
+```
+
 ## Convergence diagnostics
 
 ```python
@@ -110,8 +129,9 @@ reference class (leave-one-out or hold-out): did the model assign high probabili
 to the events that resolved quickly and low probability to those that took longer?
 See `model_checks.md` for Brier score implementation.
 
-**PriorSensitivity** — perturb the Weibull shape and scale priors. If P(event by T_mid)
-changes by > 10pp, the forecast is prior-dominated (likely due to small N).
+**PriorSensitivity** — run derived-quantity psense on `p_event_by_horizon` per
+[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md) and [`model_checks.md`](model_checks.md).
+If WARN/FAIL at T_mid, disclose prior dependence (common with small N); not automatic invalidation.
 
 **ConsistencyCheck** — verify that S(t) is strictly decreasing (survival function
 should never increase). Check P(event by T1) ≤ P(event by T2) for all T1 < T2.
@@ -157,7 +177,8 @@ with pm.Model() as loglogistic_model:
     pm.Potential("censored", log_surv.sum())
 
     idata = pm.sample(draws=200, tune=200, chains=2, target_accept=0.9,
-                      nuts_sampler="numpyro")
+                      nuts_sampler="numpyro",
+                      idata_kwargs={"log_likelihood": True, "log_prior": True})
 ```
 
 ### Two-component Weibull mixture (fast and slow resolvers)
@@ -187,5 +208,6 @@ with pm.Model() as mixture_model:
                observed=observed_dur)
 
     idata = pm.sample(draws=200, tune=200, chains=2, target_accept=0.92,
-                      nuts_sampler="numpyro")
+                      nuts_sampler="numpyro",
+                      idata_kwargs={"log_likelihood": True, "log_prior": True})
 ```

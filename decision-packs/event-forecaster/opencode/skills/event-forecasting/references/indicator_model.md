@@ -55,6 +55,7 @@ with pm.Model() as indicator_model:
         draws=500, tune=500, chains=4,
         target_accept=0.9,
         nuts_sampler="numpyro",
+        idata_kwargs={"log_likelihood": True, "log_prior": True},
     )
 ```
 
@@ -76,10 +77,23 @@ ci_high_in_W   = float(np.percentile(p_current_samples, 97))
 
 ## Extending to multiple horizons
 
-The base model gives P(event in next W days). To get P(event in next W1, W2, W3 days):
-- If W1 < W < W2, scale linearly as an approximation (or refit for each W).
-- Preferred: fit the model three times, once per horizon. Each fit takes different labels.
-- Or use an exponential decay approximation: `P(event in W') ≈ 1 - (1 - P_W)^(W'/W)` for W' ≠ W.
+The base model gives P(event in next W days). **Preferred for psense:** fit once per
+orchestrator horizon (different `event_within_W` labels per W), or refit for each W1, W2, W3.
+After sampling, attach per-draw probabilities for PriorSensitivity:
+
+```python
+import xarray as xr
+
+# Current indicators X_current; one fit per horizon W
+logit_p = idata.posterior["alpha"] + (
+    idata.posterior["betas"] @ xr.DataArray(X_current.flatten(), dims="feature")
+)
+p_draw = 1 / (1 + np.exp(-logit_p))
+idata.posterior["p_event_h0"] = p_draw.squeeze()  # name per horizon index, e.g. p_event_h1
+```
+
+See [`prior_sensitivity_psense.md`](prior_sensitivity_psense.md). Approximation only if refit is infeasible:
+- `P(event in W') ≈ 1 - (1 - P_W)^(W'/W)` for W' ≠ W (document as approximate).
 
 ## Feature selection
 
@@ -95,9 +109,10 @@ historical labelled episodes (leave-one-out or hold-out set). Compute Brier scor
 vs. naive baseline. If Brier skill < 0.05, the indicators do not improve over the
 base rate and the method should be downgraded or replaced.
 
-**PriorSensitivity** — perturb the coefficient priors (sigma from 1.0 to 0.5 and 2.0).
-If P(event by T_mid) changes by > 10pp, the model is prior-dominated — likely due
-to small N or weak signal.
+**PriorSensitivity** — derived `p_event_by_horizon` via psense per
+[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md) (sample with
+`log_prior` and `log_likelihood`). WARN/FAIL at T_mid: disclose prior dependence
+(small N / weak signal); justify in `summary.md`.
 
 **ConsistencyCheck** — verify that increasing each indicator value in the "positive"
 direction increases P(event) as expected. If the sign of a coefficient contradicts

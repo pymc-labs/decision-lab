@@ -43,7 +43,7 @@ See `opencode/skills/event-forecasting/SKILL.md` for the full method menu:
 ## Python environment
 
 `python` inside the container routes to a pre-installed pixi environment with
-PyMC, arviz, numpyro, polars, pyarrow, scipy, numpy, matplotlib, bambi, and jax.
+PyMC, arviz, numpyro, polars, pyarrow, scipy, numpy, matplotlib, and jax.
 
 To install additional packages: `pixi add <package>` (conda-forge) or
 `pixi add --pypi <package>` (PyPI).

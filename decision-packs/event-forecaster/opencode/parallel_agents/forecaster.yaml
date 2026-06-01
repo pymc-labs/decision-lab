@@ -61,6 +61,7 @@ summarizer_prompt: |
   Standard score adjustments:
   - Convergence FAIL → −4; MARGINAL → −1; PASS/N_A → 0
   - PriorSensitivity FAIL → −3; WARN → −1; PASS → 0
+    (review urgency — material prior dependence at T_mid; not automatic invalidation; see model_checks.md)
   - ConsistencyCheck FAIL → −3; PASS → 0
   - ReferenceClassCongruence FAIL → −2; WARN → −1; PASS → 0
   - Evidence score bonus: add evidence_score − 1 (so score 3 = +2, score 2 = +1, score 1 = 0, score 0 = −1)

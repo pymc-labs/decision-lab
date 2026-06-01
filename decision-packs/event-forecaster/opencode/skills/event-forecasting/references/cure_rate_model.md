@@ -86,6 +86,7 @@ with pm.Model() as cure_model:
         draws=200, tune=200, chains=2,
         target_accept=0.92,
         nuts_sampler="numpyro",
+        idata_kwargs={"log_likelihood": True, "log_prior": True},
     )
 ```
 
@@ -137,10 +138,9 @@ Include two extra fields beyond the standard schema:
 
 ## Model checks
 
-**PriorSensitivity on π** — most important. Perturb the cure rate prior (try
-Beta(1,4), Beta(2,8), Beta(4,16)) and check how much the long-run P(event ever)
-and the P(event by T_mid) change. A FAIL (> 20pp shift) means the cure fraction
-is entirely prior-driven.
+**PriorSensitivity** — derived `p_event_by_horizon` (and P(event ever) if reported)
+via psense per [`prior_sensitivity_psense.md`](prior_sensitivity_psense.md). π is
+often prior-driven with small N; WARN/FAIL requires disclosure, not rejection.
 
 **ConsistencyCheck** — verify that P(event by T) is monotonically non-decreasing
 AND that P(event by T) converges to P(event ever) = 1 − mean(π) as T grows large.
@@ -153,7 +153,7 @@ non-resolution but 90% of historical analogues resolved, document the justificat
 
 - **Identifiability with small N**: With fewer than 10 events, π is very hard to
   separate from the survival distribution. The cure fraction will track the prior
-  closely. Report PriorSensitivity WARN/FAIL prominently.
+  closely. Report PriorSensitivity WARN/FAIL prominently with justification.
 - **Long censoring times ≠ cure**: A censored observation that is "very long" is
   not necessarily cured — it may just have a slow resolution. Be careful not to
   classify long censored cases as permanent non-resolutions without domain evidence.

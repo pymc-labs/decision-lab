@@ -139,6 +139,7 @@ with pm.Model() as markov_model:
         draws=200, tune=200, chains=2,
         target_accept=0.9,
         nuts_sampler="numpyro",
+        idata_kwargs={"log_likelihood": True, "log_prior": True},
         # do NOT pass random_seed
     )
 ```
@@ -219,10 +220,10 @@ divergence_rate = divergences / total_draws
 
 ## Calibration checks
 
-**PriorSensitivity** — always run. Perturb `rate_prior_mu` (e.g. halve and double
-it, or widen the Gamma sigma) and refit. If P(event by T_mid) changes by > 10pp,
-the rates are weakly identified (usually too few observed transitions) — report
-WARN/FAIL. See `model_checks.md`.
+**PriorSensitivity** — derived `p_event_by_horizon` via psense per
+[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md). Few transitions →
+prior-dominated rates are common; WARN/FAIL at T_mid requires disclosure, not rejection.
+See [`model_checks.md`](model_checks.md).
 
 **ConsistencyCheck** — verify:
 1. Each row of every sampled `Q` sums to ~0 (`np.allclose(Q.sum(axis=1), 0)`).
@@ -239,7 +240,7 @@ current start state is unusually close to / far from resolution).
 
 - **Few transitions → prior-dominated rates.** With only a handful of observed
   `i → j` moves, each rate posterior tracks its prior. Flag PriorSensitivity
-  prominently and widen priors to reflect ignorance.
+  prominently in `summary.md` with justification; widen priors to reflect ignorance.
 - **Memorylessness assumption.** A CTMC assumes exponential dwell times (constant
   hazard within a state). If the data shows that, e.g., a crisis becomes *more*
   likely to resolve the longer it persists, the exponential dwell is wrong — see

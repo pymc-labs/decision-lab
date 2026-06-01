@@ -186,6 +186,7 @@ with pm.Model() as threshold_model:
         draws=500, tune=500, chains=4,
         target_accept=0.92,
         nuts_sampler="numpyro",
+        idata_kwargs={"log_likelihood": True, "log_prior": True},
     )
 ```
 
@@ -286,14 +287,11 @@ Only add the signal adjustment if you have actual market microstructure data. Do
 
 ## Model checks
 
-**PriorSensitivity on threshold** — critical. The threshold estimate from N=1 is
-inherently uncertain. Perturb the threshold prior mean by ±15% and re-run. If
-P(event by T_mid) changes by > 10pp:
-- WARN: the forecast is moderately threshold-sensitive
-- FAIL (> 20pp): the forecast is threshold-dominated — report explicitly
-
-Also perturb sigma on the threshold prior from 0.25 to 0.15 and 0.40 and check
-for stability.
+**PriorSensitivity** — derived `p_event_by_horizon` via psense per
+[`prior_sensitivity_psense.md`](prior_sensitivity_psense.md). With N=1, threshold
+posteriors are prior-heavy; WARN/FAIL at T_mid is **expected** — disclose in
+`summary.md`, do not treat as invalidation. Optional: perturb threshold prior mean
+±15% as structural check in JSON `note`.
 
 **ReferenceClassCongruence** — compare P(event by T_mid) to a historical base rate.
 If the ratio exceeds 4×, document why the threshold model diverges from analogues.
@@ -303,7 +301,7 @@ Any non-monotonicity indicates a bug in the Monte Carlo simulation.
 
 ## Gotchas
 
-- **N=1 threshold observation**: With a single data point, the threshold posterior is dominated by the prior. Be explicit about this in `summary.md`. Run `PriorSensitivity` on the threshold prior — a WARN or FAIL here means the forecast depends heavily on guessing the threshold level.
+- **N=1 threshold observation**: With a single data point, the threshold posterior is dominated by the prior. Be explicit in `summary.md`. PriorSensitivity WARN/FAIL at T_mid usually reflects elicitation uncertainty — justify, do not discard the forecast.
 - **Log vs linear scale**: Strictly positive drivers (prices, rates, indices bounded below zero) are often better modelled on a log scale (multiplicative shocks, always positive). Use `np.log(driver)` throughout — but verify this matches your driver's distribution.
 - **OU mean reversion level**: `mu` is the long-run mean of the driver. If you believe the equilibrium has structurally shifted, update `mu` and document the assumption.
 - **Multiple thresholds**: The decision-maker may have multiple thresholds (e.g., "if oil is above X AND diplomatic talks stall, OR oil is above Y regardless"). If this is plausible, model two separate threshold components with a logical OR.

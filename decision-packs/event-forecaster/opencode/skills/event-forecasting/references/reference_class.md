@@ -74,6 +74,7 @@ with pm.Model() as reference_model:
         draws=200, tune=200, chains=2,
         target_accept=0.9,
         nuts_sampler="numpyro",
+        idata_kwargs={"log_likelihood": True, "log_prior": True},
         # do NOT pass random_seed
     )
 ```
@@ -150,9 +151,9 @@ For non-exponential hazard rates (increasing or decreasing hazard), use `HazardM
 
 ## Model checks
 
-**PriorSensitivity** — perturb the Beta prior concentration parameter. If changing
-the concentration from 5 to 2 shifts P(event by T_mid) by > 10pp, the reference
-class base rate is weakly informed and the forecast is prior-sensitive.
+**PriorSensitivity** — analytic fallback: perturb Beta concentration (e.g. 5 → 2)
+at each horizon per [`model_checks.md`](model_checks.md). WARN/FAIL at T_mid means
+disclose weak reference-class information, not that the forecast is wrong.
 
 **ReferenceClassCongruence** — not applicable here (this IS the reference class).
 Instead: compare the posterior base rate to an even broader class as a sanity check.
