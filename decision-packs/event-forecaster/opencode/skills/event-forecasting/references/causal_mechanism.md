@@ -12,12 +12,12 @@ Build a probabilistic model of the causal drivers that determine when (and wheth
 ## Conceptual structure
 
 ```
-Causal driver 1 (e.g., sanctions_severity)   ─┐
-Causal driver 2 (e.g., oil_price_usd)        ─┤→ latent_pressure → P(event)
-Causal driver 3 (e.g., diplomatic_activity)  ─┘
+Causal driver A (e.g., regulatory_pressure)  ─┐
+Causal driver B (e.g., market_stress_index) ─┤→ latent_pressure → P(event)
+Causal driver C (e.g., resolution_signal)   ─┘
 ```
 
-The latent pressure variable represents "how much the system is being pushed toward resolution". When pressure exceeds a threshold (uncertain), the event occurs.
+The latent pressure variable represents "how much the system is being pushed toward resolution". When pressure exceeds a threshold (uncertain), the event occurs. Signed drivers lie in \([-1, 1]\) after applying direction; the threshold prior matches that scale.
 
 ## Data preparation
 
@@ -25,7 +25,7 @@ You need current measurements of the causal drivers. Historical values are helpf
 
 | column | type | notes |
 |---|---|---|
-| `driver_name` | string | e.g., `sanctions_severity`, `oil_price_usd` |
+| `driver_name` | string | e.g., `regulatory_pressure`, `market_stress_index` |
 | `current_value` | float | Normalised 0–1 scale (0 = no pressure, 1 = maximum pressure) |
 | `uncertainty_sigma` | float | Standard deviation of your uncertainty about the current value |
 | `direction` | `+` / `-` | Does higher value push *toward* resolution (+) or *away from* it (-)? |
@@ -35,15 +35,14 @@ You need current measurements of the causal drivers. Historical values are helpf
 ```python
 import pymc as pm
 import numpy as np
-import arviz as az
 
 # --- inputs (fill from domain analysis and data) ---
 # Causal drivers: current values and uncertainties on a 0–1 scale
-driver_names = ["sanctions_severity", "oil_price_pressure", "diplomatic_activity",
-                "military_escalation_risk"]
+driver_names = ["regulatory_pressure", "market_stress_index", "resolution_signal",
+                "escalation_risk"]
 # + = higher value → more pressure toward resolution
 # - = higher value → less pressure toward resolution (delays resolution)
-directions   = [+1, +1, +1, -1]   # sanctions, oil_pressure, diplomacy, military_risk
+directions   = [+1, +1, +1, -1]
 
 # Your best estimate of current driver values (0–1 scale)
 current_mu   = np.array([0.75, 0.60, 0.35, 0.45])
@@ -65,14 +64,14 @@ with pm.Model() as causal_model:
     # Weights over drivers (how much does each driver matter?)
     weights = pm.Dirichlet("weights", a=weight_alpha, shape=n_drivers)
 
-    # Apply direction signs and compute latent pressure
+    # Apply direction signs: signed drivers in [-1, 1]
     signed_drivers = pm.math.stack([directions[i] * driver_values[i]
                                     for i in range(n_drivers)])
     latent_pressure = pm.Deterministic("latent_pressure",
                                         pm.math.dot(weights, signed_drivers))
 
-    # Resolution threshold (uncertain)
-    threshold = pm.Beta("threshold", alpha=3, beta=3)  # prior: ~0.5
+    # Threshold on the same scale as latent_pressure (roughly [-1, 1])
+    threshold = pm.Normal("threshold", mu=0.0, sigma=0.5)
 
     # P(event) = logistic activation above threshold
     sharpness = pm.Gamma("sharpness", mu=8, sigma=3)  # how abrupt the transition is
@@ -84,19 +83,33 @@ with pm.Model() as causal_model:
     # obs = pm.Bernoulli("obs", p=p_event_calibration, observed=historical_outcomes)
 
     idata = pm.sample(
-        draws=500, tune=500, chains=4,
-        target_accept=0.92,
-        nuts_sampler="numpyro",
-        idata_kwargs={"log_likelihood": True, "log_prior": True},
+        draws=500,
+        tune=500,
+        chains=6,
+        backend="numba",
+        nuts_sampler="nutpie",
+        nuts={"target_accept": 0.92},
     )
+    pm.stats.compute_log_likelihood(idata, model=causal_model)
+    pm.stats.compute_log_prior(idata, model=causal_model)
 ```
 
 ## Extending to time horizons
 
 `p_event_now` is the instantaneous probability. To forecast over time, you need an assumption about how driver values evolve. Two options:
 
-**Option A — Static drivers (conservative):**
-Assume drivers remain at current values. `P(event in W days) ≈ 1 - (1 - p_event_now)^W_weeks`. Convert days to weeks to keep the exponent manageable.
+**Option A — Static drivers (approximate):**
+Assume drivers remain at current values. The independence formula
+`P(event in W) ≈ 1 - (1 - p_event_now)^(W / W_ref)` is a rough survival approximation
+when weekly probabilities are treated as independent — it can **overestimate** long
+horizons when drivers persist. Prefer Option B when trends are identifiable, or use
+a constant-hazard extrapolation in **days**:
+
+```python
+W_ref = 90.0  # reference window (days) for p_event_now
+lambda_h = -np.log(1 - p_now_samples + 1e-9) / W_ref
+p_h = 1 - np.exp(-lambda_h * horizon_days)  # monotone in calendar days
+```
 
 **Option B — Driver trend (better when trends are identifiable):**
 ```python
@@ -122,30 +135,52 @@ for wk in horizon_weeks:
 p_now_samples = idata.posterior["p_event_now"].values.flatten()
 
 horizon_days  = [90, 180, 365]
-horizon_weeks = [d / 7 for d in horizon_days]
+W_ref = float(horizon_days[0])
 
 p_event_by_horizon = []
 ci_low_by_horizon  = []
 ci_high_by_horizon = []
-for wk in horizon_weeks:
-    p_h = 1 - (1 - p_now_samples) ** wk
+lambda_samples = -np.log(1 - p_now_samples + 1e-9) / W_ref
+for t in horizon_days:
+    p_h = 1 - np.exp(-lambda_samples * t)
     p_event_by_horizon.append(float(np.mean(p_h)))
     ci_low_by_horizon.append(float(np.percentile(p_h, 3)))
     ci_high_by_horizon.append(float(np.percentile(p_h, 97)))
+
+# Derived quantities for PriorSensitivity (psense)
+import xarray as xr
+
+p_now = idata.posterior["p_event_now"]
+lambda_post = -np.log(1 - p_now + 1e-9) / W_ref
+p_by_h_list = []
+for t in horizon_days:
+    p_h = 1 - np.exp(-lambda_post * t)
+    p_by_h_list.append(p_h)
+p_by_h = xr.concat(p_by_h_list, dim=xr.DataArray(horizon_days, dims="horizon"))
+p_by_h = p_by_h.transpose("chain", "draw", "horizon")
+idata.posterior["p_event_by_horizon"] = p_by_h
 ```
 
 ## Counterfactual / intervention analysis
 
-A key advantage of this model is the ability to ask "what if driver X changes?":
+A key advantage of this model is the ability to ask "what if driver X changes?".
+`TruncatedNormal` driver values are not mutable via `pm.set_data` in PyMC 6 — recompute
+from posterior draws instead:
 
 ```python
-# What if diplomatic_activity jumps to 0.80 (from 0.35)?
-with causal_model:
-    pm.set_data({"driver_values": np.array([0.75, 0.60, 0.80, 0.45])})
-    ppc_intervention = pm.sample_posterior_predictive(idata, var_names=["p_event_now"])
+# What if driver C increases to 0.80 (from 0.35)?
+post = idata.posterior
+drivers_cf = np.array([0.75, 0.60, 0.80, 0.45])  # perturbed driver levels
+signed_cf = directions * drivers_cf
+latent_cf = (post["weights"] * xr.DataArray(signed_cf, dims=["driver"])).sum("driver")
+p_cf = 1 / (1 + np.exp(-post["sharpness"] * (latent_cf - post["threshold"])))
+print(f"Counterfactual P(event now): {float(p_cf.mean()):.3f}")
 ```
 
-Report this as a sensitivity analysis in `summary.md`.
+Report this as a sensitivity analysis in `summary.md`. For psense on derived
+`p_event_by_horizon`, add at least one calibration observation (e.g. a labelled
+historical episode) so `compute_log_likelihood` is non-empty; otherwise use the
+analytic ±1σ driver perturbation check below.
 
 ## Model checks
 
@@ -176,6 +211,6 @@ A ratio > 4× suggests the causal model is overly optimistic/pessimistic.
 ## Gotchas
 
 - **Unmeasurable drivers**: If a key causal driver can't be measured (e.g., "leadership intent"), encode it as a latent variable with a wide prior rather than omitting it.
-- **Collinear drivers**: Sanctions severity and oil price often move together. If correlation > 0.8, combine them into a single composite driver or include a correlation structure.
+- **Collinear drivers**: Correlated drivers (e.g., two measures of the same underlying stress) should be combined or modelled jointly. If correlation > 0.8, merge into a composite driver or include a correlation structure.
 - **Calibration without historical data**: If no labelled historical examples exist to calibrate against, all parameters are prior-driven. Widen all priors and report the model as *structural reasoning, not data-driven*.
 - **Direction reversal**: The direction of a driver's effect can flip under different regimes. Document this explicitly in the `key_assumptions` field of `forecast.json`.
