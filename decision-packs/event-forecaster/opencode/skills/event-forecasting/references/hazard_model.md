@@ -153,9 +153,33 @@ should never increase). Check P(event by T1) ≤ P(event by T2) for all T1 < T2.
 
 | Variant | When | Change |
 |---|---|---|
+| Weibull (default) | Parametric hazard; N ≥ 5; standard case | Primary PyMC block above |
 | Exponential | Constant hazard expected | Set `alpha = 1` (constant) or use `pm.Exponential` directly |
 | Log-normal | Roughly symmetric on log scale | Replace Weibull with `pm.LogNormal` |
 | Mixture | Two distinct resolution modes | Add a `pm.Mixture` with two Weibull components |
+
+### Continuous-time Weibull — relation to Bambi
+
+The primary PyMC Weibull block above is the **intercept-only** version of Bambi's
+continuous-time Weibull AFT model:
+
+```python
+# Bambi equivalent (no covariates): censored(duration, censoring) ~ 1
+# family="weibull", link="log"
+```
+
+Both use the same PyMC censored-likelihood backend. Parameter mapping:
+
+| This reference | Bambi / survival literature |
+|---|---|
+| `alpha` | shape (`alpha` in Bambi) |
+| `beta` | scale (`sigma` in AFT notation; Bambi derives scale from `mu` on the log link) |
+
+Bambi's `mu` targets the **mean** survival time on the log link, not the log-scale
+intercept — do not confuse with our direct `alpha`/`beta` parameterization.
+
+For PH vs AFT interpretation, Weibull-vs-exponential comparison, and conceptual
+background, see the [Bambi continuous-time survival notebook](https://bambinos.github.io/bambi/notebooks/survival_continuous_time_notebook.html).
 
 ### Log-logistic survival (non-monotonic hazard)
 
