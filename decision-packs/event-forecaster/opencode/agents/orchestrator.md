@@ -135,7 +135,7 @@ Wait for all forecasters to complete before Step 5.
 Read every forecaster `summary.md` and `parallel/run-*/consolidated_summary.md`
 (when 3+ instances ran). For each forecaster assess:
 
-**Technical quality** (Bayesian): R-hat < 1.05, ESS > 50 (relaxed for short chains).
+**Technical quality** (Bayesian): each forecaster's `convergence_status` in `forecast.json` (see `output_schema.md`).
 
 **Evidence quality**: Did the forecaster use specific, verifiable evidence? Only HIGH/MEDIUM-rated signals as inputs?
 

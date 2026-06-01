@@ -49,10 +49,8 @@ summarizer_prompt: |
 
   ## Step 2 — Technical quality
 
-  For Bayesian methods: check R-hat, ESS, divergence rate from the summary.
-  - PASS: R-hat < 1.05, ESS bulk > 50 (relaxed — short chains)
-  - MARGINAL: R-hat < 1.10, ESS > 20
-  - FAIL: worse
+  For Bayesian methods: classify per `event-forecasting/references/output_schema.md`
+  (treat `OK` as PASS for scoring).
 
   For analytic methods: note whether PriorSensitivity and ConsistencyCheck were run.
 
