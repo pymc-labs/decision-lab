@@ -19,3 +19,4 @@ requires_prompt: true
 
 hooks:
   pre-run: setup.sh
+  post-run: validate_predictions.sh   # fail if any idata.nc lacks a predictions group

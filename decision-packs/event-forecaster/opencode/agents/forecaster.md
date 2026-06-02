@@ -127,6 +127,27 @@ Write `fit.py` (Bayesian) or `analyze.py` (Analytic) that:
 
 ### Step 3a — Save BOTH parameters and predictions to `idata.nc`
 
+**Mandatory — enforced by a post-run hook.** Do NOT call a bare
+`idata.to_netcdf(...)`. Instead copy the shipped helper into your instance directory
+and call it — it writes the posterior AND attaches the prediction draws in one step:
+
+```bash
+cp event-forecasting/references/save_predictions.py .
+```
+
+```python
+from save_predictions import save_idata_with_predictions
+
+# p_by_h: the SAME per-draw cumulative probabilities you compute for the credible
+#   intervals in forecast.json — shape (chain, draw, horizon) or (chain*draw, horizon).
+# horizon_days: day offset of each horizon from the forecast origin.
+save_idata_with_predictions(idata, p_by_h, horizon_days, "outputs/idata.nc")
+```
+
+After the session, `validate_predictions.sh` checks every `outputs/idata.nc` and
+**fails the run** if any lacks a `predictions` (or `posterior_predictive`) group. A
+parameters-only idata is not acceptable.
+
 The saved `outputs/idata.nc` must contain two kinds of draws:
 
 - **Parameters** — the `posterior` group returned by `pm.sample` (plus
