@@ -118,9 +118,53 @@ citing what in the data or prompt led to the decision.
 Write `fit.py` (Bayesian) or `analyze.py` (Analytic) that:
 1. Loads data if using local files. Preserve dtypes; parse dates explicitly.
 2. Implements your chosen method.
-3. For Bayesian: runs `pm.sample(...)`, saves `idata` to `outputs/idata.nc`.
+3. For Bayesian: runs `pm.sample(...)`, then saves `idata` to `outputs/idata.nc`
+   containing **both** the parameter posterior **and** the prediction draws. Do
+   NOT save only the parameters — the saved file must let anyone recover the full
+   forecast distribution without re-running the model. See **Step 3a** below.
 4. For Analytic: computes estimates directly and prints them.
 5. Saves a forecast plot to `outputs/forecast.png`.
+
+### Step 3a — Save BOTH parameters and predictions to `idata.nc`
+
+The saved `outputs/idata.nc` must contain two kinds of draws:
+
+- **Parameters** — the `posterior` group returned by `pm.sample` (plus
+  `sample_stats`, and `log_likelihood` / `log_prior` from the calls above).
+- **Predictions** — the per-draw forecast quantities (dims `chain, draw, horizon`),
+  using the **same** definition as `forecast.json` `p_event_by_horizon`. Attach
+  these so the predictive distribution survives in the file:
+
+  - **Deterministic forecast (Tier A** — Weibull CDF, logistic, matrix exponential,
+    Beta-Binomial): compute per-draw `p_event_by_horizon` and store it in a
+    dedicated `predictions` group:
+
+    ```python
+    import xarray as xr
+    # p_by_h: DataArray with dims (chain, draw, horizon)
+    idata.add_groups(predictions=xr.Dataset({"p_event_by_horizon": p_by_h}))
+    ```
+
+  - **Forward simulation (Tier B** — ContinuousDriver, JumpDiffusion,
+    ThresholdCrossing): store the per-draw simulated predictive quantities
+    (e.g. first-passage probabilities / path summaries reduced to
+    `p_event_by_horizon` with dims `chain, draw, horizon`) in the `predictions`
+    group as above.
+
+  - **Posterior predictive (when applicable)**: if you call
+    `pm.sample_posterior_predictive`, use `extend_inferencedata=True` so the
+    `posterior_predictive` group is added to the same `idata`.
+
+Save only after both groups exist:
+
+```python
+idata.to_netcdf("outputs/idata.nc")
+# verify both groups are present
+import arviz as az
+saved = az.from_netcdf("outputs/idata.nc")
+assert "posterior" in saved.groups()
+assert "predictions" in saved.groups() or "posterior_predictive" in saved.groups()
+```
 
 Use the sampling defaults above. Run with `python fit.py`.
 
@@ -272,7 +316,9 @@ identification caveat — see causal_mechanism.md.>
 - forecast.json
 - outputs/forecast.png
 - outputs/check_<name>.json (per check run)
-- outputs/idata.nc (Bayesian) or outputs/result.pkl (Analytic, if applicable)
+- outputs/idata.nc (Bayesian — must contain BOTH the `posterior` parameter group
+  AND a `predictions` / `posterior_predictive` group with the forecast draws) or
+  outputs/result.pkl (Analytic, if applicable)
 ```
 
 ## Failure schema
