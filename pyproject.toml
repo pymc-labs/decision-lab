@@ -28,6 +28,7 @@ dependencies = [
     "dhub-cli>=0.10",
     "fastapi>=0.100",
     "uvicorn[standard]>=0.20",
+    "typer>=0.25",
 ]
 
 [project.optional-dependencies]
@@ -37,7 +38,7 @@ dev = [
 ]
 
 [project.scripts]
-dlab = "dlab.cli:main"
+dlab = "dlab.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -47,3 +48,8 @@ include = ["dlab*"]
 "dlab.data" = ["*.json"]
 "dlab.js" = ["*.ts"]
 "dlab.viewer.html" = ["*.html"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
