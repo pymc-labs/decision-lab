@@ -292,13 +292,9 @@ class ConnectApp(App):
         # Start log watcher
         self._watcher = LogWatcher(self._logs_dir)
         self._watcher.start()
-        initial_events = self._watcher.get_events()
-        self._file_logger.info("watcher.start() produced %d events", len(initial_events))
-        # Re-queue the events we just drained for inspection
-        for item in initial_events:
-            self._watcher._event_queue.put(item)
 
-        # Process initial events
+        # Process the initial events produced by start(). _process_pending_events
+        # drains the watcher queue itself, so we must not drain it first here.
         self._process_pending_events()
         self._file_logger.info(
             "after process_pending: %d agents, total_cost=%.4f",
@@ -408,14 +404,21 @@ class ConnectApp(App):
         return log_path
 
     def _is_agent_complete_in_memory(self, agent_state: AgentState) -> bool:
-        """Check completion from already-loaded events — no disk I/O."""
+        """Check completion from already-loaded events — no disk I/O.
+
+        Mirrors ``is_log_complete``: any ``error`` event means complete, and
+        that takes priority over the final ``step_finish`` reason. We therefore
+        scan the whole list for an error rather than returning on the first
+        terminal event, while still using the last ``step_finish`` (first one
+        seen when iterating in reverse) for the reason check.
+        """
+        last_step_finish_reason: str | None = None
         for event in reversed(agent_state.events):
             if event.event_type == "error":
                 return True
-            if event.event_type == "step_finish":
-                reason = event.raw.get("part", {}).get("reason", "")
-                return reason in ("stop", "error")
-        return False
+            if event.event_type == "step_finish" and last_step_finish_reason is None:
+                last_step_finish_reason = event.raw.get("part", {}).get("reason", "")
+        return last_step_finish_reason in ("stop", "error")
 
     def _update_agent_list(self) -> None:
         """Update the agent selector with current state."""
