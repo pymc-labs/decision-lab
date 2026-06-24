@@ -132,8 +132,10 @@ Wait for all forecasters to complete before Step 5.
 
 ### Step 5 — Evaluate results
 
-Read every forecaster `summary.md` and `parallel/run-*/consolidated_summary.md`
-(when 3+ instances ran). For each forecaster assess:
+Read every forecaster `summary.md` and `parallel/run-*/consolidated_summary.md`.
+The consolidator only runs when **3+ instances ran**; if fewer ran (or no
+`consolidated_summary.md` exists), compare the forecaster `summary.md` files
+directly and do the Step-5 assessment yourself. For each forecaster assess:
 
 **Technical quality** (Bayesian): each forecaster's `convergence_status` in `forecast.json` (see `output_schema.md`).
 

@@ -148,43 +148,37 @@ After the session, `validate_predictions.sh` checks every `outputs/idata.nc` and
 **fails the run** if any lacks a `predictions` (or `posterior_predictive`) group. A
 parameters-only idata is not acceptable.
 
-The saved `outputs/idata.nc` must contain two kinds of draws:
+The saved `outputs/idata.nc` must contain two kinds of draws, and the helper above
+writes **both** in one call — do **not** call `idata.add_groups(...)` or a bare
+`idata.to_netcdf(...)` yourself. The helper appends the `predictions` group via
+netCDF `mode="a"`, which sidesteps the arviz-1 / DataTree `add_groups` API
+differences a manual save would hit:
 
 - **Parameters** — the `posterior` group returned by `pm.sample` (plus
-  `sample_stats`, and `log_likelihood` / `log_prior` from the calls above).
-- **Predictions** — the per-draw forecast quantities (dims `chain, draw, horizon`),
-  using the **same** definition as `forecast.json` `p_event_by_horizon`. Attach
-  these so the predictive distribution survives in the file:
+  `sample_stats`, and `log_likelihood` / `log_prior` from the calls above). These
+  are already in `idata`; the helper preserves them.
+- **Predictions** — the per-draw forecast quantity `p_event_by_horizon`
+  (dims `chain, draw, horizon`), using the **same** definition as `forecast.json`.
+  You compute this once as `p_by_h` and pass it to `save_idata_with_predictions`:
 
   - **Deterministic forecast (Tier A** — Weibull CDF, logistic, matrix exponential,
-    Beta-Binomial): compute per-draw `p_event_by_horizon` and store it in a
-    dedicated `predictions` group:
-
-    ```python
-    import xarray as xr
-    # p_by_h: DataArray with dims (chain, draw, horizon)
-    idata.add_groups(predictions=xr.Dataset({"p_event_by_horizon": p_by_h}))
-    ```
-
+    Beta-Binomial): compute per-draw `p_event_by_horizon` analytically.
   - **Forward simulation (Tier B** — ContinuousDriver, JumpDiffusion,
-    ThresholdCrossing): store the per-draw simulated predictive quantities
-    (e.g. first-passage probabilities / path summaries reduced to
-    `p_event_by_horizon` with dims `chain, draw, horizon`) in the `predictions`
-    group as above.
+    ThresholdCrossing): reduce the per-draw simulated paths to
+    `p_event_by_horizon` (dims `chain, draw, horizon`).
+  - **Posterior predictive (optional)**: if you also call
+    `pm.sample_posterior_predictive`, pass `extend_inferencedata=True` so the
+    `posterior_predictive` group is added to `idata` **before** the helper call.
 
-  - **Posterior predictive (when applicable)**: if you call
-    `pm.sample_posterior_predictive`, use `extend_inferencedata=True` so the
-    `posterior_predictive` group is added to the same `idata`.
-
-Save only after both groups exist:
+After saving, verify both groups are present. Note that under the pinned arviz
+(`>=1`), `.groups` is a **property** returning `/`-prefixed paths (not a method) —
+this snippet matches what `validate_predictions.sh` checks:
 
 ```python
-idata.to_netcdf("outputs/idata.nc")
-# verify both groups are present
 import arviz as az
-saved = az.from_netcdf("outputs/idata.nc")
-assert "posterior" in saved.groups()
-assert "predictions" in saved.groups() or "posterior_predictive" in saved.groups()
+groups = [g.strip("/") for g in az.from_netcdf("outputs/idata.nc").groups]
+assert "posterior" in groups
+assert "predictions" in groups or "posterior_predictive" in groups
 ```
 
 Use the sampling defaults above. Run with `python fit.py`.

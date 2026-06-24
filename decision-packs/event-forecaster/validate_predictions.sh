@@ -7,7 +7,7 @@
 # alone has proven insufficient.
 set -uo pipefail
 
-echo "=== validate_predictions: pre-run hook check ==="
+echo "=== validate_predictions: post-run hook check ==="
 
 python - <<'PY'
 import glob
