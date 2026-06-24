@@ -4,6 +4,7 @@ Log file watcher using simple polling.
 Tracks file positions and streams new log events as they are appended.
 """
 
+import os
 import threading
 from pathlib import Path
 from queue import Queue
@@ -175,10 +176,28 @@ class LogWatcher:
         """Stop watching."""
         self._running = False
 
+    def _logs_dir_signature(self) -> float:
+        """Latest mtime across every directory in the log tree.
+
+        Sub-agent logs live in subdirectories (``_opencode_logs/<agent>/...``),
+        so watching only the top-level mtime would miss a new ``.log`` file
+        created inside an already-known subdirectory — e.g. a late-spawning
+        nested agent. Adding a file bumps its *containing* directory's mtime,
+        so taking the max mtime over all directories in the tree detects that.
+        Walking directories (not stat-ing every file) keeps this cheap.
+        """
+        signature = self._logs_dir.stat().st_mtime
+        for dirpath, _dirnames, _filenames in os.walk(self._logs_dir):
+            try:
+                signature = max(signature, os.stat(dirpath).st_mtime)
+            except OSError:
+                continue
+        return signature
+
     def _refresh_log_paths(self) -> None:
         """Re-scan for log files only when the directory tree has changed."""
         try:
-            current_mtime = self._logs_dir.stat().st_mtime
+            current_mtime = self._logs_dir_signature()
         except OSError:
             return
         if current_mtime != self._logs_dir_mtime:
