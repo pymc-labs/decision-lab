@@ -1,0 +1,22 @@
+# =============================================================================
+# netforensics — graph-ML done right
+# =============================================================================
+# A decision-pack for supervised graph learning problems. Encodes the
+# methodological checks that make a graph-ML claim defensible:
+#   - benchmark vs. a no-graph baseline
+#   - evaluation protocol matched to the deployment distribution shift
+#   - edge-shuffle ablation (does the graph actually contribute?)
+#   - class-imbalance-appropriate metrics
+#   - multiple seeds for reliable variance estimates
+#
+# Designed to land on any node-classification problem with optional timestamps.
+# Shipped with the Elliptic Bitcoin transaction dataset as the canonical example.
+
+name: netforensics
+description: Graph ML done right — convergence checks across eval protocol, model family, and feature regime for supervised graph learning.
+docker_image_name: dlab-netforensics
+default_model: anthropic/claude-sonnet-4-5
+opencode_version: "1.2.10"
+
+requires_data: true
+requires_prompt: true

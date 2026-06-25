@@ -1,0 +1,72 @@
+# Fans out 3 evaluation-protocol variants of the SAME model on the SAME features.
+# Used to quantify the leakage gap: if F1 drops sharply from transductive to
+# temporal split, the model was relying on information it won't have at deployment.
+#
+# Spawned by: orchestrator.md, Step 3
+# Agent it runs: protocol-evaluator.md (one instance per prompt)
+
+name: protocol-evaluator
+
+description: "Evaluate the same model under three train/test split protocols"
+
+timeout_minutes: 30
+failure_behavior: continue
+max_instances: 3
+
+default_model: "anthropic/claude-sonnet-4-5"
+
+subagent_suffix_prompt: |
+  ---
+
+  Use the `train-model` tool with the exact protocol given in your prompt.
+  Then write your results to summary.md with this structure:
+
+  ## Configuration
+  - Split protocol (transductive / temporal / inductive)
+  - Model family
+  - Feature mode and number of features used
+  - strict_edges value (for GNNs)
+  - Seed(s) used
+
+  ## Results
+  - f1_positive: <value>
+  - precision_at_50: <value>
+  - precision_at_500: <value>
+  - pr_auc: <value>
+  - auroc: <value>
+  - n_test: <value>
+  - n_positive in test: <value>
+
+  ## Interpretation
+  - Whether the protocol is appropriate for this dataset (does it have a
+    temporal axis? are train/test connected?)
+  - What this F1 number means in deployment terms
+  - Whether AUROC is informative here (it isn't if positives are <5%)
+
+  Also write parameters_and_results.json with the raw JSON output from the
+  train-model tool.
+
+summarizer_prompt: |
+  You are a consolidator with READ-ONLY access.
+
+  Read ONLY these summary files (the paths are provided; do not search):
+  {summary_paths}
+
+  Write a comparison of evaluation protocols to the output path provided.
+
+  ## Comparison Table
+  | Protocol | f1_positive | precision@50 | pr_auc | n_test | n_positive |
+
+  ## Leakage Analysis
+  - F1 gap between transductive and temporal: <value>
+  - If gap > 0.10, flag as a leakage-trap signature. Quote the relevant
+    numbers and explain what this implies for any "X% accuracy" claim made
+    on this dataset.
+
+  ## Trade-offs
+  - Which protocol most closely matches the deployment distribution?
+  - For each protocol, what is it actually estimating?
+
+  Present facts only. Do NOT pick a winner — that is the orchestrator's job.
+
+summarizer_model: "anthropic/claude-sonnet-4-5"

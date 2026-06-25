@@ -1,0 +1,72 @@
+# Fans out 3 feature regimes on the SAME model and SAME split.
+# Used to localize where signal lives: in raw per-node features, in pre-
+# aggregated neighborhood features, or in graph topology alone.
+#
+# Spawned by: orchestrator.md, Step 5
+# Agent it runs: feature-ablator.md (one instance per prompt)
+
+name: feature-ablator
+
+description: "Localize signal across feature regimes: raw local, full (with aggregated), topology-only"
+
+timeout_minutes: 30
+failure_behavior: continue
+max_instances: 3
+
+default_model: "anthropic/claude-sonnet-4-5"
+
+subagent_suffix_prompt: |
+  ---
+
+  Use the `train-model` tool with feature_mode set to the value in your prompt:
+    - all (use all provided features)
+    - raw_local (use only the first n_raw_features columns; n_raw_features is
+      dataset-specific and MUST be passed in by the orchestrator's prompt — e.g.,
+      94 for Elliptic Bitcoin. Do not invent a value if missing.)
+    - topology_only (ignore provided features; use computed degree/PageRank/clustering)
+
+  Use the split named in your prompt (the orchestrator picks the canonical
+  split — temporal when timestamps exist, otherwise transductive).
+  Use XGBoost as the model unless otherwise instructed.
+
+  Write summary.md with:
+
+  ## Configuration
+  - Feature mode
+  - n_features_used (returned by the tool)
+  - Model
+  - Split
+
+  ## Results
+  - f1_positive, precision_at_50, precision_at_500, pr_auc, auroc
+
+  ## Interpretation
+  - What this feature set physically represents
+  - If topology_only F1 is near random, the graph has weak signal for the task
+  - If raw_local F1 is much lower than all F1, the aggregated features carry
+    most of the signal (and they already encode the graph)
+
+summarizer_prompt: |
+  You are a consolidator with READ-ONLY access.
+
+  Read ONLY these summary files:
+  {summary_paths}
+
+  Write a comparison of feature regimes to the output path provided.
+
+  ## Comparison Table
+  | Feature mode | n_features | f1_positive | precision@50 | pr_auc |
+
+  ## Signal Localization
+  - raw_local F1 = <v>
+  - all F1 = <v>          (gap from raw_local: <v>)
+  - topology_only F1 = <v> (vs. random baseline implied by positive_rate)
+
+  Interpret:
+    - If all ≫ raw_local: aggregated features are doing the work; the model
+      doesn't need a graph layer because the graph is already baked in.
+    - If topology_only ≈ random: graph has weak independent signal.
+
+  Present facts only.
+
+summarizer_model: "anthropic/claude-sonnet-4-5"

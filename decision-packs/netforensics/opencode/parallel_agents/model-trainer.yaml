@@ -1,0 +1,77 @@
+# Fans out 3 model families on the SAME split and SAME features.
+# Used to quantify whether a graph-aware model beats the no-graph baseline.
+# Required instances: at least one XGBoost (the no-graph floor) and at least
+# one GNN. The orchestrator usually spawns: xgboost, gcn, graphsage.
+#
+# Spawned by: orchestrator.md, Step 4
+# Agent it runs: model-trainer.md (one instance per prompt)
+
+name: model-trainer
+
+description: "Train multiple model families on the same data + split, to compare graph-aware vs. no-graph performance"
+
+timeout_minutes: 60
+failure_behavior: continue
+max_instances: 4
+
+default_model: "anthropic/claude-sonnet-4-5"
+
+subagent_suffix_prompt: |
+  ---
+
+  Use the `train-model` tool. For GNNs (gcn, graphsage) running on a
+  temporal or inductive split, you MUST pass strict_edges=true. For GNNs
+  on transductive split, leave strict_edges=false (the default).
+
+  Run the model at 3 seeds (0, 1, 2) and report median F1, min/max, and
+  the per-seed values.
+
+  Write your results to summary.md with this structure:
+
+  ## Configuration
+  - Model family
+  - Split protocol
+  - Feature mode
+  - strict_edges
+  - Seeds used: [0, 1, 2]
+
+  ## Results (across seeds)
+  - f1_positive: median=<v>, min=<v>, max=<v>
+  - precision_at_50: median=<v>
+  - precision_at_500: median=<v>
+  - pr_auc: median=<v>
+  - auroc: median=<v>
+  - runtime_s per seed: <list>
+
+  ## Interpretation
+  - How does this compare to the simplest baseline (XGBoost on all features)?
+  - Is the median F1 difference larger than the seed-to-seed spread?
+    If not, the difference is not significant.
+
+  Also write parameters_and_results.json with all per-seed raw JSONs.
+
+summarizer_prompt: |
+  You are a consolidator with READ-ONLY access.
+
+  Read ONLY these summary files:
+  {summary_paths}
+
+  Write a comparison of model families to the output path provided.
+
+  ## Comparison Table
+  | Model | f1_positive (median ± range) | precision@50 | pr_auc | runtime_s |
+
+  ## Graph-vs-no-graph Analysis
+  - XGBoost (no-graph baseline): median F1 = <value>
+  - Best GNN: model=<name>, median F1 = <value>
+  - Gap: <value>
+  - Is the gap larger than the seed-to-seed spread of either model? If not,
+    quote the spreads and state that no significant difference was detected.
+
+  ## Trade-offs
+  - Accuracy vs. runtime
+  - Accuracy vs. interpretability (tree models are inspectable; GNNs are not)
+
+  Present facts only. The orchestrator decides.
+
+summarizer_model: "anthropic/claude-sonnet-4-5"
