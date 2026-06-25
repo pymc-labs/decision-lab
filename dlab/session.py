@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from dlab.config import apply_model_roles_to_opencode, resolve_model_roles
 from dlab.model_fallback import process_opencode_dir
 from dlab.parallel_tool import PARALLEL_AGENTS_SOURCE
 
@@ -172,6 +173,7 @@ def setup_opencode_config(
     orchestrator_model: str | None = None,
     env_file: str | None = None,
     no_sandboxing: bool = False,
+    dpack_config: dict[str, Any] | None = None,
 ) -> list[str]:
     """
     Set up opencode configuration in work directory.
@@ -193,6 +195,9 @@ def setup_opencode_config(
         Path to .env file for checking available provider keys.
     no_sandboxing : bool
         If True, also check os.environ for API keys.
+    dpack_config : dict[str, Any] | None
+        Loaded decision-pack config. When provided, forecaster and consolidator
+        models from config.yaml are injected into parallel agent YAML files.
 
     Returns
     -------
@@ -201,9 +206,14 @@ def setup_opencode_config(
     """
     copy_opencode_config(config_dir, work_dir)
 
+    opencode_dest: Path = Path(work_dir) / ".opencode"
+    if dpack_config is not None:
+        apply_model_roles_to_opencode(
+            str(opencode_dest), resolve_model_roles(dpack_config),
+        )
+
     # Validate model names and apply provider fallback
     messages: list[str] = []
-    opencode_dest: Path = Path(work_dir) / ".opencode"
     if orchestrator_model:
         messages = process_opencode_dir(
             str(opencode_dest), orchestrator_model, env_file, no_sandboxing,
@@ -359,7 +369,7 @@ def create_session(
 
         fallback_messages: list[str] = setup_opencode_config(
             config["config_dir"], str(work_path), orchestrator_model, env_file,
-            no_sandboxing,
+            no_sandboxing, dpack_config=config,
         )
         copy_hook_scripts(config, str(work_path))
     except Exception:

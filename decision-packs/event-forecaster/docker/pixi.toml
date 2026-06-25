@@ -1,0 +1,35 @@
+[workspace]
+name = "strait_of_hormuz_opening"
+version = "0.1.0"
+description = "Bayesian prediction of when the Strait of Hormuz reopens"
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
+
+[dependencies]
+python = ">=3.11,<3.13"
+pymc = ">=6.0.0,<7"
+arviz = ">=1.0.0,<2"
+numpy = "*"
+pandas = "*"
+polars = "*"
+scipy = "*"
+matplotlib = "*"
+marimo = "*"
+pytest = "*"
+pyarrow = "*"
+python-dotenv = "*"
+[pypi-dependencies]
+wrds = "*"
+yfinance = "*"
+fredapi = "*"
+jax = "*"
+jaxlib = "*"
+numpyro = "*"
+nutpie = "*"
+h5netcdf = "*"
+h5py = "*"
+markdown = ">=3.0"
+[tasks]
+test = "pytest"
+nb = "marimo edit"
+fetch = "python -m data_loading.fetch_all"

@@ -1,0 +1,3 @@
+# Hook/shell scripts run inside the Linux container — they MUST stay LF or the
+# shebang breaks (/usr/bin/env: 'bash\r'). Force LF regardless of core.autocrlf.
+*.sh text eol=lf

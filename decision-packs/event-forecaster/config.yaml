@@ -1,0 +1,22 @@
+name: event-forecaster
+description: >
+  Probabilistic event forecasting — when and whether a future event will occur.
+  Given a user-provided dataset and a question of the form "When will X happen?",
+  runs multiple structurally different Bayesian forecasting methods in parallel
+  and synthesises a defensible probability estimate with credible intervals.
+
+docker_image_name: dlab-event-forecaster
+default_model: anthropic/claude-sonnet-4-5
+requires_data: false
+requires_prompt: true
+
+# Model roles — orchestrator and data-explorer use default_model (or dlab --model).
+# Uncomment models below to override parallel forecaster instances and/or consolidator;
+# omitted keys inherit default_model at session setup.
+# models:
+#   forecaster: anthropic/claude-haiku-4-5      # e.g. cheaper testing
+#   consolidator: anthropic/claude-sonnet-4-5
+
+hooks:
+  pre-run: setup.sh
+  post-run: validate_predictions.sh   # fail if any idata.nc lacks a predictions group
