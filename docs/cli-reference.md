@@ -15,7 +15,7 @@ If no command is specified and run-mode arguments are provided, dlab runs in **r
 Execute opencode in a Docker container with your data and prompt.
 
 ```bash
-dlab --dpack PATH --data PATH [PATH ...] --prompt TEXT [options]
+dlab --dpack PATH --data PATH [--data PATH ...] --prompt TEXT [options]
 ```
 
 ### Required Arguments
@@ -23,7 +23,7 @@ dlab --dpack PATH --data PATH [PATH ...] --prompt TEXT [options]
 | Argument | Description |
 |----------|-------------|
 | `--dpack PATH` | Path to the decision-pack configuration directory |
-| `--data PATH [PATH ...]` | Data files or directory (multiple paths accepted) |
+| `--data PATH` | Data file or directory to copy into the workspace (repeat for multiple files: `--data a.csv --data b.csv`) |
 | `--prompt TEXT` | Prompt text for the agent |
 
 `--data` is required unless the decision-pack sets `requires_data: false` in config.yaml. `--prompt` (or `--prompt-file`) is required unless the decision-pack sets `requires_prompt: false`.
@@ -64,8 +64,8 @@ This refreshes the `.opencode` config and hook scripts from the decision-pack, t
 # Basic usage
 dlab --dpack ./my-dpack --data ./data --prompt "Analyze this CSV"
 
-# Multiple data files
-dlab --dpack ./my-dpack --data file1.csv file2.csv --prompt "Compare"
+# Multiple data files (repeat --data for each file)
+dlab --dpack ./my-dpack --data file1.csv --data file2.csv --prompt "Compare"
 
 # With model override
 dlab --dpack ./my-dpack --data ./data \

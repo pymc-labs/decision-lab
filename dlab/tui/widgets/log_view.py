@@ -5,16 +5,15 @@ Displays formatted log events for the selected agent with
 real-time updates and expand/collapse functionality.
 """
 
-from textual.widgets import Static
-from textual.containers import VerticalScroll, Horizontal
-from textual.reactive import reactive
-from textual import events
-from rich.text import Text
-from rich.markdown import Markdown
 from rich.console import Group
+from rich.markdown import Markdown
+from rich.text import Text
+from textual import events
+from textual.containers import Horizontal, VerticalScroll
+from textual.reactive import reactive
+from textual.widgets import Static
 
 from dlab.tui.models import LogEvent
-
 
 # Monokai-native color palette
 _CYAN: str = "#66D9EF"
@@ -413,12 +412,16 @@ class LogView(VerticalScroll, can_focus=True):
         self.remove_children()
         self._widgets = []
 
+        widgets = []
         for event in self._events:
             if event.hidden:
                 continue
             widget = LogEventWidget(event, self._global_start_ts)
             self._widgets.append(widget)
-            self.mount(widget)
+            widgets.append(widget)
+
+        if widgets:
+            self.mount(*widgets)
 
         if self.auto_scroll:
             self.scroll_end(animate=False)
@@ -460,7 +463,10 @@ class LogView(VerticalScroll, can_focus=True):
             vp_top: int = self.scroll_offset.y
             vp_bottom: int = vp_top + self.size.height
             try:
-                if w.virtual_region.y < vp_bottom and w.virtual_region.y + w.virtual_region.height > vp_top:
+                if (
+                    w.virtual_region.y < vp_bottom
+                    and w.virtual_region.y + w.virtual_region.height > vp_top
+                ):
                     return  # Already visible
             except Exception:
                 return
@@ -496,9 +502,7 @@ class LogView(VerticalScroll, can_focus=True):
             widget.is_collapsed = False
         self.refresh(layout=True)
         if 0 <= self.selected_index < len(self._widgets):
-            self.call_after_refresh(
-                self._widgets[self.selected_index].scroll_visible
-            )
+            self.call_after_refresh(self._widgets[self.selected_index].scroll_visible)
 
     def collapse_all(self) -> None:
         """Collapse all collapsible events."""
@@ -508,9 +512,7 @@ class LogView(VerticalScroll, can_focus=True):
             widget.is_collapsed = True
         self.refresh(layout=True)
         if 0 <= self.selected_index < len(self._widgets):
-            self.call_after_refresh(
-                self._widgets[self.selected_index].scroll_visible
-            )
+            self.call_after_refresh(self._widgets[self.selected_index].scroll_visible)
 
     def highlight_search(self, query: str) -> list[int]:
         """

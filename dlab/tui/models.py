@@ -44,7 +44,7 @@ class LogEvent:
     raw: dict[str, Any]
     cost: float = 0.0
     duration_ms: int | None = None
-    hidden: bool = False    # True for step_start/step_finish (not rendered)
+    hidden: bool = False  # True for step_start/step_finish (not rendered)
 
     @property
     def full_description(self) -> str:
@@ -342,6 +342,11 @@ class AgentState:
         Start time of first event.
     end_time : datetime | None
         End time of last event.
+    is_complete : bool
+        Cached flag: True once the agent's log file has been confirmed complete.
+        Avoids re-parsing the entire log file on every timer tick.
+    _seen_timestamps : set[int]
+        Set of already-seen timestamps for O(1) duplicate detection.
     """
 
     name: str
@@ -350,6 +355,8 @@ class AgentState:
     total_cost: float = 0.0
     start_time: datetime | None = None
     end_time: datetime | None = None
+    is_complete: bool = False
+    _seen_timestamps: set[int] = field(default_factory=set, repr=False, compare=False)
 
     def add_event(self, event: LogEvent) -> bool:
         """
@@ -368,10 +375,13 @@ class AgentState:
         bool
             True if event was added, False if it was a duplicate.
         """
-        # Deduplicate based on timestamp (events with same timestamp are duplicates)
-        # Skip deduplication for timestamp=0 events (raw_text, additional_output)
-        if event.timestamp > 0 and any(e.timestamp == event.timestamp for e in self.events):
-            return False
+        # Deduplicate based on timestamp (events with same timestamp are duplicates).
+        # Skip deduplication for timestamp=0 events (raw_text, additional_output).
+        # O(1) set lookup instead of O(n) linear scan.
+        if event.timestamp > 0:
+            if event.timestamp in self._seen_timestamps:
+                return False
+            self._seen_timestamps.add(event.timestamp)
 
         self.events.append(event)
         self.total_cost += event.cost
@@ -428,9 +438,7 @@ class SessionState:
         start_dt = ms_to_datetime(self.global_start_ts)
 
         # Find latest end time from all agents (from log timestamps only)
-        end_times = [
-            a.end_time for a in self.agents.values() if a.end_time is not None
-        ]
+        end_times = [a.end_time for a in self.agents.values() if a.end_time is not None]
         if end_times:
             end_dt = max(end_times)
         else:

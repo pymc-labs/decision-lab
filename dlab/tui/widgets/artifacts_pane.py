@@ -8,24 +8,41 @@ Provides:
 
 import csv
 import io
+import os
 import re
 from pathlib import Path
 
-from textual.widgets import ListView, ListItem, Static, DataTable
-from textual.containers import VerticalScroll
-from textual.reactive import reactive
-from textual.message import Message
-from rich.text import Text
+from rich.console import Group
 from rich.markdown import Markdown
 from rich.syntax import Syntax
-from rich.console import Group
-
+from rich.text import Text
+from textual.containers import VerticalScroll
+from textual.message import Message
+from textual.reactive import reactive
+from textual.widgets import DataTable, ListItem, ListView, Static
 
 # File extensions to include as artifacts
 ARTIFACT_EXTENSIONS = {".md", ".py", ".txt", ".csv", ".png", ".jpg", ".jpeg", ".pdf"}
 
 # Directories to exclude from artifact discovery
-EXCLUDE_DIRS = {".git", ".opencode", "_opencode_logs", "_docker", "_hooks", "node_modules", "__pycache__", "data"}
+EXCLUDE_DIRS = {
+    ".git",
+    ".opencode",
+    "_opencode_logs",
+    "_docker",
+    "_hooks",
+    "node_modules",
+    "__pycache__",
+    "data",
+    ".venv",
+    "venv",
+    ".env",
+    "env",
+    "dist",
+    "build",
+    ".tox",
+    ".mypy_cache",
+}
 
 # Image extensions
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
@@ -115,35 +132,32 @@ def discover_artifacts(
     list[Path]
         List of artifact paths relative to work_dir.
     """
-    artifacts: list[Path] = []
     search_dir = agent_dir if agent_dir else work_dir
-
     if not search_dir.exists():
-        return artifacts
+        return []
 
-    for path in search_dir.rglob("*"):
-        if not path.is_file():
-            continue
+    artifacts: list[Path] = []
+    base = agent_dir if agent_dir else work_dir
 
-        # Skip excluded directories
-        if any(excluded in path.parts for excluded in EXCLUDE_DIRS):
-            continue
+    for root, dirs, files in os.walk(search_dir, topdown=True):
+        root_path = Path(root)
 
-        # For main agent, skip files inside parallel run directories
-        if is_main and any(is_parallel_run_dir(part) for part in path.parts):
-            continue
+        # Prune excluded and parallel-run directories in-place so os.walk
+        # never descends into them — O(relevant files only).
+        dirs[:] = [
+            d
+            for d in dirs
+            if d not in EXCLUDE_DIRS and not (is_main and is_parallel_run_dir(d))
+        ]
 
-        # Check extension
-        if path.suffix.lower() not in ARTIFACT_EXTENSIONS:
-            continue
-
-        # Store relative path (relative to agent_dir for subagents, work_dir for main)
-        base = agent_dir if agent_dir else work_dir
-        try:
-            rel_path = path.relative_to(base)
-            artifacts.append(rel_path)
-        except ValueError:
-            artifacts.append(path)
+        for filename in files:
+            file_path = root_path / filename
+            if file_path.suffix.lower() not in ARTIFACT_EXTENSIONS:
+                continue
+            try:
+                artifacts.append(file_path.relative_to(base))
+            except ValueError:
+                artifacts.append(file_path)
 
     return sorted(artifacts)
 
@@ -184,7 +198,7 @@ class ArtifactItem(ListItem):
 
         max_len: int = 19
         if len(display_path) > max_len:
-            display_path = display_path[:max_len - 1] + "…"
+            display_path = display_path[: max_len - 1] + "…"
 
         text = Text()
         text.append(f"{tag:>3}", style="dim")
@@ -193,8 +207,11 @@ class ArtifactItem(ListItem):
 
 
 _ARTIFACT_TYPE_ORDER: dict[str, int] = {
-    ".md": 0, ".py": 1,
-    ".png": 2, ".jpg": 2, ".jpeg": 2,
+    ".md": 0,
+    ".py": 1,
+    ".png": 2,
+    ".jpg": 2,
+    ".jpeg": 2,
     ".csv": 3,
 }
 
@@ -239,7 +256,9 @@ class ArtifactList(ListView):
         is_main = agent_name is not None and agent_name.startswith("main")
 
         # Discover artifacts
-        self._artifacts = discover_artifacts(self._work_dir, self._agent_dir, is_main=is_main)
+        self._artifacts = discover_artifacts(
+            self._work_dir, self._agent_dir, is_main=is_main
+        )
 
         # Rebuild list
         self.clear()
@@ -260,7 +279,9 @@ class ArtifactList(ListView):
 
         self._agent_dir = get_agent_directory(self._work_dir, self._agent_name)
         is_main = self._agent_name.startswith("main")
-        new_artifacts = _sort_artifacts(discover_artifacts(self._work_dir, self._agent_dir, is_main=is_main))
+        new_artifacts = _sort_artifacts(
+            discover_artifacts(self._work_dir, self._agent_dir, is_main=is_main)
+        )
 
         if new_artifacts != self._artifacts:
             self._artifacts = new_artifacts
@@ -284,7 +305,9 @@ class ArtifactList(ListView):
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle selection (Enter key)."""
         if isinstance(event.item, ArtifactItem):
-            self.post_message(self.FileSelected(self._resolve_path(event.item.file_path)))
+            self.post_message(
+                self.FileSelected(self._resolve_path(event.item.file_path))
+            )
 
     def get_highlighted_path(self) -> Path | None:
         """Get the path of the currently highlighted file."""
@@ -630,7 +653,12 @@ class CsvDisplay(DataTable):
             # Show truncation message if needed
             if len(rows) > self._max_rows + 1:
                 truncated = len(rows) - self._max_rows - 1
-                self.add_row(*[f"... {truncated} more rows ..." if i == 0 else "" for i in range(len(headers))])
+                self.add_row(
+                    *[
+                        f"... {truncated} more rows ..." if i == 0 else ""
+                        for i in range(len(headers))
+                    ]
+                )
 
         except csv.Error:
             # Fallback to plain text display if CSV parsing fails
