@@ -137,6 +137,14 @@ Displays a Gantt chart of the session with timing, cost breakdown per agent, and
 
 <!-- ![dlab timeline Gantt chart](docs/assets/timeline-gantt.png) -->
 
+### Browser-based session viewer
+
+```bash
+dlab view ./mmm-run
+```
+
+Opens a browser viewer with a DAG visualization of the session — orchestrator, parallel instances, and consolidator laid out on a time axis — with a detail panel showing each agent's messages, tool calls, costs, and artifacts. Use `--export report.html` to write a self-contained HTML file you can share instead of starting a server.
+
 ### Creation wizards
 
 ```bash
@@ -186,6 +194,7 @@ DLAB_FIT_MODEL_LOCALLY=1 dlab --dpack mmm --data ./data --prompt "..."
 dlab --dpack PATH --data PATH --prompt TEXT   # Run a session
 dlab connect WORK_DIR                         # Live TUI monitor
 dlab timeline [WORK_DIR]                      # Execution Gantt chart
+dlab view WORK_DIR                            # Browser-based DAG viewer
 dlab create-dpack [OUTPUT_DIR]                # Interactive wizard
 dlab create-parallel-agent [DPACK_DIR]        # Parallel agent wizard
 dlab install DPACK_PATH                       # Create shortcut command

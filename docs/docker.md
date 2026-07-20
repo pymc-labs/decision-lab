@@ -2,6 +2,8 @@
 
 dlab uses Docker to provide isolated, reproducible environments for running opencode.
 
+Docker can be bypassed entirely with the `--no-sandboxing` flag, which runs opencode locally on the host — see [Local Mode in the CLI reference](cli-reference.md#local-mode---no-sandboxing).
+
 ## How Images Are Built
 
 When you run dlab, it builds a Docker image in two stages:
