@@ -223,6 +223,7 @@ export default tool({
       model: string
       prompt: string
     }> = []
+    const modelWarnings: string[] = []
 
     for (let i = 0; i < numInstances; i++) {
       const instanceDir = join(runDir, `instance-${i + 1}`)
@@ -255,8 +256,22 @@ export default tool({
 
       // Build prompt with subagent context and suffix
       // Model priority: 1) explicit models array, 2) instance_models from config, 3) default_model
+      // The models arg comes from the orchestrator LLM and may be hallucinated
+      // (e.g. "gemini-pro" without a provider prefix). opencode then dies with
+      // ProviderModelNotFoundError but still exits 0, so the whole fan-out
+      // fails silently. Ignore entries that are not "provider/model" and fall
+      // back to the configured model, surfacing a warning in the tool result.
       const instanceModels = config.instance_models || []
-      const model = args.models?.[i] || instanceModels[i] || config.default_model
+      const requestedModel = args.models?.[i]
+      const configuredModel = instanceModels[i] || config.default_model
+      let model = requestedModel || configuredModel
+      if (requestedModel && !requestedModel.includes("/")) {
+        model = configuredModel
+        modelWarnings.push(
+          `instance-${i + 1}: ignored invalid model "${requestedModel}" ` +
+          `(expected provider/model format), using "${configuredModel}"`
+        )
+      }
 
       // Automatic subagent context (always added to prevent hangs and enforce workspace boundaries)
       const subagentContext = `IMPORTANT CONTEXT: You are running as a parallel subagent in non-interactive mode.
@@ -402,6 +417,18 @@ RULES:
       finalOutput += `- Exit code: ${r.exitCode}\n`
       if (existsSync(r.summaryPath)) {
         finalOutput += `- Summary: ${r.summaryPath}\n`
+      } else {
+        // opencode can die (e.g. on an invalid model) and still exit 0, so a
+        // missing summary is the reliable failure signal — surface it.
+        finalOutput += `- WARNING: no summary.md produced — treat this instance as FAILED even though the exit code may be 0\n`
+      }
+      finalOutput += "\n"
+    }
+
+    if (modelWarnings.length > 0) {
+      finalOutput += "## Warnings\n\n"
+      for (const w of modelWarnings) {
+        finalOutput += `- ${w}\n`
       }
       finalOutput += "\n"
     }

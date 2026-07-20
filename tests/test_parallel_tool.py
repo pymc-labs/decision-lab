@@ -68,6 +68,17 @@ class TestParallelAgentsSource:
         summaries directly)."""
         assert "config.consolidator !== false" in PARALLEL_AGENTS_SOURCE
 
+    def test_invalid_instance_models_fall_back(self) -> None:
+        """Hallucinated model ids from the orchestrator (e.g. "gemini-pro"
+        without a provider prefix) must fall back to the configured model
+        instead of silently killing every instance — opencode dies with
+        ProviderModelNotFoundError but still exits 0, so without this guard
+        the whole fan-out fails invisibly."""
+        assert 'ignored invalid model' in PARALLEL_AGENTS_SOURCE
+        assert 'requestedModel.includes("/")' in PARALLEL_AGENTS_SOURCE
+        # Missing summary.md must be surfaced as a failure signal
+        assert "no summary.md produced" in PARALLEL_AGENTS_SOURCE
+
     def test_no_esm_named_imports_from_third_party(self) -> None:
         """Third-party packages must use default imports to avoid CJS/ESM issues.
 
