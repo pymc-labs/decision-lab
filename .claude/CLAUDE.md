@@ -187,7 +187,7 @@ The consolidator agent is auto-generated from `summarizer_prompt` in parallel ag
 - `opencode.json` with hardcoded permissions: reads and file writes allowed, bash/task denied. IMPORTANT: opencode gates the `write` tool behind the `edit` permission key — the consolidator must be able to write `consolidated_summary.md`, since only that file's content reaches the orchestrator (stdout is discarded). Denying `edit` silently discards the consolidator's entire output.
 - No custom tools directory
 
-The consolidator runs automatically when >2 parallel instances complete, reading all `summary.md` files and creating a consolidated comparison.
+The consolidator runs automatically when >2 parallel instances complete, reading all `summary.md` files and creating a consolidated comparison. Setting `consolidator: false` in the parallel agent YAML skips it entirely — the orchestrator then gets the per-instance summary paths and compares them itself.
 
 ## Documentation Maintenance
 

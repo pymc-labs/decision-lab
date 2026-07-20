@@ -326,10 +326,11 @@ CRITICAL OUTPUT RULES:
       })
     }
 
-    // Run consolidator if >= 3 instances completed
+    // Run consolidator if >= 3 instances completed, unless the parallel agent
+    // config opts out with `consolidator: false`.
     // For n=2, the orchestrator can read both summaries directly
     let consolidatedSummary = ""
-    if (numInstances >= 3 && config.summarizer_prompt) {
+    if (numInstances >= 3 && config.summarizer_prompt && config.consolidator !== false) {
       // Use ABSOLUTE paths so consolidator doesn't need to search
       const summaryPaths = results
         .filter(r => existsSync(r.summaryPath))

@@ -62,6 +62,12 @@ class TestParallelAgentsSource:
         assert '"bash": { "*": "deny" }' in consolidator_block
         assert '"task": { "*": "deny" }' in consolidator_block
 
+    def test_consolidator_opt_out_supported(self) -> None:
+        """`consolidator: false` in a parallel agent YAML must skip the
+        consolidation step (the orchestrator then reads per-instance
+        summaries directly)."""
+        assert "config.consolidator !== false" in PARALLEL_AGENTS_SOURCE
+
     def test_no_esm_named_imports_from_third_party(self) -> None:
         """Third-party packages must use default imports to avoid CJS/ESM issues.
 
