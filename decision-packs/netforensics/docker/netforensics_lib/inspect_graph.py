@@ -7,6 +7,7 @@ the agent reads this and decides which evaluation protocols are applicable.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -53,7 +54,6 @@ def inspect(ds: GraphDataset) -> dict:
 
     # Edge / degree summary
     if ds.n_edges > 0:
-        from collections import Counter
         deg = Counter(int(u) for u, _ in ds.edges)
         for _, v in ds.edges:
             deg[int(v)] += 1

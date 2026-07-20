@@ -7,6 +7,7 @@ subset of nodes.
 """
 from __future__ import annotations
 
+import networkx as nx
 import numpy as np
 
 from .loader import GraphDataset
@@ -119,8 +120,6 @@ def inductive_subgraph_split(
     distribution shift. If you call it explicitly on a temporal dataset, the
     result is a stress test, not a deploy estimate.
     """
-    import networkx as nx
-
     g = nx.Graph()
     g.add_nodes_from(range(ds.n_nodes))
     g.add_edges_from(ds.edges.tolist())

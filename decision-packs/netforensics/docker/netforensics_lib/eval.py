@@ -7,6 +7,7 @@ is included only as a secondary comparator.
 """
 from __future__ import annotations
 
+import networkx as nx
 import numpy as np
 from sklearn.metrics import (
     average_precision_score,
@@ -115,17 +116,18 @@ def _degree_preserving_shuffle(ds: GraphDataset, seed: int = 0) -> GraphDataset:
     sequence exactly while destroying any non-degree structure (community,
     motif, assortativity).
     """
-    import networkx as nx
-
     g = nx.Graph()
     g.add_nodes_from(range(ds.n_nodes))
     g.add_edges_from(ds.edges.tolist())
     n_swaps = max(10 * g.number_of_edges(), 1000)
     try:
         nx.double_edge_swap(g, nswap=n_swaps, max_tries=n_swaps * 10, seed=seed)
-    except nx.NetworkXAlgorithmError:
-        # Falls through for graphs too dense/sparse to fully randomize;
-        # the partial randomization is still informative.
+    except (nx.NetworkXAlgorithmError, nx.NetworkXError):
+        # NetworkXAlgorithmError: graph too dense/sparse to fully randomize —
+        # the partial randomization is still informative. NetworkXError:
+        # degenerate graphs (< 4 nodes or < 2 edges) cannot be rewired at
+        # all; the "shuffled" graph is then identical to the real one, which
+        # correctly yields a zero gap.
         pass
 
     new_edges = np.array(list(g.edges()), dtype=np.int64)

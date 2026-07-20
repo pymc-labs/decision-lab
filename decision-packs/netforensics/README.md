@@ -22,7 +22,7 @@ Every run produces two reports at the work directory root:
 - **`business_report.md`** — plain-language deploy / use-baseline / don't-deploy verdict, with the honest F1 number and the gap from the naive evaluation.
 - **`technical_report.md`** — full diagnostics with tables, seeds, spread, and references to the methodological standards being applied.
 
-Plus three `consolidated_summary.md` files from the parallel-agent fan-outs and one `edge_shuffle_result.json`.
+Plus per-instance `summary.md` files from every parallel-agent fan-out, `consolidated_summary.md` comparisons for the fan-outs with 3+ instances (the consolidator does not run for two-instance fan-outs), and one `edge_shuffle_result.json`.
 
 ## Install
 
@@ -37,16 +37,16 @@ echo "ANTHROPIC_API_KEY=..." > .env
 
 ```bash
 # On the included synthetic example (homophilic — some graph signal, smoke test)
-dlab --dpack netforensics \
-  --data netforensics/example-data \
+dlab --dpack decision-packs/netforensics \
+  --data decision-packs/netforensics/example-data \
   --env-file .env \
   --work-dir ./synth-run \
   --prompt "Evaluate whether this dataset supports a deployable node-classification model and whether the graph structure is contributing useful signal."
 
 # On the negative-control synthetic (label-independent edges — graph should
 # contribute nothing; this is the test that the pack will SAY so)
-dlab --dpack netforensics \
-  --data netforensics/example-data-negcontrol \
+dlab --dpack decision-packs/netforensics \
+  --data decision-packs/netforensics/example-data-negcontrol \
   --env-file .env \
   --work-dir ./synth-run-negcontrol \
   --prompt "Evaluate whether this dataset supports a deployable node-classification model and whether the graph structure is contributing useful signal."
@@ -82,7 +82,7 @@ To run the demo on Elliptic:
 2. Run:
 
    ```bash
-   dlab --dpack netforensics \
+   dlab --dpack decision-packs/netforensics \
      --data ./elliptic \
      --env-file .env \
      --work-dir ./elliptic-run \

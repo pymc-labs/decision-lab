@@ -23,8 +23,8 @@ subagent_suffix_prompt: |
   temporal or inductive split, you MUST pass strict_edges=true. For GNNs
   on transductive split, leave strict_edges=false (the default).
 
-  Run the model at 3 seeds (0, 1, 2) and report median F1, min/max, and
-  the per-seed values.
+  Run the model once per seed in the seed list given in your prompt and
+  report median F1, min/max, and the per-seed values.
 
   Write your results to summary.md with this structure:
 
@@ -33,7 +33,7 @@ subagent_suffix_prompt: |
   - Split protocol
   - Feature mode
   - strict_edges
-  - Seeds used: [0, 1, 2]
+  - Seeds used: <the seed list from your prompt>
 
   ## Results (across seeds)
   - f1_positive: median=<v>, min=<v>, max=<v>

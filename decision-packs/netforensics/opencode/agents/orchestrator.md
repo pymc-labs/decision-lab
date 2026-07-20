@@ -67,7 +67,7 @@ Spawn the `protocol-evaluator` parallel agent. Each instance runs XGBoost on the
 
 (If no timestamps: replace `temporal` with `inductive` in the second prompt.)
 
-Read `consolidated_summary.md` from the run directory. Compute the F1 gap between transductive and the deployment-realistic split (temporal if available, else inductive).
+Read the results. NOTE: the consolidator only runs when 3 or more instances complete, so this two-instance fan-out produces NO `consolidated_summary.md` — read each instance's `summary.md` directly (the parallel-agents tool output lists their paths). Compute the F1 gap between transductive and the deployment-realistic split (temporal if available, else inductive).
 
 **Decision point:** If the gap is >0.10 F1, mark the dataset as exhibiting the leakage trap. Any "X% accuracy" claim made on this dataset with a random split is invalid. This will be the lead finding in the business report.
 
@@ -97,7 +97,7 @@ Read `consolidated_summary.md`.
 Spawn the `feature-ablator` parallel agent. All instances run XGBoost on the deployment-realistic split.
 
 - If you recorded `n_raw_features` in Step 1, fan out three instances: `all`, `raw_local` (with `n_raw_features=<value>`), and `topology_only`.
-- If `n_raw_features` is `null` (no documented per-node-only subset), fan out **two** instances: `all` and `topology_only`. State in the consolidated summary that the per-node-only split could not be evaluated for this dataset.
+- If `n_raw_features` is `null` (no documented per-node-only subset), fan out **two** instances: `all` and `topology_only`. State in the reports that the per-node-only split could not be evaluated for this dataset.
 
 ```json
 {
@@ -110,14 +110,14 @@ Spawn the `feature-ablator` parallel agent. All instances run XGBoost on the dep
 }
 ```
 
-Read `consolidated_summary.md`. Note where the signal lives.
+Read the results (`consolidated_summary.md` with three instances; with two instances the consolidator does not run — read the per-instance `summary.md` files). Note where the signal lives.
 
 ### Step 6: Edge-shuffle ablation on the winning model
 
 Pick the model from Step 4 with the best honest (strict_edges=true on temporal/inductive) F1. Call the `eval-edge-shuffle` tool on it across the **same seed list** you used in Step 4 (`[0, 1, 2, 3, 4]`):
 
 ```
-eval-edge-shuffle(data_dir, model=<winner>, split=<canonical>, seed=<each of 0..4>, strict_edges=true)
+eval-edge-shuffle(data_dir, model=<winner>, split=<canonical>, seed=<each of 0..4>)
 ```
 
 The tool automatically forces `strict_edges=true` when the split is temporal or inductive (because measuring the edge-shuffle gap in the leaky regime is meaningless — leakage and rewiring have correlated effects on F1). Do not bypass this.
@@ -172,7 +172,8 @@ Read `n_test_positives` from Step 4's `consolidated_summary.md` (or the per-cell
 By end of run, the work directory should contain:
 
 - `data_summary.md`
-- `parallel/run-*/consolidated_summary.md` (one per fan-out, three total)
+- `parallel/run-*/instance-*/summary.md` (one per instance, every fan-out)
+- `parallel/run-*/consolidated_summary.md` (only for fan-outs with 3+ instances — Step 4 always; Step 5 unless `n_raw_features` is null; never Step 3, which runs two instances)
 - `edge_shuffle_result.json`
 - `business_report.md`
 - `technical_report.md`

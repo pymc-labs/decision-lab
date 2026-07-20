@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import time
 
+import networkx as nx
 import numpy as np
 
 from .eval import evaluate
@@ -47,8 +48,6 @@ def _compute_topology_features(ds: GraphDataset) -> np.ndarray:
     the graph (no provided features). If the model can't predict from these,
     the graph carries little signal for the task.
     """
-    import networkx as nx
-
     g = nx.DiGraph()
     g.add_nodes_from(range(ds.n_nodes))
     g.add_edges_from(ds.edges.tolist())

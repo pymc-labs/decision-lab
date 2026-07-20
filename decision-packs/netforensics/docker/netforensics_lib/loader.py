@@ -95,17 +95,41 @@ def _parse_label(value) -> int:
     return -1
 
 
+def _is_number(value) -> bool:
+    """True if the value parses as a float (so it cannot be a column name)."""
+    try:
+        float(str(value))
+        return True
+    except ValueError:
+        return False
+
+
+def _read_csv_sniff_header(path: Path) -> pd.DataFrame:
+    """Read a CSV whose header row is optional.
+
+    All three dataset files share the convention that the first column is a
+    numeric node id. If the first cell of the file is non-numeric while the
+    rest of the first column is numeric, the first row is a header (e.g.,
+    Elliptic's ``txId1,txId2`` / ``txId,class``); otherwise the file is
+    headerless. Limitation (documented in the README): datasets with
+    non-numeric node ids cannot carry a header row, since the two cases are
+    then indistinguishable.
+    """
+    probe = pd.read_csv(path, header=None, nrows=2, low_memory=False)
+    has_header = (
+        len(probe) > 1
+        and not _is_number(probe.iloc[0, 0])
+        and _is_number(probe.iloc[1, 0])
+    )
+    return pd.read_csv(path, header=0 if has_header else None, low_memory=False)
+
+
 def load_dataset(data_dir: str | Path) -> GraphDataset:
     """Load a graph dataset from a directory of CSVs."""
     data_dir = Path(data_dir)
     features_path, edges_path, labels_path = _detect_files(data_dir)
 
-    feat_df = pd.read_csv(features_path, header=None, low_memory=False)
-    # Elliptic has no header; first col is node_id, second is timestamp.
-    # If a header is present (custom datasets), we'll handle that too.
-    if not np.issubdtype(feat_df.iloc[0, 0].__class__, np.number):
-        # Looks like header row — re-read with header=0
-        feat_df = pd.read_csv(features_path, low_memory=False)
+    feat_df = _read_csv_sniff_header(features_path)
 
     node_ids = feat_df.iloc[:, 0].to_numpy()
     # Heuristic: if column 1 has small integer range (1..100), treat as timestep
@@ -126,9 +150,7 @@ def load_dataset(data_dir: str | Path) -> GraphDataset:
 
     id_to_idx = {nid: i for i, nid in enumerate(node_ids)}
 
-    edges_df = pd.read_csv(edges_path)
-    if edges_df.shape[1] != 2:
-        edges_df = pd.read_csv(edges_path, header=None)
+    edges_df = _read_csv_sniff_header(edges_path)
     edges_src = edges_df.iloc[:, 0].to_numpy()
     edges_dst = edges_df.iloc[:, 1].to_numpy()
     edges = np.column_stack([
@@ -138,9 +160,7 @@ def load_dataset(data_dir: str | Path) -> GraphDataset:
     keep = (edges[:, 0] >= 0) & (edges[:, 1] >= 0)
     edges = edges[keep].astype(np.int64)
 
-    labels_df = pd.read_csv(labels_path)
-    if labels_df.shape[1] != 2 or labels_df.columns[0].startswith("Unnamed"):
-        labels_df = pd.read_csv(labels_path, header=None)
+    labels_df = _read_csv_sniff_header(labels_path)
     label_map = {row[0]: _parse_label(row[1]) for row in labels_df.itertuples(index=False)}
     labels = np.array([label_map.get(nid, -1) for nid in node_ids], dtype=np.int64)
 

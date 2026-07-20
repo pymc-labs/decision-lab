@@ -9,7 +9,9 @@ All three split functions (transductive/temporal/inductive) take and return
 the same shape: (train_mask, test_mask) over labeled rows of features.
 
 All three model trainers (XGBoost, GCN, GraphSAGE) accept the same arguments
-and return the same dict: {f1_positive, precision_at_k, auroc, predictions, runtime_s}.
+and return the same dict of metrics: {f1_positive, precision_at_50,
+precision_at_500, pr_auc, auroc, n_test, n_positive, runtime_s, ...} plus the
+configuration echoed back.
 """
 
 from .loader import load_dataset, GraphDataset
