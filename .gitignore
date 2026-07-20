@@ -5,6 +5,9 @@ sandbox-test-sessions/*
 # Generated session directories (dlab-{dpack}-workdir-NNN/)
 dlab-*-workdir-[0-9][0-9][0-9]/
 
+# Local collection of session work dirs moved out of the repo root
+runs/
+
 # Python
 __pycache__/
 *.py[cod]

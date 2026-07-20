@@ -20,6 +20,8 @@ my-dpack/
     Dockerfile             # Container setup
     requirements.txt       # Dependencies (or environment.yml / pixi.toml)
     modal_app/             # (optional) Modal serverless compute
+    my_dpack_lib/          # (optional) Custom Python library (python_lib=True)
+  tests/                   # (required with a custom lib) pytest suite for the lib
   opencode/
     opencode.json          # Permissions and default agent
     agents/
@@ -29,6 +31,8 @@ my-dpack/
     skills/                # (optional) Knowledge files
     parallel_agents/       # (optional) Parallel agent configs
 ```
+
+If the pack bundles a custom Python library (`python_lib=True`), it must also ship a pytest suite in `<pack>/tests/` covering the library's deterministic logic (loaders, numeric routines, invariants). `generate_dpack()` does not scaffold this yet — create it after generation. Reference layout: `decision-packs/mmm/tests/` (conftest, fixtures, pytest.ini).
 
 ## generate_dpack()
 
