@@ -182,9 +182,9 @@ In `parallel_tool.py`, we run `git init` in each parallel instance directory. Th
 
 The consolidator agent is auto-generated from `summarizer_prompt` in parallel agent YAML config. It does NOT require a separate `consolidator.md` file.
 
-`setupConsolidator()` in `parallel_tool.py` creates:
-- Inline `consolidator.md` agent with read-only permissions
-- `opencode.json` with hardcoded read-only tool access (no edit, bash, or task)
+`setupConsolidator()` in `js/parallel-agents.ts` creates:
+- Inline `consolidator.md` agent (read + write, no bash)
+- `opencode.json` with hardcoded permissions: reads and file writes allowed, bash/task denied. IMPORTANT: opencode gates the `write` tool behind the `edit` permission key — the consolidator must be able to write `consolidated_summary.md`, since only that file's content reaches the orchestrator (stdout is discarded). Denying `edit` silently discards the consolidator's entire output.
 - No custom tools directory
 
 The consolidator runs automatically when >2 parallel instances complete, reading all `summary.md` files and creating a consolidated comparison.

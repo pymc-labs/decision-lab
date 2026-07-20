@@ -117,18 +117,18 @@ The consolidator is auto-generated at runtime from the `summarizer_prompt`. You 
 
 ### Permissions
 
-The consolidator has **read-only permissions**:
+The consolidator can read everything and write files, but cannot execute commands or spawn agents:
 
 | Permission | Status |
 |------------|--------|
 | Read files | Allowed |
 | Glob/Grep search | Allowed |
-| Edit files | **Denied** |
+| Write/edit files | Allowed — required to produce `consolidated_summary.md` (opencode gates the `write` tool behind the `edit` permission key, so `edit` must be allowed) |
 | Bash commands | **Denied** |
 | Spawn subagents | **Denied** |
 | Custom tools | **Not available** |
 
-This ensures the consolidator only synthesizes results without modifying instance output.
+The consolidator's job is to synthesize results into `consolidated_summary.md`; only that file's content reaches the orchestrator (stdout is discarded), so write access is essential.
 
 ## Directory Structure
 

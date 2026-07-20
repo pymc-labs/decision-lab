@@ -44,6 +44,24 @@ class TestParallelAgentsSource:
         expected: str = source_file.read_text()
         assert PARALLEL_AGENTS_SOURCE == expected
 
+    def test_consolidator_can_write_its_summary(self) -> None:
+        """The consolidator must be able to write consolidated_summary.md.
+
+        opencode gates the write tool behind the "edit" permission key.
+        Regression guard: with "edit" denied, the write tool silently
+        disappears, the consolidator's output file is never created, and the
+        orchestrator only ever sees the placeholder text — parallel runs then
+        pay for a consolidator whose entire output is discarded.
+        """
+        consolidator_block: str = PARALLEL_AGENTS_SOURCE.split(
+            "function setupConsolidator"
+        )[1].split("function ")[0]
+        assert '"edit": { "*": "allow" }' in consolidator_block
+        assert '"edit": { "*": "deny" }' not in consolidator_block
+        assert "write: true" in consolidator_block
+        assert '"bash": { "*": "deny" }' in consolidator_block
+        assert '"task": { "*": "deny" }' in consolidator_block
+
     def test_no_esm_named_imports_from_third_party(self) -> None:
         """Third-party packages must use default imports to avoid CJS/ESM issues.
 

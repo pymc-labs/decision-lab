@@ -62,20 +62,22 @@ function buildPermissionsFromFrontmatter(agentPath: string): Record<string, any>
   }
 }
 
-// Helper: Setup minimal consolidator environment (read-only, no custom tools)
+// Helper: Setup minimal consolidator environment (read + write summary, no bash/task, no custom tools)
 function setupConsolidator(runDir: string, srcOpencode: string, summarizerPrompt: string) {
   const destOpencode = join(runDir, ".opencode")
 
   // Create directories
   mkdirSync(join(destOpencode, "agents"), { recursive: true })
 
-  // Create minimal consolidator agent from summarizer_prompt
+  // Create minimal consolidator agent from summarizer_prompt.
+  // The consolidator MUST be able to write consolidated_summary.md — its
+  // output is read from that file, stdout is discarded.
   const consolidatorAgent = `---
 description: Consolidator agent for comparing parallel agent results
 mode: primary
 tools:
   read: true
-  edit: false
+  write: true
   bash: false
   parallel-agents: false
 ---
@@ -88,7 +90,7 @@ ${summarizerPrompt}
   const opconfig = JSON.parse(readFileSync(join(srcOpencode, "opencode.json"), "utf-8"))
   opconfig.default_agent = "consolidator"
 
-  // Hardcoded read-only permissions for consolidator
+  // Hardcoded permissions for consolidator
   opconfig.permission = {
     // Read/discovery tools - always allowed
     "read": { "*": "allow" },
@@ -98,8 +100,14 @@ ${summarizerPrompt}
     "lsp": { "*": "allow" },
     "external_directory": { "*": "allow" },
 
-    // Write/execute tools - always denied
-    "edit": { "*": "deny" },
+    // File writes - ALLOWED: opencode gates the write tool behind the "edit"
+    // permission key. Denying it silently removes the write tool, the
+    // consolidator cannot create consolidated_summary.md, and its entire
+    // output is discarded (the orchestrator then only sees the placeholder
+    // "[Consolidator did not produce a summary file]").
+    "edit": { "*": "allow" },
+
+    // Execute/spawn tools - always denied
     "bash": { "*": "deny" },
     "task": { "*": "deny" },
 
@@ -352,7 +360,7 @@ RULES:
       // Without this, OpenCode traverses up and merges parent's .opencode/, running as orchestrator
       Bun.spawnSync(["git", "init"], { cwd: runDir, stdout: "ignore", stderr: "ignore" })
 
-      // Setup minimal consolidator environment (read-only, no custom tools)
+      // Setup minimal consolidator environment (no bash/task, no custom tools)
       setupConsolidator(runDir, join(cwd, ".opencode"), config.summarizer_prompt)
 
       const consLogFile = join(logsDir, "consolidator.log")
