@@ -53,6 +53,11 @@ requires_data: true           # If false, --data becomes optional (default: true
 requires_prompt: true         # If false, --prompt becomes optional (default: true)
 opencode_version: "1.2.10"    # Pin opencode version (default: latest)
 
+# Optional per-role model overrides (omitted roles inherit default_model)
+models:
+  forecaster: anthropic/claude-haiku-4-5     # Parallel agent instances
+  consolidator: anthropic/claude-sonnet-4-5  # Consolidator agent
+
 # Hook scripts that run inside the container
 hooks:
   pre-run: deploy_modal.sh           # Single script
@@ -71,8 +76,14 @@ hooks:
 | `requires_prompt` | No | `true` | Whether `--prompt` is required |
 | `cli_name` | No | same as `name` | Override command name for `dlab install` |
 | `opencode_version` | No | `latest` | opencode version to install |
+| `models.forecaster` | No | `default_model` | Model for parallel agent instances |
+| `models.consolidator` | No | `default_model` | Model for the consolidator agent |
 | `hooks.pre-run` | No | — | Scripts to run before opencode |
 | `hooks.post-run` | No | — | Scripts to run after opencode |
+
+### Model Roles
+
+`default_model` is the orchestrator model (overridable at run time with `dlab --model`). The optional `models:` block overrides models for the other roles: at session setup, `forecaster` is injected as `default_model` and `consolidator` as `summarizer_model` into each YAML file under `opencode/parallel_agents/`. Omitted roles fall back to `default_model`.
 
 ## opencode/opencode.json
 
@@ -255,3 +266,4 @@ DLAB_FIT_MODEL_LOCALLY=1
 4. **Set requires_data / requires_prompt**: Use `requires_data: false` or `requires_prompt: false` for decision-packs that don't need them
 5. **Use .env.example**: Document required environment variables
 6. **Use `DLAB_*` env vars**: For decision-pack-specific configuration that users can toggle at runtime
+7. **Test bundled Python code**: If the pack ships a custom library under `docker/` (e.g. `mmm_lib`, `netforensics_lib`), include a pytest suite in `<pack>/tests/` covering its deterministic logic — data loading, numeric routines, invariants. The agent workflow can't be unit-tested, but the primitives it calls can, and they are what silently corrupts results when broken. See `decision-packs/mmm/tests/` for the reference layout (conftest, fixtures, pytest.ini).
