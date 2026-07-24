@@ -99,6 +99,97 @@ class TestTyperApp:
         assert result.exit_code != 2
 
 
+class TestRunSubcommand:
+    """Behavioral tests for the explicit `dlab run` subcommand (issue #32).
+
+    Every test that exercises an error path doubles as a wiring check: an
+    exit code of 1 (not 2) proves the invocation parsed and reached
+    cmd_run's own validation rather than dying in click.
+    """
+
+    ALL_RUN_OPTIONS: tuple[str, ...] = (
+        "--dpack", "--data", "--model", "--prompt", "--prompt-file",
+        "--work-dir", "--continue-dir", "--rebuild", "--env-file",
+        "--no-sandboxing",
+    )
+
+    def test_run_help_lists_every_run_option(self) -> None:
+        result = runner.invoke(app, ["run", "--help"])
+        assert result.exit_code == 0
+        for opt in self.ALL_RUN_OPTIONS:
+            assert opt in result.output, f"{opt} missing from `dlab run --help`"
+
+    def test_run_without_args_fails_like_run_mode(self) -> None:
+        """`dlab run` with no options reaches cmd_run and fails on the
+        missing --dpack (exit 1), it does not print help or parse-error."""
+        result = runner.invoke(app, ["run"])
+        assert result.exit_code == 1
+
+    def test_run_rejects_positional_arguments(self) -> None:
+        """`run` takes options only; a stray positional is a parse error."""
+        result = runner.invoke(app, ["run", "some-dpack"])
+        assert result.exit_code == 2
+
+    def test_run_repeated_data_flag_parses(self) -> None:
+        result = runner.invoke(
+            app,
+            ["run", "--dpack", "/nonexistent", "--data", "/a", "--data", "/b",
+             "--prompt", "test"],
+        )
+        # exit 1 (invalid dpack) is fine; exit 2 would mean a parse error
+        assert result.exit_code == 1
+
+    def test_run_missing_data_fails(self, dpack_config_dir: Path) -> None:
+        result = runner.invoke(
+            app, ["run", "--dpack", str(dpack_config_dir), "--prompt", "test"]
+        )
+        assert result.exit_code == 1
+
+    def test_run_both_prompt_args_fails(
+        self, dpack_config_dir: Path, data_dir: Path, tmp_path: Path
+    ) -> None:
+        prompt_file: Path = tmp_path / "prompt.md"
+        prompt_file.write_text("file prompt")
+        result = runner.invoke(
+            app,
+            ["run", "--dpack", str(dpack_config_dir), "--data", str(data_dir),
+             "--prompt", "inline", "--prompt-file", str(prompt_file)],
+        )
+        assert result.exit_code == 1
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ["--prompt", "test"],                                # missing dpack
+            ["--dpack", "/nonexistent", "--prompt", "test"],     # invalid dpack
+            ["--dpack", "/nonexistent", "--data", "/a", "--data", "/b",
+             "--prompt", "t"],                                   # repeated data
+        ],
+        ids=["missing-dpack", "invalid-dpack", "repeated-data"],
+    )
+    def test_shorthand_and_subcommand_agree(self, args: list[str]) -> None:
+        """The root shorthand and `run` must exit identically for the same
+        argument vector — they share cmd_run."""
+        explicit = runner.invoke(app, ["run", *args])
+        shorthand = runner.invoke(app, args)
+        assert explicit.exit_code == shorthand.exit_code == 1
+
+    def test_shorthand_prompt_value_run_is_not_a_subcommand(self) -> None:
+        """A --prompt value of "run" must stay an option value, not get
+        dispatched as the run subcommand."""
+        result = runner.invoke(
+            app, ["--dpack", "/nonexistent", "--prompt", "run"]
+        )
+        # invalid dpack error from cmd_run, not a parse/dispatch error
+        assert result.exit_code == 1
+
+    def test_run_unknown_flag_is_parse_error(self) -> None:
+        result = runner.invoke(
+            app, ["run", "--dpack", "/x", "--bogus-flag"]
+        )
+        assert result.exit_code == 2
+
+
 class TestCmdRun:
     """Tests for cmd_run function."""
 
@@ -618,6 +709,15 @@ class TestCmdInstall:
         assert "dlab" in content
         assert "--dpack" in content
         assert str(dpack_config_dir.resolve()) in content
+
+    def test_wrapper_uses_explicit_run_subcommand(
+        self, dpack_config_dir: Path, tmp_path: Path
+    ) -> None:
+        """Generated wrappers call `dlab run --dpack ...` explicitly (#32)."""
+        bin_dir: Path = tmp_path / "bin"
+        assert cmd_install(dpack_path=str(dpack_config_dir), bin_dir=str(bin_dir)) == 0
+        content: str = (bin_dir / "test-dpack").read_text()
+        assert '"dlab", "run", "--dpack"' in content
 
     def test_creates_bin_dir_if_missing(
         self, dpack_config_dir: Path, tmp_path: Path
