@@ -24,7 +24,7 @@ Get Modal tokens at https://modal.com/settings/tokens.
 ## Run
 
 ```bash
-dlab --dpack decision-packs/modal-example --env-file .env --prompt "Run a test computation on Modal"
+dlab run --dpack decision-packs/modal-example --env-file .env --prompt "Run a test computation on Modal"
 ```
 
 ## Environment variables

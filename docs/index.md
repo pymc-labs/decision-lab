@@ -63,7 +63,7 @@ dlab solves the problem of running AI coding agents in a controlled, reproducibl
 dlab create-dpack
 
 # Run with a decision-pack
-dlab --dpack ./my-dpack \
+dlab run --dpack ./my-dpack \
          --data ./my-data \
          --prompt "Analyze this data"
 
@@ -74,7 +74,7 @@ dlab connect ./analysis-001
 dlab timeline ./analysis-001
 
 # Resume an interrupted session
-dlab --dpack ./my-dpack \
+dlab run --dpack ./my-dpack \
          --continue-dir ./analysis-001 \
          --prompt "Continue the analysis"
 ```

@@ -26,7 +26,7 @@ By default, sessions are created in the **current working directory**:
 
 You can specify a custom location with `--work-dir`:
 ```bash
-dlab --dpack ./my-dpack --data ./data \
+dlab run --dpack ./my-dpack --data ./data \
          --prompt "Test" --work-dir ./my-custom-session
 ```
 
@@ -103,7 +103,7 @@ Each session stores metadata:
 Data is **copied** to the session, not symlinked:
 
 ```bash
-dlab --dpack ./my-dpack --data ./my-data-dir --prompt "Analyze"
+dlab run --dpack ./my-dpack --data ./my-data-dir --prompt "Analyze"
 ```
 
 This copies the entire directory to `{session}/data/`.
@@ -113,7 +113,7 @@ This copies the entire directory to `{session}/data/`.
 You can pass multiple files instead of a directory:
 
 ```bash
-dlab --dpack ./my-dpack --data file1.csv file2.csv config.json --prompt "Compare"
+dlab run --dpack ./my-dpack --data file1.csv file2.csv config.json --prompt "Compare"
 ```
 
 Each file is copied into `{session}/data/`.
@@ -121,7 +121,7 @@ Each file is copied into `{session}/data/`.
 ### Mixed Files and Directories
 
 ```bash
-dlab --dpack ./my-dpack --data ./images/ report.csv --prompt "Process"
+dlab run --dpack ./my-dpack --data ./images/ report.csv --prompt "Process"
 ```
 
 Directories are copied as subdirectories, files are copied directly into `data/`.
@@ -131,7 +131,7 @@ Directories are copied as subdirectories, files are copied directly into `data/`
 If the decision-pack sets `requires_data: false`, `--data` is optional:
 
 ```bash
-dlab --dpack ./prompt-only-dpack --prompt "Write a poem"
+dlab run --dpack ./prompt-only-dpack --prompt "Write a poem"
 ```
 
 ## Continue Mode
@@ -139,7 +139,7 @@ dlab --dpack ./prompt-only-dpack --prompt "Write a poem"
 Resume an interrupted session:
 
 ```bash
-dlab --dpack ./my-dpack --continue-dir ./analysis-001 --prompt "Continue"
+dlab run --dpack ./my-dpack --continue-dir ./analysis-001 --prompt "Continue"
 ```
 
 This:

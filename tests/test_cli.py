@@ -26,8 +26,20 @@ class TestTyperApp:
         assert result.exit_code == 0
         assert "dlab" in result.output
 
-    def test_run_mode_options_appear_in_help(self) -> None:
+    def test_root_help_lists_run_command_not_run_options(self) -> None:
+        """Root help shows the run command; run-mode options are hidden
+        there so commands and options aren't interleaved (issue #32).
+        (--dpack does appear once, in the description's shorthand example,
+        so assert on options that no prose mentions.)"""
         result = runner.invoke(app, ["--help"])
+        assert "run" in result.output
+        assert "--no-sandboxing" not in result.output
+        assert "--prompt-file" not in result.output
+        assert "--continue-dir" not in result.output
+
+    def test_run_help_shows_run_options(self) -> None:
+        result = runner.invoke(app, ["run", "--help"])
+        assert result.exit_code == 0
         assert "--dpack" in result.output
         assert "--data" in result.output
         assert "--prompt" in result.output
@@ -58,6 +70,16 @@ class TestTyperApp:
         result = runner.invoke(app, [])
         assert result.exit_code == 0
         assert "dlab" in result.output
+
+    def test_run_subcommand_and_shorthand_are_equivalent(self) -> None:
+        """`dlab run --dpack ...` and the root shorthand must take the same
+        code path (issue #32): both hit cmd_run and fail identically on an
+        invalid dpack (exit 1, not a parse error)."""
+        args: list[str] = ["--dpack", "/nonexistent", "--prompt", "test"]
+        explicit = runner.invoke(app, ["run", *args])
+        shorthand = runner.invoke(app, args)
+        assert explicit.exit_code == 1
+        assert shorthand.exit_code == 1
 
     def test_data_repeated_flag(self) -> None:
         # exit 1 (invalid dpack) is fine; exit 2 means a parse error

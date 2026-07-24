@@ -36,17 +36,19 @@ dlab is a Python CLI that runs [opencode](https://opencode.ai) in automated mode
 
 ```bash
 # Basic usage
-dlab --dpack <dpack> --data <data-dir> --env-file .env --work-dir <work-dir> --prompt "Your prompt here"
+dlab run --dpack <dpack> --data <data-dir> --env-file .env --work-dir <work-dir> --prompt "Your prompt here"
 
 # Multiple data files
-dlab --dpack <dpack> --data file1.csv file2.csv --prompt "Compare these"
+dlab run --dpack <dpack> --data file1.csv file2.csv --prompt "Compare these"
 
 # Resume interrupted session
-dlab --dpack <dpack> --continue-dir ./dlab-mmm-workdir-001 --prompt "Continue"
+dlab run --dpack <dpack> --continue-dir ./dlab-mmm-workdir-001 --prompt "Continue"
 
 # Prompt from file
-dlab --dpack <dpack> --data <data-dir> --prompt-file prompt.txt
+dlab run --dpack <dpack> --data <data-dir> --prompt-file prompt.txt
 ```
+
+The `run` subcommand may be omitted as a shorthand (`dlab --dpack ...` works identically).
 
 Required flags:
 - `--dpack` - Path to decision-pack config directory
