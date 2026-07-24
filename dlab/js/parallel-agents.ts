@@ -62,20 +62,22 @@ function buildPermissionsFromFrontmatter(agentPath: string): Record<string, any>
   }
 }
 
-// Helper: Setup minimal consolidator environment (read-only, no custom tools)
+// Helper: Setup minimal consolidator environment (read + write summary, no bash/task, no custom tools)
 function setupConsolidator(runDir: string, srcOpencode: string, summarizerPrompt: string) {
   const destOpencode = join(runDir, ".opencode")
 
   // Create directories
   mkdirSync(join(destOpencode, "agents"), { recursive: true })
 
-  // Create minimal consolidator agent from summarizer_prompt
+  // Create minimal consolidator agent from summarizer_prompt.
+  // The consolidator MUST be able to write consolidated_summary.md — its
+  // output is read from that file, stdout is discarded.
   const consolidatorAgent = `---
 description: Consolidator agent for comparing parallel agent results
 mode: primary
 tools:
   read: true
-  edit: false
+  write: true
   bash: false
   parallel-agents: false
 ---
@@ -88,7 +90,7 @@ ${summarizerPrompt}
   const opconfig = JSON.parse(readFileSync(join(srcOpencode, "opencode.json"), "utf-8"))
   opconfig.default_agent = "consolidator"
 
-  // Hardcoded read-only permissions for consolidator
+  // Hardcoded permissions for consolidator
   opconfig.permission = {
     // Read/discovery tools - always allowed
     "read": { "*": "allow" },
@@ -98,8 +100,14 @@ ${summarizerPrompt}
     "lsp": { "*": "allow" },
     "external_directory": { "*": "allow" },
 
-    // Write/execute tools - always denied
-    "edit": { "*": "deny" },
+    // File writes - ALLOWED: opencode gates the write tool behind the "edit"
+    // permission key. Denying it silently removes the write tool, the
+    // consolidator cannot create consolidated_summary.md, and its entire
+    // output is discarded (the orchestrator then only sees the placeholder
+    // "[Consolidator did not produce a summary file]").
+    "edit": { "*": "allow" },
+
+    // Execute/spawn tools - always denied
     "bash": { "*": "deny" },
     "task": { "*": "deny" },
 
@@ -215,6 +223,7 @@ export default tool({
       model: string
       prompt: string
     }> = []
+    const modelWarnings: string[] = []
 
     for (let i = 0; i < numInstances; i++) {
       const instanceDir = join(runDir, `instance-${i + 1}`)
@@ -247,8 +256,22 @@ export default tool({
 
       // Build prompt with subagent context and suffix
       // Model priority: 1) explicit models array, 2) instance_models from config, 3) default_model
+      // The models arg comes from the orchestrator LLM and may be hallucinated
+      // (e.g. "gemini-pro" without a provider prefix). opencode then dies with
+      // ProviderModelNotFoundError but still exits 0, so the whole fan-out
+      // fails silently. Ignore entries that are not "provider/model" and fall
+      // back to the configured model, surfacing a warning in the tool result.
       const instanceModels = config.instance_models || []
-      const model = args.models?.[i] || instanceModels[i] || config.default_model
+      const requestedModel = args.models?.[i]
+      const configuredModel = instanceModels[i] || config.default_model
+      let model = requestedModel || configuredModel
+      if (requestedModel && !requestedModel.includes("/")) {
+        model = configuredModel
+        modelWarnings.push(
+          `instance-${i + 1}: ignored invalid model "${requestedModel}" ` +
+          `(expected provider/model format), using "${configuredModel}"`
+        )
+      }
 
       // Automatic subagent context (always added to prevent hangs and enforce workspace boundaries)
       const subagentContext = `IMPORTANT CONTEXT: You are running as a parallel subagent in non-interactive mode.
@@ -318,10 +341,11 @@ CRITICAL OUTPUT RULES:
       })
     }
 
-    // Run consolidator if >= 3 instances completed
+    // Run consolidator if >= 3 instances completed, unless the parallel agent
+    // config opts out with `consolidator: false`.
     // For n=2, the orchestrator can read both summaries directly
     let consolidatedSummary = ""
-    if (numInstances >= 3 && config.summarizer_prompt) {
+    if (numInstances >= 3 && config.summarizer_prompt && config.consolidator !== false) {
       // Use ABSOLUTE paths so consolidator doesn't need to search
       const summaryPaths = results
         .filter(r => existsSync(r.summaryPath))
@@ -352,7 +376,7 @@ RULES:
       // Without this, OpenCode traverses up and merges parent's .opencode/, running as orchestrator
       Bun.spawnSync(["git", "init"], { cwd: runDir, stdout: "ignore", stderr: "ignore" })
 
-      // Setup minimal consolidator environment (read-only, no custom tools)
+      // Setup minimal consolidator environment (no bash/task, no custom tools)
       setupConsolidator(runDir, join(cwd, ".opencode"), config.summarizer_prompt)
 
       const consLogFile = join(logsDir, "consolidator.log")
@@ -393,6 +417,18 @@ RULES:
       finalOutput += `- Exit code: ${r.exitCode}\n`
       if (existsSync(r.summaryPath)) {
         finalOutput += `- Summary: ${r.summaryPath}\n`
+      } else {
+        // opencode can die (e.g. on an invalid model) and still exit 0, so a
+        // missing summary is the reliable failure signal — surface it.
+        finalOutput += `- WARNING: no summary.md produced — treat this instance as FAILED even though the exit code may be 0\n`
+      }
+      finalOutput += "\n"
+    }
+
+    if (modelWarnings.length > 0) {
+      finalOutput += "## Warnings\n\n"
+      for (const w of modelWarnings) {
+        finalOutput += `- ${w}\n`
       }
       finalOutput += "\n"
     }

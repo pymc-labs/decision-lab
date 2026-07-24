@@ -38,6 +38,13 @@ dlab --dpack PATH --data PATH [--data PATH ...] --prompt TEXT [options]
 | `--continue-dir PATH` | Resume a previous session from this directory |
 | `--rebuild` | Force rebuild Docker image even if cached |
 | `--env-file PATH` | Path to environment file (auto-detected from decision-pack `.env` if not specified) |
+| `--no-sandboxing` | Run opencode locally without Docker (see below) |
+
+### Local Mode (`--no-sandboxing`)
+
+With `--no-sandboxing`, dlab skips Docker entirely and runs opencode directly on the host. The decision-pack's `docker/` directory is copied into the work dir as `_docker/`, and instructions are prepended to the prompt telling the agent to provision its own environment from it. Pre-run and post-run hooks are **not** executed in local mode.
+
+Use this when Docker is unavailable or for quick iteration; the sandboxing and reproducibility guarantees of the Docker environment do not apply.
 
 ### Environment Variable Forwarding
 
@@ -226,6 +233,8 @@ Launch a TUI to monitor running or completed sessions.
 dlab connect WORK_DIR
 ```
 
+The `--log` and `--log-json` flags are reserved but **not yet implemented** — passing them prints an error and exits.
+
 ### TUI Layout
 
 - **Left sidebar**: Agent selector showing all agents (main, parallel instances, consolidator)
@@ -271,6 +280,30 @@ dlab timeline [WORK_DIR]
 
 ---
 
+## view
+
+Open a browser-based session viewer with a DAG visualization of the session (orchestrator, parallel instances, consolidator) and a detail panel per node.
+
+```bash
+dlab view WORK_DIR [--port PORT] [--no-open] [--export FILE]
+```
+
+### Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `WORK_DIR` | — | Path to session work directory |
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--port PORT` | auto-select | Port for the viewer server |
+| `--no-open` | — | Start the server without opening a browser |
+| `--export FILE` | — | Write a self-contained HTML file instead of starting a server |
+
+---
+
 ## Help
 
 ```bash
@@ -279,5 +312,6 @@ dlab create-dpack --help
 dlab create-parallel-agent --help
 dlab connect --help
 dlab timeline --help
+dlab view --help
 dlab install --help
 ```

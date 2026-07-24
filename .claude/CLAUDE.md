@@ -59,6 +59,7 @@ Optional flags:
 - `--work-dir` - Explicit work directory path
 - `--continue-dir` - Resume from a previous session's work directory
 - `--rebuild` - Force rebuild Docker image
+- `--no-sandboxing` - Run opencode locally without Docker (via `local.py`); copies `docker/` into the work dir as `_docker/` and instructs the agent to provision its own environment
 
 Environment variables starting with `DLAB_` are automatically forwarded from the host to the Docker container. decision-packs can use these for configuration (e.g., `DLAB_FIT_MODEL_LOCALLY=1` in the MMM decision-pack).
 
@@ -75,13 +76,14 @@ dlab create-parallel-agent [DPACK_DIR]
 dlab install <dpack-path> [--bin-dir PATH]
 
 # Live-monitor a session (TUI)
-dlab connect <work-dir> [--log] [--log-json]
+dlab connect <work-dir>
+# (--log and --log-json flags exist but are not yet implemented)
 
 # View execution timeline with Gantt chart
 dlab timeline [work-dir]
 
 # Browser-based session viewer (DAG visualization)
-dlab view <work-dir> [--port PORT] [--no-open]
+dlab view <work-dir> [--port PORT] [--no-open] [--export FILE]
 ```
 
 ## Coding Style
@@ -123,6 +125,7 @@ dlab view <work-dir> [--port PORT] [--no-open]
 ## Project Architecture
 
 - decision-pack config contains: `docker/`, `opencode/`, `config.yaml`
+- decision-packs that bundle a custom Python library under `docker/` must ship a pytest suite in `<pack>/tests/` for its deterministic logic (reference: `decision-packs/mmm/tests/`)
 - CLI orchestrates Docker containers running opencode
 - Communication via `docker exec`
 - Session state in JSON files for resumption
@@ -131,13 +134,17 @@ dlab view <work-dir> [--port PORT] [--no-open]
 
 ## Modules (in `dlab/`)
 
-- `cli.py` - CLI with argparse, subcommands, Rich output
-- `config.py` - decision-pack config loading and validation
+- `cli.py` - Typer-based CLI, subcommands, Rich output
+- `config.py` - decision-pack config loading and validation, model-role resolution (`resolve_model_roles`, `apply_model_roles_to_opencode`)
 - `session.py` - Session creation and state management
 - `docker.py` - Docker image building and container lifecycle
+- `local.py` - Local (no-Docker) execution backend for `--no-sandboxing`
+- `model_fallback.py` - Model validation and provider fallback (`preflight_check` before session creation, `process_opencode_dir` during setup) so a single API key suffices
+- `opencode_logparser.py` - Canonical OpenCode NDJSON log parser (`LogEvent`, `SessionNode`, `parse_log_file`, `build_session_graph`); single source of truth used by `timeline.py`, `tui/`, and `viewer/`
 - `parallel_tool.py` - Loads parallel-agents.ts from `js/`
 - `js/parallel-agents.ts` - TypeScript source bundled as package data
-- `timeline.py` - Log parsing and timeline visualization
+- `data/models.json` - Bundled models.dev model list (package data)
+- `timeline.py` - Timeline visualization (parsing delegated to `opencode_logparser.py`)
 - `create_dpack.py` - Programmatic decision-pack generation (used by wizard and skills)
 - `create_dpack_wizard.py` - TUI wizard for `create-dpack` command (8 screens, Textual-based)
 - `create_parallel_agent_wizard.py` - TUI wizard for `create-parallel-agent` command
@@ -166,6 +173,19 @@ hooks:
 - If any hook fails (non-zero exit), the session aborts
 - Hooks run once per session (parallel instances do not re-run them)
 
+## Model Roles (config.yaml)
+
+decision-packs can override models per role via an optional `models:` block in `config.yaml`:
+
+```yaml
+default_model: anthropic/claude-sonnet-4-5    # orchestrator model
+models:
+  forecaster: anthropic/claude-haiku-4-5      # parallel agent instances (optional)
+  consolidator: anthropic/claude-sonnet-4-5   # consolidator (optional)
+```
+
+Omitted roles fall back to `default_model`. `resolve_model_roles()` in `config.py` resolves the roles; `apply_model_roles_to_opencode()` injects them as `default_model`/`summarizer_model` into each YAML under `parallel_agents/` during session setup.
+
 ## Known Hacks / Technical Debt
 
 ### Git Init Hack in Parallel Agents (EVIL HACK - FIX LATER)
@@ -182,12 +202,12 @@ In `parallel_tool.py`, we run `git init` in each parallel instance directory. Th
 
 The consolidator agent is auto-generated from `summarizer_prompt` in parallel agent YAML config. It does NOT require a separate `consolidator.md` file.
 
-`setupConsolidator()` in `parallel_tool.py` creates:
-- Inline `consolidator.md` agent with read-only permissions
-- `opencode.json` with hardcoded read-only tool access (no edit, bash, or task)
+`setupConsolidator()` in `js/parallel-agents.ts` creates:
+- Inline `consolidator.md` agent (read + write, no bash)
+- `opencode.json` with hardcoded permissions: reads and file writes allowed, bash/task denied. IMPORTANT: opencode gates the `write` tool behind the `edit` permission key — the consolidator must be able to write `consolidated_summary.md`, since only that file's content reaches the orchestrator (stdout is discarded). Denying `edit` silently discards the consolidator's entire output.
 - No custom tools directory
 
-The consolidator runs automatically when >2 parallel instances complete, reading all `summary.md` files and creating a consolidated comparison.
+The consolidator runs automatically when >2 parallel instances complete, reading all `summary.md` files and creating a consolidated comparison. Setting `consolidator: false` in the parallel agent YAML skips it entirely — the orchestrator then gets the per-instance summary paths and compares them itself.
 
 ## Documentation Maintenance
 
@@ -203,6 +223,7 @@ When making changes, update documentation as needed:
 | Session/state changes | `docs/sessions.md` |
 | decision-pack config changes | `docs/decision-packs.md` |
 | Known hacks | `.claude/CLAUDE.md` (Known Hacks section) |
+| Skill content (`.claude/skills/`) | `.claude/skills/` is the source of truth; after editing, run `python scripts/sync_skills.py --write` to republish `skills/dlab-cli/references/` (checked by `tests/test_skill_sync.py`) |
 
 ### Documentation Files
 

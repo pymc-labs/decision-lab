@@ -1,6 +1,15 @@
 # Log Processing Reference
 
-This document describes how OpenCode log files are structured and processed by the `dlab connect` TUI and `dlab timeline` commands.
+This document describes how OpenCode log files are structured and processed by the `dlab connect` TUI, `dlab timeline`, and `dlab view` commands.
+
+## Parser Module
+
+Log parsing is centralized in `dlab/opencode_logparser.py`, the single source of truth for reading OpenCode NDJSON logs. Its main entry points:
+
+- `parse_log_file()` — parse one log file into a list of `LogEvent` objects
+- `build_session_graph()` — assemble all log files of a work dir into a `SessionNode` tree (main agent → parallel runs → instances/consolidator)
+
+`timeline.py`, the `connect` TUI (`dlab/tui/`), and the browser viewer (`dlab/viewer/`) all consume this module rather than parsing logs themselves.
 
 ## Log File Format
 

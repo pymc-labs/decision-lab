@@ -263,7 +263,9 @@ class TestBuildRunnerScript:
         assert "#!/bin/bash" in script
         assert "set -o pipefail" in script
         assert 'opencode run --format json --log-level DEBUG --model "anthropic/claude-sonnet-4-0"' in script
-        assert "tee /_opencode_logs/main.log" in script
+        # dlab_start JSON line is written first, then opencode appends via tee -a
+        assert "'type':'dlab_start'" in script
+        assert "tee -a /_opencode_logs/main.log" in script
 
     def test_script_model_and_prefix(self) -> None:
         """Model and log prefix should appear correctly in script."""
@@ -272,7 +274,7 @@ class TestBuildRunnerScript:
         )
 
         assert '--model "anthropic/claude-opus-4-0"' in script
-        assert "tee /_opencode_logs/instance-3.log" in script
+        assert "tee -a /_opencode_logs/instance-3.log" in script
 
 
 class TestComputeDockerDirHash:

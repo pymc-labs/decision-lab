@@ -93,6 +93,7 @@ You also need a corresponding agent `.md` file at `opencode/agents/modeler.md`.
 | `max_instances` | — | Maximum number of parallel instances |
 | `default_model` | — | Default model for instances |
 | `instance_models` | — | Per-instance model overrides (list) |
+| `consolidator` | `true` | Set to `false` to skip the consolidation step entirely; the orchestrator receives the per-instance `summary.md` paths instead |
 
 ### Failure Behaviors
 
@@ -109,26 +110,30 @@ You also need a corresponding agent `.md` file at `opencode/agents/modeler.md`.
 3. Instances write `summary.md` with their findings
 4. **When 3 or more instances complete**, a consolidator agent reads all summaries and produces `parallel/run-{timestamp}/consolidated_summary.md`
 
-The consolidator does **not** run if fewer than 3 instances complete.
+The consolidator does **not** run if fewer than 3 instances complete, or if the config sets `consolidator: false`. In both cases the tool result lists the per-instance `summary.md` paths for the orchestrator to read directly.
 
 ## Consolidator
 
 The consolidator is auto-generated at runtime from the `summarizer_prompt`. You do NOT need to create a separate agent file.
 
+### Skipping the consolidator
+
+Set `consolidator: false` in the parallel agent YAML to skip the consolidation step entirely. The orchestrator then compares the per-instance `summary.md` files itself (their paths are returned by the tool). Consider this when the orchestrator's own prompt already does the cross-instance comparison — a consolidator adds latency and cost for a synthesis the orchestrator would redo anyway.
+
 ### Permissions
 
-The consolidator has **read-only permissions**:
+The consolidator can read everything and write files, but cannot execute commands or spawn agents:
 
 | Permission | Status |
 |------------|--------|
 | Read files | Allowed |
 | Glob/Grep search | Allowed |
-| Edit files | **Denied** |
+| Write/edit files | Allowed — required to produce `consolidated_summary.md` (opencode gates the `write` tool behind the `edit` permission key, so `edit` must be allowed) |
 | Bash commands | **Denied** |
 | Spawn subagents | **Denied** |
 | Custom tools | **Not available** |
 
-This ensures the consolidator only synthesizes results without modifying instance output.
+The consolidator's job is to synthesize results into `consolidated_summary.md`; only that file's content reaches the orchestrator (stdout is discarded), so write access is essential.
 
 ## Directory Structure
 

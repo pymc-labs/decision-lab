@@ -44,6 +44,41 @@ class TestParallelAgentsSource:
         expected: str = source_file.read_text()
         assert PARALLEL_AGENTS_SOURCE == expected
 
+    def test_consolidator_can_write_its_summary(self) -> None:
+        """The consolidator must be able to write consolidated_summary.md.
+
+        opencode gates the write tool behind the "edit" permission key.
+        Regression guard: with "edit" denied, the write tool silently
+        disappears, the consolidator's output file is never created, and the
+        orchestrator only ever sees the placeholder text — parallel runs then
+        pay for a consolidator whose entire output is discarded.
+        """
+        consolidator_block: str = PARALLEL_AGENTS_SOURCE.split(
+            "function setupConsolidator"
+        )[1].split("function ")[0]
+        assert '"edit": { "*": "allow" }' in consolidator_block
+        assert '"edit": { "*": "deny" }' not in consolidator_block
+        assert "write: true" in consolidator_block
+        assert '"bash": { "*": "deny" }' in consolidator_block
+        assert '"task": { "*": "deny" }' in consolidator_block
+
+    def test_consolidator_opt_out_supported(self) -> None:
+        """`consolidator: false` in a parallel agent YAML must skip the
+        consolidation step (the orchestrator then reads per-instance
+        summaries directly)."""
+        assert "config.consolidator !== false" in PARALLEL_AGENTS_SOURCE
+
+    def test_invalid_instance_models_fall_back(self) -> None:
+        """Hallucinated model ids from the orchestrator (e.g. "gemini-pro"
+        without a provider prefix) must fall back to the configured model
+        instead of silently killing every instance — opencode dies with
+        ProviderModelNotFoundError but still exits 0, so without this guard
+        the whole fan-out fails invisibly."""
+        assert 'ignored invalid model' in PARALLEL_AGENTS_SOURCE
+        assert 'requestedModel.includes("/")' in PARALLEL_AGENTS_SOURCE
+        # Missing summary.md must be surfaced as a failure signal
+        assert "no summary.md produced" in PARALLEL_AGENTS_SOURCE
+
     def test_no_esm_named_imports_from_third_party(self) -> None:
         """Third-party packages must use default imports to avoid CJS/ESM issues.
 
