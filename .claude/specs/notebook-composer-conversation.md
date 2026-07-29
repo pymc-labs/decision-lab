@@ -326,3 +326,86 @@ Three deliverables: the spec doc in `.claude/specs/`, the GitHub issue, and a re
 
 ---
 
+## **Claude**
+
+Extraction works — 29 turns, verbatim (including your interrupted first message, which is honest traceability). Now the spec document:
+
+---
+
+## **Claude**
+
+Now the GitHub issue (with the AI-disclosure convention we established), then committing the spec files:
+
+---
+
+## **Ben**
+
+[Request interrupted by user]
+
+---
+
+## **Ben**
+
+the spec is way too short. you have to include examples verbatim, expand on the reasoning behind the decision. put in where has to be changed what. remember that run-analyzer skill has to be adapted. I want an agent working on this to KNOW what we agreed on here in this conversation and not come up with their own ideas. it's fine if the spec is very long
+
+---
+
+## **Claude**
+
+Two untracked files (`AGENTS.md`, `AUDIT.md`) exist at the repo root that aren't from my work — I'll leave them alone. Now the full spec:
+
+---
+
+## **Claude**
+
+Issue #68 is closed as requested — but stop, something bigger is off. I need to flag what I just found before touching anything else:
+
+---
+
+## **Claude**
+
+Done — poem example removed, replaced with a compact schematic so the header/tree format stays pinned without run-specific content. Backup synced.
+
+**On "should we argue about the format a bit more":** mostly no, with one exception I'd genuinely add. The load-bearing decisions are settled and mutually reinforcing (identical per-agent sections, shared event counter as the timeline, write chains, ✓/✗ script runs, IDs + `digest-get`, `--brief`). What's left is cosmetic — truncation lengths, table layout — and that's better settled empirically during implementation by generating digests against real runs and iterating on how they read, exactly how the viewer got polished. Spec-arguing cosmetics now would be guessing. The one *genuine* gap worth one more round: **per-instance prompts aren't in the format.** The composer needs "instance 2 was asked to try geometric adstock, instance 3 Weibull" to narrate alternatives — and that's sitting in each instance's `dlab_start` event. I'd add a one-line **Task** field per agent section (the differentiating part of its prompt, ID'd like everything else, e.g. `[p0]`, retrievable in full via `digest-get`). Want that in?
+
+**Separately — I have to report a repo-state anomaly before doing anything else with git.** Mid-turn, between two of my commands, the checkout changed under me: we're now on a branch called **`audit`** that I've never seen, my local `spec/notebook-composer` branch has been *deleted*, the branch contains commits referencing issues **#43, #44, #50** (far beyond anything from our sessions — my last known issue was #39/#68), and there are untracked `AGENTS.md` / `AUDIT.md` files at the root. This strongly suggests **another session/agent is working concurrently in this same checkout**. I've deliberately *not* switched branches — that would sabotage whatever is running — and nothing is lost: the expanded spec sits untracked on disk plus a scratchpad backup, and the remote `spec/notebook-composer` branch and PR #69 are intact (just verified).
+
+So, two questions: (1) add the per-instance **Task** field to the digest format? (2) Is that `audit` branch yours/another agent's live work — and once you give the all-clear, I'll move the expanded spec onto the spec branch and push it to PR #69 for your review (issue #68 stays closed until you approve).
+
+---
+
+## **Ben**
+
+1. yes I want that Task section. 2. another agent is working here at the moment while we're speccing out, that should be fine. 3. btw can you please check ../ben-deepagent-MMM/ ? a year ago I wrote a parser that would let LLMs work on notebooks directly and then also convert the LLM traces to a database-format from which then I could regenerate the notebooks in a custom web front end view. I doubt any of the logic can be used directly because this was a very different setup, but i think it might still be worth checking out and then afterwards putting in the spec what is worth looking at for the developer of this feature
+
+---
+
+## **Claude**
+
+Adding the Task field now, and dispatching an explorer into `../ben-deepagent-MMM/` in parallel:
+
+---
+
+## **Claude**
+
+The spec is complete at 537 lines — ready for your review at `.claude/specs/notebook-composer.md`. What went in since your last message:
+
+**Task field** (§7.1): every per-agent section now carries a required `**Task** [p0]` line — the differentiating portion of the instance's prompt from its `dlab_start` event (shared suffix stripped), full text retrievable via `digest-get <agent>/p0`. The example sketch shows it.
+
+**Prior art from `../ben-deepagent-MMM/`** (new §13): the explorer found all three pieces you remembered — MCP cell tools, LangGraph-trace→SQLite, and a Svelte frontend rebuilding notebook views from the trace. The headlines for our feature:
+
+- **It independently validates our two riskiest decisions.** Its `messages.sequence` + `tool_call_id` schema is structurally our shared-event-counter + ID-addressing; and its output-minimizer's `<IMAGE: hash=…>` placeholder-in-context/bytes-on-the-side protocol is exactly our "LLM passes paths, `nb-read` strips base64" rule. You built both patterns once already, a year ago.
+- **One pitfall worth recording, now in the spec**: its purely positional `cell_index` addressing shifted on inserts and got brittle over long edit sessions. Our composer mostly appends, which sidesteps it, but `nb-edit-cell` implementers are warned.
+- **A telling negative**: the `$`/math escaping and cell validation you remembered *don't exist in that codebase* — markdown was rendered raw. That was a gap you hit, not one you solved, which confirms our escaping + validation requirements are new and necessary.
+- Its kernel-hygiene code (matplotlib Agg forcing, PyMC progress-bar collapsing) is flagged as reading for the future Level C `--execute` work only.
+
+**Current state, awaiting your call:** the spec + regenerated conversation extract live on disk (backed up to scratchpad); issue #68 stays closed; nothing has been pushed. Since the audit agent owns this checkout's branch state, when you approve I'll update the `spec/notebook-composer` branch **via a git worktree** — same trick as the netforensics fixes — so PR #69 gets the full spec without ever switching branches under the other session. Review when ready; happy to argue any section further.
+
+---
+
+## **Ben**
+
+I approve
+
+---
+
