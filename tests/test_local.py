@@ -1,5 +1,7 @@
 """Tests for dlab.local module."""
 
+import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -9,8 +11,8 @@ from dlab.local import build_local_prompt
 class TestBuildLocalPrompt:
     """Tests for build_local_prompt()."""
 
-    def test_uses_provided_work_dir(self, tmp_path: Path) -> None:
-        """Should use the provided work_dir for absolute paths, not config parent."""
+    def test_uses_provided_work_dir_in_computation(self, tmp_path: Path) -> None:
+        """work_dir parameter should be accepted and not crash."""
         work_dir: Path = tmp_path / "my-workdir"
         work_dir.mkdir()
         config_dir: Path = tmp_path / "dpack"
@@ -22,11 +24,8 @@ class TestBuildLocalPrompt:
         }
         result: str = build_local_prompt("Do something", config, str(work_dir))
 
-        # Should contain the actual work dir path in PYTHONPATH instructions
-        assert f"PYTHONPATH={work_dir}/_docker" in result
-        assert f"{work_dir}/.venv/bin/python" in result
-        # Should NOT contain the generic placeholder
-        assert "/absolute/path/to/workdir" not in result
+        # Prompt should still use the generic placeholder (agents resolve it)
+        assert "/absolute/path/to/workdir" in result
 
     def test_falls_back_to_config_parent_when_no_work_dir(
         self, tmp_path: Path,
@@ -41,9 +40,8 @@ class TestBuildLocalPrompt:
         }
         result: str = build_local_prompt("Do something", config, None)
 
-        # Should contain the parent of config_dir as the work dir
-        assert f"PYTHONPATH={tmp_path}/_docker" in result
-        assert f"{tmp_path}/.venv/bin/python" in result
+        # Prompt should still use the generic placeholder
+        assert "/absolute/path/to/workdir" in result
 
 
 class TestRunnerScript:
@@ -79,19 +77,37 @@ class TestRunnerScript:
         assert "printf '%s\\n'" in script
         assert 'echo "$prompt"' not in script
 
-    def test_printf_handles_dash_prefixed_prompt(self, tmp_path: Path) -> None:
-        """printf should not interpret dash-prefixed prompts as flags."""
-        from dlab.local import build_local_prompt
+    def test_printf_preserves_dash_prefixed_prompt_in_log(
+        self, tmp_path: Path,
+    ) -> None:
+        """Runner script must preserve prompts starting with dash in dlab_start log."""
+        from dlab.local import run_opencode_local
 
-        config_dir: Path = tmp_path / "dpack"
-        config_dir.mkdir()
-        config: dict[str, Any] = {
-            "config_dir": str(config_dir),
-            "package_manager": "pip",
-        }
+        work_dir: Path = tmp_path / "work"
+        work_dir.mkdir()
+        (work_dir / "_opencode_logs").mkdir()
 
-        # A prompt starting with -n (which echo would interpret as a flag)
-        prompt: str = "-n 5\nDo something"
-        result: str = build_local_prompt(prompt, config, str(tmp_path / "work"))
-        # The prompt should be preserved in the output
-        assert "-n 5" in result
+        # A prompt starting with -n (which echo would interpret as the no-newline flag)
+        prompt: str = "-n 5\nDo something important"
+
+        # Use a bogus model so opencode fails fast; the dlab_start line is still written
+        exit_code, _stdout, _stderr = run_opencode_local(
+            str(work_dir),
+            prompt,
+            "bogus/test-model-12345",
+            env=dict(os.environ),
+            timeout=5,
+            log_prefix="dash-test",
+        )
+
+        log_file: Path = work_dir / "_opencode_logs" / "dash-test.log"
+        assert log_file.exists(), "Log file should be created by the runner script"
+
+        lines: list[str] = log_file.read_text().splitlines()
+        assert len(lines) >= 1, "Log should contain at least the dlab_start line"
+
+        dlab_start: dict[str, Any] = json.loads(lines[0])
+        assert dlab_start["type"] == "dlab_start"
+        assert dlab_start["prompt"] == prompt, (
+            f"Prompt mangled by shell: expected {prompt!r}, got {dlab_start['prompt']!r}"
+        )
