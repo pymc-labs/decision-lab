@@ -287,6 +287,33 @@ class TestCmdRun:
         captured = capsys.readouterr()
         assert "No --env-file provided" not in captured.out
 
+    def test_secret_env_vars_masked_in_output(
+        self,
+        dpack_config_dir: Path,
+        data_dir: Path,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Should mask secret DLAB_* env vars in terminal output."""
+        monkeypatch.setenv("DLAB_ANTHROPIC_API_KEY", "sk-secret123")
+        monkeypatch.setenv("DLAB_OPENAI_TOKEN", "tok-abc")
+        monkeypatch.setenv("DLAB_FIT_MODEL_LOCALLY", "1")
+
+        cmd_run(
+            dpack=str(dpack_config_dir),
+            data=[str(data_dir)],
+            prompt="test",
+            work_dir=str(tmp_path / "work"),
+        )
+        captured = capsys.readouterr()
+        assert "DLAB_ANTHROPIC_API_KEY=***" in captured.out
+        assert "DLAB_OPENAI_TOKEN=***" in captured.out
+        assert "DLAB_FIT_MODEL_LOCALLY=1" in captured.out
+        # Real secret values must NOT appear in output
+        assert "sk-secret123" not in captured.out
+        assert "tok-abc" not in captured.out
+
 
 class TestErrorMessages:
     """Tests for user-friendly error messages."""

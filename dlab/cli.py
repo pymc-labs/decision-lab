@@ -523,7 +523,7 @@ def cmd_run(
         console.print(f"{I}[green]Ready[/green]")
 
         # Prepend system instructions to prompt
-        local_prompt: str = build_local_prompt(resolved_prompt, config)
+        local_prompt: str = build_local_prompt(resolved_prompt, config, work_dir)
 
         console.print(next_step("Running agent ..."))
         hint_text: Text = Text()
@@ -646,7 +646,15 @@ def cmd_run(
         key: value for key, value in os.environ.items() if key.startswith("DLAB_")
     }
     for key, value in extra_env.items():
-        console.print(f"{I}[dim]{key}={value}[/dim]")
+        # Mask values that look like secrets (API keys, tokens, etc.)
+        if any(
+            sensitive in key.upper()
+            for sensitive in ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "AUTH")
+        ):
+            display_value: str = "***"
+        else:
+            display_value = value
+        console.print(f"{I}[dim]{key}={display_value}[/dim]")
 
     try:
         start_container(

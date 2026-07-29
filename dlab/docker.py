@@ -527,7 +527,7 @@ def build_runner_script(
     return f'''#!/bin/bash
 set -o pipefail
 prompt=$(cat {prompt_file})
-echo "$prompt" | python3 -c "import json,sys; print(json.dumps({{'type':'dlab_start','timestamp':int(__import__('time').time()*1000),'model':'{model}','agent':'{log_prefix}','prompt':sys.stdin.read().strip()}}))" > /_opencode_logs/{log_prefix}.log
+printf '%s\\n' "$prompt" | python3 -c "import json,sys; print(json.dumps({{'type':'dlab_start','timestamp':int(__import__('time').time()*1000),'model':'{model}','agent':'{log_prefix}','prompt':sys.stdin.read().strip()}}))" > /_opencode_logs/{log_prefix}.log
 opencode run --format json --log-level DEBUG --model "{model}" "$prompt" 2>&1 | tee -a /_opencode_logs/{log_prefix}.log
 '''
 

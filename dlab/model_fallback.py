@@ -25,7 +25,7 @@ from dlab.create_dpack import KNOWN_PROVIDER_ENVS, get_model_list, get_provider_
 # Matches provider/model-name patterns (e.g. "anthropic/claude-sonnet-4-5")
 # Negative lookahead (?!/) excludes file paths like "opencode/agents/foo.md"
 _MODEL_PATTERN: re.Pattern[str] = re.compile(
-    r"\b([a-zA-Z0-9_-]+/[a-zA-Z0-9._-]+)\b(?!/)"
+    r"\b([a-zA-Z0-9_-]+/[a-zA-Z0-9._-]+)\b(?!/)",
 )
 
 
@@ -93,6 +93,20 @@ def _strip_comments(text: str) -> str:
     return "\n".join(lines)
 
 
+# Known file extensions that should not be treated as model names
+_FILE_EXTENSIONS: set[str] = {
+    ".md", ".py", ".yaml", ".yml", ".txt", ".json", ".ts", ".js",
+    ".html", ".css", ".sh", ".csv", ".pdf", ".png", ".jpg", ".jpeg",
+    ".gif", ".svg", ".xml", ".toml", ".ini", ".cfg", ".log", ".rst",
+}
+
+
+def _is_likely_file_path(model_str: str) -> bool:
+    """Check if a matched string looks like a file path rather than a model ID."""
+    model_part: str = model_str.split("/", 1)[1]
+    return any(model_part.lower().endswith(ext) for ext in _FILE_EXTENSIONS)
+
+
 def find_model_strings(text: str) -> list[str]:
     """
     Extract all provider/model-name strings from non-comment text.
@@ -109,12 +123,17 @@ def find_model_strings(text: str) -> list[str]:
     """
     matches: list[str] = _MODEL_PATTERN.findall(_strip_comments(text))
     # Only keep matches whose provider prefix is a known provider
+    # and which do not look like file paths
     known_prefixes: set[str] = set(KNOWN_PROVIDER_ENVS.keys())
     models: list[str] = []
     seen: set[str] = set()
     for m in matches:
         provider: str = m.split("/")[0]
-        if provider in known_prefixes and m not in seen:
+        if (
+            provider in known_prefixes
+            and m not in seen
+            and not _is_likely_file_path(m)
+        ):
             seen.add(m)
             models.append(m)
     return models
@@ -291,7 +310,7 @@ def apply_model_fallback(
     def _replace(match: re.Match[str]) -> str:
         model_str: str = match.group(1)
         provider: str = model_str.split("/")[0]
-        if provider in unavailable_providers:
+        if provider in unavailable_providers and not _is_likely_file_path(model_str):
             replacements.append(f"{model_str} -> {orchestrator_model}")
             return orchestrator_model
         return model_str
