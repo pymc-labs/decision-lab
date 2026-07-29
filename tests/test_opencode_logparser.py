@@ -359,12 +359,19 @@ class TestIsLogComplete:
         ]
         assert is_log_complete(events) is True
 
-    def test_running_tool_calls(self) -> None:
+    def test_complete_tool_calls(self) -> None:
         events: list[LogEvent] = [
             LogEvent("step_start", 1000, "", {}, {}),
             LogEvent("step_finish", 2000, "", {"reason": "tool-calls"}, {}),
         ]
-        assert is_log_complete(events) is False
+        assert is_log_complete(events) is True
+
+    def test_complete_max_tokens(self) -> None:
+        events: list[LogEvent] = [
+            LogEvent("step_start", 1000, "", {}, {}),
+            LogEvent("step_finish", 2000, "", {"reason": "max-tokens"}, {}),
+        ]
+        assert is_log_complete(events) is True
 
     def test_error_event(self) -> None:
         events: list[LogEvent] = [
@@ -388,10 +395,10 @@ class TestIsLogComplete:
         log_file.write_text(f"{STEP_START_LINE}\n{STEP_FINISH_LINE}\n")
         assert is_log_file_complete(log_file) is True
 
-    def test_file_running(self, tmp_path: Path) -> None:
-        log_file: Path = tmp_path / "running.log"
+    def test_file_complete_tool_calls(self, tmp_path: Path) -> None:
+        log_file: Path = tmp_path / "tool_calls.log"
         log_file.write_text(f"{STEP_START_LINE}\n{STEP_FINISH_TOOL_CALLS_LINE}\n")
-        assert is_log_file_complete(log_file) is False
+        assert is_log_file_complete(log_file) is True
 
 
 # ---------------------------------------------------------------------------

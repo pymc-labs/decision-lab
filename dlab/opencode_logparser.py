@@ -232,7 +232,8 @@ def is_log_complete(events: list[LogEvent]) -> bool:
     Check if a list of events represents a completed run.
 
     A log is complete if:
-    - Its last step_finish event has reason "stop" or "error", OR
+    - Its last step_finish event has reason "stop", "error", "max-tokens",
+      or "tool-calls", OR
     - It contains an "error" event (job crashed/terminated)
 
     Parameters
@@ -264,7 +265,7 @@ def is_log_complete(events: list[LogEvent]) -> bool:
         return False
 
     reason: str = last_step_finish.part.get("reason", "")
-    return reason in ("stop", "error")
+    return reason in ("stop", "error", "max-tokens", "tool-calls")
 
 
 def is_log_file_complete(path: str | Path) -> bool:
