@@ -523,7 +523,7 @@ def cmd_run(
         console.print(f"{I}[green]Ready[/green]")
 
         # Prepend system instructions to prompt
-        local_prompt: str = build_local_prompt(resolved_prompt, config)
+        local_prompt: str = build_local_prompt(resolved_prompt, config, work_dir)
 
         console.print(next_step("Running agent ..."))
         hint_text: Text = Text()

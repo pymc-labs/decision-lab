@@ -77,7 +77,7 @@ def copy_docker_dir(config_dir: str, work_dir: str) -> None:
         shutil.copytree(str(docker_src), str(docker_dst))
 
 
-def build_local_prompt(prompt: str, config: dict[str, Any]) -> str:
+def build_local_prompt(prompt: str, config: dict[str, Any], work_dir: str | None = None) -> str:
     """
     Prepend system instructions for unsandboxed local execution.
 
@@ -87,6 +87,9 @@ def build_local_prompt(prompt: str, config: dict[str, Any]) -> str:
         Original user prompt.
     config : dict[str, Any]
         decision-pack configuration.
+    work_dir : str | None
+        Absolute path to the session work directory. If None, falls back
+        to the parent of the decision-pack config directory.
 
     Returns
     -------
@@ -98,9 +101,10 @@ def build_local_prompt(prompt: str, config: dict[str, Any]) -> str:
         detect_package_manager(config["config_dir"]),
     )
 
-    work_dir_abs: str = str(Path(config["config_dir"]).resolve().parent)
-    # Use the actual work dir if available, fall back to config dir parent
-    # (the caller should pass work_dir in config if needed)
+    if work_dir:
+        work_dir_abs = str(Path(work_dir).resolve())
+    else:
+        work_dir_abs = str(Path(config["config_dir"]).resolve().parent)
 
     system_instructions: str = (
         "IMPORTANT --- SYSTEM INSTRUCTIONS (NO-SANDBOXING MODE):\n\n"
@@ -251,7 +255,7 @@ def run_opencode_local(
     runner_script: str = f'''#!/bin/bash
 set -o pipefail
 prompt=$(cat "{prompt_file}")
-echo "$prompt" | python3 -c "import json,sys; print(json.dumps({{'type':'dlab_start','timestamp':int(__import__('time').time()*1000),'model':'{model}','agent':'{log_prefix}','prompt':sys.stdin.read().strip()}}))" > "{log_path}"
+printf '%s\\n' "$prompt" | python3 -c "import json,sys; print(json.dumps({{'type':'dlab_start','timestamp':int(__import__('time').time()*1000),'model':'{model}','agent':'{log_prefix}','prompt':sys.stdin.read().strip()}}))" > "{log_path}"
 opencode run --format json --log-level DEBUG --model "{model}" "$prompt" 2>&1 | tee -a "{log_path}"
 '''
     runner_file: Path = work_path / ".run_opencode.sh"
