@@ -118,6 +118,24 @@ class TestFindModelStrings:
         assert "anthropic/claude-opus-4-5" in result
         assert "google/gemini-2.5-pro" in result
 
+    def test_ignores_file_paths(self) -> None:
+        """File paths like anthropic/report.md should not be treated as models."""
+        text: str = textwrap.dedent("""\
+            See docs at anthropic/report.md
+            Use model google/gemini-2.5-pro
+            Check openai/spec.yaml
+        """)
+        result: list[str] = find_model_strings(text)
+        assert "google/gemini-2.5-pro" in result
+        assert "anthropic/report.md" not in result
+        assert "openai/spec.yaml" not in result
+
+    def test_ignores_urls(self) -> None:
+        """URLs should not be treated as models."""
+        text: str = "Visit https://anthropic/docs/claude-sonnet-4-5.html\n"
+        result: list[str] = find_model_strings(text)
+        assert "anthropic/docs/claude-sonnet-4-5.html" not in result
+
 
 class TestPreflightCheck:
     """Tests for preflight_check()."""
@@ -311,6 +329,23 @@ class TestApplyModelFallback:
             text, "anthropic/claude-opus-4-0", {"google"},
         )
         assert 'Use model "anthropic/claude-opus-4-0" for analysis.\n' == new_text
+        assert len(replacements) == 1
+
+    def test_does_not_replace_file_paths(self) -> None:
+        """File paths should not be replaced even if provider is unavailable."""
+        text: str = textwrap.dedent("""\
+            See docs at anthropic/report.md
+            Use model "google/gemini-2.5-pro"
+            Check openai/spec.yaml
+        """)
+        new_text, replacements = apply_model_fallback(
+            text, "anthropic/claude-opus-4-0", {"google", "anthropic", "openai"},
+        )
+        assert "anthropic/report.md" in new_text
+        assert "openai/spec.yaml" in new_text
+        assert "google/gemini-2.5-pro" not in new_text
+        assert "anthropic/claude-opus-4-0" in new_text
+        # Only one replacement (the actual model, not the file paths)
         assert len(replacements) == 1
 
 
