@@ -347,21 +347,32 @@ CRITICAL OUTPUT RULES:
         env: buildInstanceEnv(cwd),  // Curated env (allowlist); never the full host env (#56)
       })
 
-      // Stream to logs (async)
+      // Stream to logs (async). These are fire-and-forget, so a rejected
+      // reader.read() (e.g. the subprocess dies mid-read) would become an
+      // unhandled promise rejection and can crash the whole fan-out under Bun.
+      // Catch it, note it in the log, and stop reading (issue #45).
       ;(async () => {
-        const reader = proc.stdout.getReader()
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          appendFileSync(logFile, new TextDecoder().decode(value))
+        try {
+          const reader = proc.stdout.getReader()
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            appendFileSync(logFile, new TextDecoder().decode(value))
+          }
+        } catch (e) {
+          try { appendFileSync(logFile, `[dlab] stdout stream error: ${e}\n`) } catch {}
         }
       })()
       ;(async () => {
-        const reader = proc.stderr.getReader()
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          appendFileSync(logFile, "[STDERR] " + new TextDecoder().decode(value))
+        try {
+          const reader = proc.stderr.getReader()
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            appendFileSync(logFile, "[STDERR] " + new TextDecoder().decode(value))
+          }
+        } catch (e) {
+          try { appendFileSync(logFile, `[dlab] stderr stream error: ${e}\n`) } catch {}
         }
       })()
 
@@ -434,12 +445,17 @@ RULES:
         env: buildInstanceEnv(cwd),  // Curated env (allowlist); never the full host env (#56)
       })
 
-      // Stream stdout to log file (don't use as summary - it's JSON logs)
-      const reader = consProc.stdout.getReader()
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        appendFileSync(consLogFile, new TextDecoder().decode(value))
+      // Stream stdout to log file (don't use as summary - it's JSON logs).
+      // Guard the read loop so a stream error doesn't abort the tool (#45).
+      try {
+        const reader = consProc.stdout.getReader()
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          appendFileSync(consLogFile, new TextDecoder().decode(value))
+        }
+      } catch (e) {
+        try { appendFileSync(consLogFile, `[dlab] stdout stream error: ${e}\n`) } catch {}
       }
       await consProc.exited
 
