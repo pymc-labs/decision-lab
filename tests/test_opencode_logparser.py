@@ -359,12 +359,19 @@ class TestIsLogComplete:
         ]
         assert is_log_complete(events) is True
 
-    def test_running_tool_calls(self) -> None:
+    def test_complete_tool_calls(self) -> None:
         events: list[LogEvent] = [
             LogEvent("step_start", 1000, "", {}, {}),
             LogEvent("step_finish", 2000, "", {"reason": "tool-calls"}, {}),
         ]
-        assert is_log_complete(events) is False
+        assert is_log_complete(events) is True
+
+    def test_complete_max_tokens(self) -> None:
+        events: list[LogEvent] = [
+            LogEvent("step_start", 1000, "", {}, {}),
+            LogEvent("step_finish", 2000, "", {"reason": "max-tokens"}, {}),
+        ]
+        assert is_log_complete(events) is True
 
     def test_error_event(self) -> None:
         events: list[LogEvent] = [
@@ -388,10 +395,10 @@ class TestIsLogComplete:
         log_file.write_text(f"{STEP_START_LINE}\n{STEP_FINISH_LINE}\n")
         assert is_log_file_complete(log_file) is True
 
-    def test_file_running(self, tmp_path: Path) -> None:
-        log_file: Path = tmp_path / "running.log"
+    def test_file_complete_tool_calls(self, tmp_path: Path) -> None:
+        log_file: Path = tmp_path / "tool_calls.log"
         log_file.write_text(f"{STEP_START_LINE}\n{STEP_FINISH_TOOL_CALLS_LINE}\n")
-        assert is_log_file_complete(log_file) is False
+        assert is_log_file_complete(log_file) is True
 
 
 # ---------------------------------------------------------------------------
@@ -568,6 +575,35 @@ class TestDlabStart:
             LogEvent("text", 2000, "", {"text": "hi"}, {}),
         ]
         assert get_dlab_start_model(events) is None
+
+    def test_model_found_when_noise_precedes_dlab_start(self) -> None:
+        # Issue #61: a non-JSON stderr line (raw_text, no timestamp) and a
+        # step_start before dlab_start must not stop the scan.
+        events: list[LogEvent] = [
+            LogEvent("raw_text", None, "", {"text": "[STDERR] warning"}, {}),
+            LogEvent("step_start", 1000, "", {}, {}),
+            LogEvent("dlab_start", 1000, "", {"model": "anthropic/claude-opus-4-5"},
+                     {"model": "anthropic/claude-opus-4-5"}),
+        ]
+        assert get_dlab_start_model(events) == "anthropic/claude-opus-4-5"
+
+    def test_model_found_regardless_of_position(self) -> None:
+        # The scan has no early exit: dlab_start is returned wherever it is,
+        # so no amount of leading noise can hide it (the #61 failure mode).
+        events: list[LogEvent] = [
+            LogEvent("text", i, "", {"text": "x"}, {}) for i in range(100)
+        ]
+        events.append(
+            LogEvent("dlab_start", 999999, "", {"model": "m/x"}, {"model": "m/x"})
+        )
+        assert get_dlab_start_model(events) == "m/x"
+
+    def test_returns_first_dlab_start_when_multiple(self) -> None:
+        events: list[LogEvent] = [
+            LogEvent("dlab_start", 1, "", {"model": "first/m"}, {"model": "first/m"}),
+            LogEvent("dlab_start", 2, "", {"model": "second/m"}, {"model": "second/m"}),
+        ]
+        assert get_dlab_start_model(events) == "first/m"
 
     def test_dlab_start_in_log_file(self, tmp_path: Path) -> None:
         """dlab_start as first line followed by normal events."""

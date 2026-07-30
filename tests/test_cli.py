@@ -400,6 +400,33 @@ class TestCmdRun:
         captured = capsys.readouterr()
         assert "No --env-file provided" not in captured.out
 
+    def test_secret_env_vars_masked_in_output(
+        self,
+        dpack_config_dir: Path,
+        data_dir: Path,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Should mask secret DLAB_* env vars in terminal output."""
+        monkeypatch.setenv("DLAB_ANTHROPIC_API_KEY", "sk-secret123")
+        monkeypatch.setenv("DLAB_OPENAI_TOKEN", "tok-abc")
+        monkeypatch.setenv("DLAB_FIT_MODEL_LOCALLY", "1")
+
+        cmd_run(
+            dpack=str(dpack_config_dir),
+            data=[str(data_dir)],
+            prompt="test",
+            work_dir=str(tmp_path / "work"),
+        )
+        captured = capsys.readouterr()
+        assert "DLAB_ANTHROPIC_API_KEY=***" in captured.out
+        assert "DLAB_OPENAI_TOKEN=***" in captured.out
+        assert "DLAB_FIT_MODEL_LOCALLY=1" in captured.out
+        # Real secret values must NOT appear in output
+        assert "sk-secret123" not in captured.out
+        assert "tok-abc" not in captured.out
+
 
 class TestErrorMessages:
     """Tests for user-friendly error messages."""
@@ -479,6 +506,7 @@ class TestContinueDir:
         prompt: str = "continue",
         no_sandboxing: bool = False,
         data: list[str] | None = None,
+        yes: bool = False,
     ) -> int:
         """Helper to run cmd_run in continue mode, mocking agent execution."""
         mock_return = (0, "", "")
@@ -493,6 +521,7 @@ class TestContinueDir:
                 work_dir=str(work_dir) if work_dir else None,
                 no_sandboxing=no_sandboxing,
                 data=data,
+                yes=yes,
             )
 
     # --- Error handling (no mode needed, errors before execution) ---
@@ -546,6 +575,43 @@ class TestContinueDir:
         assert result == 1
         captured = capsys.readouterr()
         assert "already exists" in captured.out
+
+    def test_continue_yes_flag_skips_prompt(
+        self,
+        dpack_config_dir: Path,
+        previous_session: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """--yes should auto-confirm --continue-dir without --work-dir."""
+        result: int = self._run_continue(
+            dpack_config_dir,
+            previous_session,
+            yes=True,
+            no_sandboxing=True,
+        )
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Will continue session in:" in captured.out
+        assert "Aborted." not in captured.out
+
+    def test_continue_non_tty_auto_confirms(
+        self,
+        dpack_config_dir: Path,
+        previous_session: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Non-interactive mode (no TTY) should auto-confirm continue."""
+        monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+        result: int = self._run_continue(
+            dpack_config_dir,
+            previous_session,
+            no_sandboxing=True,
+        )
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Will continue session in:" in captured.out
+        assert "Aborted." not in captured.out
 
     # --- Local mode (--no-sandboxing) ---
 

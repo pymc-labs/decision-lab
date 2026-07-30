@@ -203,6 +203,10 @@ def _main(
         bool,
         typer.Option("--no-sandboxing", hidden=True),
     ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", hidden=True),
+    ] = False,
 ) -> None:
     """Run opencode in automated mode, sandboxed with Docker.
 
@@ -228,6 +232,7 @@ def _main(
             rebuild=rebuild,
             env_file=env_file,
             no_sandboxing=no_sandboxing,
+            yes=yes,
         )
         raise typer.Exit(code=exit_code)
 
@@ -301,6 +306,13 @@ def _cmd_run_command(
             help="Run opencode locally without Docker (no container isolation)",
         ),
     ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            help="Auto-confirm interactive prompts (e.g. --continue-dir without --work-dir)",
+        ),
+    ] = False,
 ) -> None:
     """Run opencode in automated mode, sandboxed with Docker (default command)."""
     exit_code = cmd_run(
@@ -314,6 +326,7 @@ def _cmd_run_command(
         rebuild=rebuild,
         env_file=env_file,
         no_sandboxing=no_sandboxing,
+        yes=yes,
     )
     raise typer.Exit(code=exit_code)
 
@@ -329,6 +342,7 @@ def cmd_run(
     rebuild: bool = False,
     env_file: str | None = None,
     no_sandboxing: bool = False,
+    yes: bool = False,
 ) -> int:
     """
     Handle run mode - create session and start agent.
@@ -463,13 +477,17 @@ def cmd_run(
             work_dir = str(work_path)
             print(f"Copied {_continue_dir} to {work_dir}")
         else:
-            # Continue in place - ask for confirmation
+            # Continue in place - ask for confirmation in interactive mode
             work_dir = str(_continue_dir)
             print(f"Will continue session in: {work_dir}")
-            confirm = input("Continue? [y/N]: ").strip().lower()
-            if confirm != "y":
-                print("Aborted.")
-                return 0
+            if yes or not sys.stdin.isatty():
+                # Auto-confirm when --yes is passed or stdin is not a TTY
+                pass
+            else:
+                confirm = input("Continue? [y/N]: ").strip().lower()
+                if confirm != "y":
+                    print("Aborted.")
+                    return 0
 
         # Overwrite .opencode with latest from decision-pack (agent prompts may have changed)
         opencode_dir = Path(work_dir) / ".opencode"
@@ -597,7 +615,7 @@ def cmd_run(
         console.print(f"{I}[green]Ready[/green]")
 
         # Prepend system instructions to prompt
-        local_prompt: str = build_local_prompt(resolved_prompt, config)
+        local_prompt: str = build_local_prompt(resolved_prompt, config, work_dir)
 
         console.print(next_step("Running agent ..."))
         hint_text: Text = Text()
@@ -720,7 +738,15 @@ def cmd_run(
         key: value for key, value in os.environ.items() if key.startswith("DLAB_")
     }
     for key, value in extra_env.items():
-        console.print(f"{I}[dim]{key}={value}[/dim]")
+        # Mask values that look like secrets (API keys, tokens, etc.)
+        if any(
+            sensitive in key.upper()
+            for sensitive in ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "AUTH")
+        ):
+            display_value: str = "***"
+        else:
+            display_value = value
+        console.print(f"{I}[dim]{key}={display_value}[/dim]")
 
     try:
         start_container(
