@@ -4,6 +4,42 @@ import { readFileSync, mkdirSync, writeFileSync, existsSync, appendFileSync, rea
 const yaml = require("yaml")
 import { join, basename } from "path"
 
+// Conservative built-in fallback used only if the dlab-written allowlist is
+// absent (e.g. a workdir created before this change and resumed). dlab writes
+// the authoritative list — the union of operational vars and every known LLM
+// provider credential — to .opencode/instance-env-allowlist.json at setup.
+const FALLBACK_ENV_EXACT = new Set([
+  "PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE",
+  "TERM", "TMPDIR", "TMP", "TEMP", "PWD", "SHELL",
+  "PYTHONPATH", "PYTHONUNBUFFERED", "NODE_PATH",
+  "SSL_CERT_FILE", "SSL_CERT_DIR", "CURL_CA_BUNDLE", "REQUESTS_CA_BUNDLE",
+])
+const FALLBACK_ENV_PREFIXES = ["DLAB_", "OPENCODE_", "AWS_", "AZURE_", "GOOGLE_", "VERTEX_", "CLOUDFLARE_", "GITHUB_"]
+
+// Build a curated environment for a spawned instance/consolidator. Passing the
+// full parent environment leaks unrelated host state (shell history paths,
+// ambient secrets) into the subagent, readable via bash — a real leak in
+// --no-sandboxing local mode where the parent env is the user's shell (#56).
+function buildInstanceEnv(cwd: string): Record<string, string> {
+  let exact = FALLBACK_ENV_EXACT
+  let prefixes = FALLBACK_ENV_PREFIXES
+  try {
+    const allow = JSON.parse(readFileSync(join(cwd, ".opencode", "instance-env-allowlist.json"), "utf-8"))
+    if (Array.isArray(allow.exact)) exact = new Set(allow.exact)
+    if (Array.isArray(allow.prefixes)) prefixes = allow.prefixes
+  } catch {
+    // Allowlist missing/unreadable — fall back to the built-in conservative set.
+  }
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v === undefined) continue
+    if (exact.has(k) || prefixes.some((p: string) => k.startsWith(p))) {
+      out[k] = v
+    }
+  }
+  return out
+}
+
 // Helper: Copy directory contents excluding certain paths
 function copyWorkDir(src: string, dest: string, exclude: string[]) {
   mkdirSync(dest, { recursive: true })
@@ -301,7 +337,7 @@ CRITICAL OUTPUT RULES:
         cwd: instanceDir,
         stdout: "pipe",
         stderr: "pipe",
-        env: process.env,  // Inherit PYTHONPATH and other env vars
+        env: buildInstanceEnv(cwd),  // Curated env (allowlist); never the full host env (#56)
       })
 
       // Stream to logs (async)
@@ -388,7 +424,7 @@ RULES:
         cwd: runDir,
         stdout: "pipe",
         stderr: "pipe",
-        env: process.env,  // Inherit PYTHONPATH and other env vars
+        env: buildInstanceEnv(cwd),  // Curated env (allowlist); never the full host env (#56)
       })
 
       // Stream stdout to log file (don't use as summary - it's JSON logs)
