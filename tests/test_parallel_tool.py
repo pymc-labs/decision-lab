@@ -182,3 +182,16 @@ class TestYamlImportRuntime:
         assert 'require("yaml")' in PARALLEL_AGENTS_SOURCE, (
             "parallel-agents.ts must use require('yaml') for CJS/ESM compatibility"
         )
+
+
+class TestStreamReaderErrorHandling:
+    """Stream reader loops must catch errors so a dead subprocess mid-read
+    can't become an unhandled rejection that aborts the fan-out (issue #45)."""
+
+    def test_reader_loops_are_guarded(self) -> None:
+        # All three read loops (instance stdout/stderr, consolidator stdout)
+        # log a stream error from a catch block.
+        assert PARALLEL_AGENTS_SOURCE.count("getReader()") == 3
+        assert PARALLEL_AGENTS_SOURCE.count("stream error: ${e}") == 3
+        # and each getReader loop is preceded by a `try {`
+        assert PARALLEL_AGENTS_SOURCE.count("} catch (e) {") >= 3

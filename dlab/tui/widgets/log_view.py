@@ -536,7 +536,10 @@ class LogView(VerticalScroll, can_focus=True):
 
         query_lower = query.lower()
         for i, event in enumerate(self._events):
-            if query_lower in event.description.lower():
+            # Match the full untruncated text, so a term that only appears in
+            # the part trimmed for display (a long prompt, an error's response
+            # body) is still found (issue #60).
+            if query_lower in event.full_description.lower():
                 matches.append(i)
 
         return matches
