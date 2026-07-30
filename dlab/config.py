@@ -2,11 +2,14 @@
 Configuration loading and validation for decision-pack config directories.
 """
 
-import re
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
 import yaml
+from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap
+from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
 
 REQUIRED_DIRS: list[str] = ["docker", "opencode"]
@@ -218,30 +221,36 @@ def upsert_yaml_scalar(
     insert_after: str | None = None,
     insert_before: str | None = None,
 ) -> str:
-    """Set or insert a top-level YAML scalar key with a quoted value."""
-    quoted: str = f'"{value}"'
-    pattern: re.Pattern[str] = re.compile(rf"^{re.escape(key)}:\s*.+$", re.MULTILINE)
-    if pattern.search(text):
-        return pattern.sub(f"{key}: {quoted}", text, count=1)
+    """
+    Set or insert a top-level YAML scalar key with a double-quoted value.
 
-    new_line: str = f"{key}: {quoted}\n"
-    if insert_before:
-        before_pattern: re.Pattern[str] = re.compile(
-            rf"^{re.escape(insert_before)}:\s*", re.MULTILINE,
-        )
-        match: re.Match[str] | None = before_pattern.search(text)
-        if match:
-            return text[: match.start()] + new_line + text[match.start() :]
+    Uses a round-trip YAML parser (ruamel) so the rest of the document —
+    comments, blank lines, block scalars, quoting of other keys — is
+    preserved and only the target key is changed (issue #65). If the key is
+    new it is inserted before ``insert_before`` or after ``insert_after``
+    when those keys exist, otherwise appended.
+    """
+    ryaml: YAML = YAML()
+    ryaml.preserve_quotes = True
+    data: Any = ryaml.load(text)
+    if data is None:
+        data = CommentedMap()
 
-    if insert_after:
-        after_pattern: re.Pattern[str] = re.compile(
-            rf"^{re.escape(insert_after)}:\s*.+\n", re.MULTILINE,
-        )
-        match = after_pattern.search(text)
-        if match:
-            return text[: match.end()] + new_line + text[match.end() :]
+    quoted_value: DoubleQuotedScalarString = DoubleQuotedScalarString(value)
+    if key in data:
+        data[key] = quoted_value
+    else:
+        keys: list[str] = list(data.keys())
+        index: int = len(keys)
+        if insert_before and insert_before in keys:
+            index = keys.index(insert_before)
+        elif insert_after and insert_after in keys:
+            index = keys.index(insert_after) + 1
+        data.insert(index, key, quoted_value)
 
-    return new_line + text
+    stream: StringIO = StringIO()
+    ryaml.dump(data, stream)
+    return stream.getvalue()
 
 
 def apply_model_roles_to_opencode(opencode_dir: str, model_roles: dict[str, str]) -> None:
