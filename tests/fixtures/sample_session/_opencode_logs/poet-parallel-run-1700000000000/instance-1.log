@@ -1,0 +1,4 @@
+{"type": "dlab_start", "timestamp": 1700000000300, "model": "anthropic/claude-sonnet-4-5", "agent": "poet"}
+{"type": "step_start", "timestamp": 1700000000300, "part": {"type": "step-start"}}
+{"type": "text", "timestamp": 1700000000400, "part": {"type": "text", "text": "A haiku about config."}}
+{"type": "step_finish", "timestamp": 1700000001300, "part": {"type": "step-finish", "reason": "stop", "cost": 0.004}}

@@ -1,0 +1,6 @@
+{"type": "dlab_start", "timestamp": 1700000000000, "model": "anthropic/claude-sonnet-4-5", "agent": "main"}
+{"type": "step_start", "timestamp": 1700000000000, "part": {"type": "step-start"}}
+{"type": "text", "timestamp": 1700000000100, "part": {"type": "text", "text": "I'll fan out three poets and consolidate."}}
+{"type": "tool_use", "timestamp": 1700000000200, "part": {"tool": "parallel-agents", "state": {"status": "completed", "input": {"agent": "poet", "prompts": ["haiku", "sonnet"]}, "time": {"start": 1700000000200, "end": 1700000005000}}}}
+{"type": "text", "timestamp": 1700000006000, "part": {"type": "text", "text": "Consolidated; writing final_poem.md."}}
+{"type": "step_finish", "timestamp": 1700000007000, "part": {"type": "step-finish", "reason": "stop", "cost": 0.021}}
