@@ -580,17 +580,23 @@ class TestDlabStart:
         ]
         assert get_dlab_start_model(events) == "anthropic/claude-opus-4-5"
 
-    def test_scan_is_bounded_on_large_logs(self) -> None:
-        # A dlab_start buried far past the window is intentionally not found —
-        # dlab always writes it near the top, and the bound keeps huge logs
-        # without a dlab_start cheap.
+    def test_model_found_regardless_of_position(self) -> None:
+        # The scan has no early exit: dlab_start is returned wherever it is,
+        # so no amount of leading noise can hide it (the #61 failure mode).
         events: list[LogEvent] = [
             LogEvent("text", i, "", {"text": "x"}, {}) for i in range(100)
         ]
         events.append(
             LogEvent("dlab_start", 999999, "", {"model": "m/x"}, {"model": "m/x"})
         )
-        assert get_dlab_start_model(events) is None
+        assert get_dlab_start_model(events) == "m/x"
+
+    def test_returns_first_dlab_start_when_multiple(self) -> None:
+        events: list[LogEvent] = [
+            LogEvent("dlab_start", 1, "", {"model": "first/m"}, {"model": "first/m"}),
+            LogEvent("dlab_start", 2, "", {"model": "second/m"}, {"model": "second/m"}),
+        ]
+        assert get_dlab_start_model(events) == "first/m"
 
     def test_dlab_start_in_log_file(self, tmp_path: Path) -> None:
         """dlab_start as first line followed by normal events."""
