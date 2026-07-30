@@ -368,6 +368,11 @@ def get_text(event: LogEvent) -> str | None:
     return None
 
 
+# dlab_start is written as the log's first line; scan a small window past any
+# leading noise (stderr, banner lines) to find it without walking huge logs.
+_DLAB_START_SCAN_LIMIT: int = 20
+
+
 def get_dlab_start_model(events: list[LogEvent]) -> str | None:
     """
     Extract model from the first dlab_start event, or None for older logs.
@@ -382,12 +387,14 @@ def get_dlab_start_model(events: list[LogEvent]) -> str | None:
     str | None
         Model string (e.g. "anthropic/claude-sonnet-4-5") or None.
     """
-    for event in events:
+    # dlab writes dlab_start as the first line, but a non-JSON stderr line
+    # (or other noise) can precede it in the log. Scan a bounded window of
+    # early events rather than breaking at the first timestamped one, so the
+    # model is still found when noise comes first (issue #61); the window
+    # keeps this cheap on large logs that have no dlab_start at all.
+    for event in events[:_DLAB_START_SCAN_LIMIT]:
         if event.event_type == "dlab_start":
             return event.part.get("model") or event.raw.get("model")
-        # Only check the first few events — dlab_start is always first
-        if event.timestamp is not None:
-            break
     return None
 
 

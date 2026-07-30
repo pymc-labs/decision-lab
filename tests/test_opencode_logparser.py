@@ -569,6 +569,29 @@ class TestDlabStart:
         ]
         assert get_dlab_start_model(events) is None
 
+    def test_model_found_when_noise_precedes_dlab_start(self) -> None:
+        # Issue #61: a non-JSON stderr line (raw_text, no timestamp) and a
+        # step_start before dlab_start must not stop the scan.
+        events: list[LogEvent] = [
+            LogEvent("raw_text", None, "", {"text": "[STDERR] warning"}, {}),
+            LogEvent("step_start", 1000, "", {}, {}),
+            LogEvent("dlab_start", 1000, "", {"model": "anthropic/claude-opus-4-5"},
+                     {"model": "anthropic/claude-opus-4-5"}),
+        ]
+        assert get_dlab_start_model(events) == "anthropic/claude-opus-4-5"
+
+    def test_scan_is_bounded_on_large_logs(self) -> None:
+        # A dlab_start buried far past the window is intentionally not found —
+        # dlab always writes it near the top, and the bound keeps huge logs
+        # without a dlab_start cheap.
+        events: list[LogEvent] = [
+            LogEvent("text", i, "", {"text": "x"}, {}) for i in range(100)
+        ]
+        events.append(
+            LogEvent("dlab_start", 999999, "", {"model": "m/x"}, {"model": "m/x"})
+        )
+        assert get_dlab_start_model(events) is None
+
     def test_dlab_start_in_log_file(self, tmp_path: Path) -> None:
         """dlab_start as first line followed by normal events."""
         log_file: Path = tmp_path / "main.log"
