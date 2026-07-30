@@ -99,6 +99,12 @@ class TestArtifactDiscovery:
         assert "results.json" not in names
         assert "predictions.parquet" not in names
 
+    def test_include_all_surfaces_extra(self, session: Path) -> None:
+        # The "more files" expander (#48) reveals the non-curated outputs.
+        names = {p.name for p in discover_artifacts(session, session, include_all=True)}
+        assert "results.json" in names
+        assert "predictions.parquet" in names
+
 
 @pytest.mark.asyncio
 async def test_connect_tui_boots_on_fixture(session: Path) -> None:
