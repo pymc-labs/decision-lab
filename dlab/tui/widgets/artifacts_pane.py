@@ -23,8 +23,18 @@ from textual.message import Message
 from textual.reactive import reactive
 from textual.widgets import DataTable, ListItem, ListView, Static
 
-# File extensions to include as artifacts
+# Curated default view — the artifact types worth surfacing prominently.
 ARTIFACT_EXTENSIONS = {".md", ".py", ".txt", ".csv", ".png", ".jpg", ".jpeg", ".pdf"}
+
+# The list shows the curated types by default and, behind a "N more files"
+# expander, everything else under the agent dir EXCEPT these clearly-irrelevant
+# extensions (and dotfiles). This surfaces .json/.parquet/.html/... outputs
+# without whitelist catch-up or cluttering the default view (issue #48).
+HIDDEN_EXTENSIONS = {
+    ".pyc", ".pyo", ".pyd", ".so", ".o", ".a", ".class",
+    ".lock", ".tmp", ".temp", ".swp", ".swo", ".bak",
+    ".log", ".pid", ".cache",
+}
 
 # Directories to exclude from artifact discovery
 EXCLUDE_DIRS = {
@@ -150,7 +160,10 @@ def is_parallel_run_dir(name: str) -> bool:
 
 
 def discover_artifacts(
-    work_dir: Path, agent_dir: Path | None, is_main: bool = False
+    work_dir: Path,
+    agent_dir: Path | None,
+    is_main: bool = False,
+    include_all: bool = False,
 ) -> list[Path]:
     """
     Discover artifact files for an agent.
@@ -189,8 +202,15 @@ def discover_artifacts(
 
         for filename in files:
             file_path = root_path / filename
-            if file_path.suffix.lower() not in ARTIFACT_EXTENSIONS:
-                continue
+            suffix = file_path.suffix.lower()
+            if include_all:
+                # Everything except dotfiles and clearly-irrelevant extensions.
+                if filename.startswith(".") or suffix in HIDDEN_EXTENSIONS:
+                    continue
+            else:
+                # Curated default view.
+                if suffix not in ARTIFACT_EXTENSIONS:
+                    continue
             try:
                 artifacts.append(file_path.relative_to(base))
             except ValueError:
@@ -261,11 +281,30 @@ def _sort_artifacts(artifacts: list[Path]) -> list[Path]:
     )
 
 
+class MoreFilesItem(ListItem):
+    """Expander row that reveals/hides the non-curated files (issue #48)."""
+
+    def __init__(self, count: int, expanded: bool, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._count = count
+        self._expanded = expanded
+
+    def compose(self):
+        arrow: str = "▾" if self._expanded else "▸"
+        if self._expanded:
+            label: str = "fewer files"
+        else:
+            plural: str = "s" if self._count != 1 else ""
+            label = f"{self._count} more file{plural}"
+        yield Static(Text(f"{arrow} {label}", style="dim italic"))
+
+
 class ArtifactList(ListView):
     """
     File list in left sidebar.
 
-    Shows artifacts for selected agent with icons.
+    Shows the curated artifact types for the selected agent, plus an
+    expandable "N more files" row revealing everything else the agent wrote.
     """
 
     class FileSelected(Message):
@@ -279,35 +318,43 @@ class ArtifactList(ListView):
         super().__init__(**kwargs)
         self._work_dir = work_dir
         self._agent_dir: Path | None = None
-        self._artifacts: list[Path] = []
+        self._artifacts: list[Path] = []       # curated
+        self._extra: list[Path] = []           # non-curated ("more files")
         self._agent_name: str | None = None
+        self._show_more: bool = False
+
+    def _recompute(self) -> None:
+        """Split the agent's files into curated and extra lists."""
+        is_main = self._agent_name is not None and self._agent_name.startswith("main")
+        all_files = discover_artifacts(
+            self._work_dir, self._agent_dir, is_main=is_main, include_all=True
+        )
+        curated = [p for p in all_files if p.suffix.lower() in ARTIFACT_EXTENSIONS]
+        extra = [p for p in all_files if p.suffix.lower() not in ARTIFACT_EXTENSIONS]
+        self._artifacts = _sort_artifacts(curated)
+        self._extra = _sort_artifacts(extra)
+
+    def _rebuild(self) -> None:
+        """Repopulate the list from the current curated/extra state."""
+        self.clear()
+        if not self._artifacts and not self._extra:
+            self.append(ListItem(Static(Text("No files", style="dim italic"))))
+            return
+        for path in self._artifacts:
+            self.append(ArtifactItem(path))
+        if self._extra:
+            self.append(MoreFilesItem(len(self._extra), self._show_more))
+            if self._show_more:
+                for path in self._extra:
+                    self.append(ArtifactItem(path))
 
     def set_agent(self, agent_name: str | None) -> None:
         """Update artifacts for selected agent."""
         self._agent_name = agent_name
-
-        # Get agent directory
         self._agent_dir = get_agent_directory(self._work_dir, agent_name)
-
-        # Check if this is the main agent
-        is_main = agent_name is not None and agent_name.startswith("main")
-
-        # Discover artifacts
-        self._artifacts = discover_artifacts(
-            self._work_dir, self._agent_dir, is_main=is_main
-        )
-
-        # Rebuild list
-        self.clear()
-
-        if not self._artifacts:
-            self.append(ListItem(Static(Text("No files", style="dim italic"))))
-            return
-
-        self._artifacts = _sort_artifacts(self._artifacts)
-
-        for path in self._artifacts:
-            self.append(ArtifactItem(path))
+        self._show_more = False  # collapse when switching agents
+        self._recompute()
+        self._rebuild()
 
     def refresh_if_changed(self) -> None:
         """Re-discover artifacts and update list only if files changed."""
@@ -315,19 +362,10 @@ class ArtifactList(ListView):
             return
 
         self._agent_dir = get_agent_directory(self._work_dir, self._agent_name)
-        is_main = self._agent_name.startswith("main")
-        new_artifacts = _sort_artifacts(
-            discover_artifacts(self._work_dir, self._agent_dir, is_main=is_main)
-        )
-
-        if new_artifacts != self._artifacts:
-            self._artifacts = new_artifacts
-            self.clear()
-            if not self._artifacts:
-                self.append(ListItem(Static(Text("No files", style="dim italic"))))
-                return
-            for path in self._artifacts:
-                self.append(ArtifactItem(path))
+        old_artifacts, old_extra = self._artifacts, self._extra
+        self._recompute()
+        if self._artifacts != old_artifacts or self._extra != old_extra:
+            self._rebuild()
 
     def _resolve_path(self, rel_path: Path) -> Path:
         """Resolve a relative artifact path to an absolute path."""
@@ -341,6 +379,10 @@ class ArtifactList(ListView):
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle selection (Enter key)."""
+        if isinstance(event.item, MoreFilesItem):
+            self._show_more = not self._show_more
+            self._rebuild()
+            return
         if isinstance(event.item, ArtifactItem):
             self.post_message(
                 self.FileSelected(self._resolve_path(event.item.file_path))
