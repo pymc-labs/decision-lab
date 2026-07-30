@@ -127,8 +127,12 @@ def _run_with_log_spinner(
         ticker = threading.Thread(target=_tick, daemon=True)
         ticker.start()
 
-        result = run_fn()
-        running = False
+        try:
+            result = run_fn()
+        finally:
+            # Always stop the counter/ticker threads, even if run_fn raises,
+            # so they don't spin until process exit (issue #52).
+            running = False
 
     return result
 
