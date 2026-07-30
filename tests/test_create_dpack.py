@@ -577,6 +577,17 @@ class TestDockerfilePerPackageManager:
         assert "pixi install" in content
         assert 'CMD ["/bin/bash"]' in content
 
+    def test_pixi_dockerfile_single_path_definition(self, tmp_path: Path) -> None:
+        """pixi Dockerfile should have exactly one ENV PATH line with both paths (#3)."""
+        config: dict[str, Any] = {"name": "pixi-path-test", "package_manager": "pixi"}
+        generate_dpack(tmp_path, config)
+
+        content: str = (tmp_path / "pixi-path-test" / "docker" / "Dockerfile").read_text()
+        env_lines = [l for l in content.splitlines() if "ENV PATH=" in l]
+        assert len(env_lines) == 1, f"Expected 1 ENV PATH line, got {len(env_lines)}"
+        assert "/opt/pixi/.pixi/envs/default/bin" in env_lines[0]
+        assert "/root/.pixi/bin" in env_lines[0]
+
     def test_default_package_manager_is_pip(self, tmp_path: Path) -> None:
         """Default package manager should be pip."""
         generate_dpack(tmp_path, {"name": "default-pkg"})

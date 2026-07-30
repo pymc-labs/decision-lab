@@ -393,6 +393,7 @@ class TestContinueDir:
         prompt: str = "continue",
         no_sandboxing: bool = False,
         data: list[str] | None = None,
+        yes: bool = False,
     ) -> int:
         """Helper to run cmd_run in continue mode, mocking agent execution."""
         mock_return = (0, "", "")
@@ -407,6 +408,7 @@ class TestContinueDir:
                 work_dir=str(work_dir) if work_dir else None,
                 no_sandboxing=no_sandboxing,
                 data=data,
+                yes=yes,
             )
 
     # --- Error handling (no mode needed, errors before execution) ---
@@ -460,6 +462,43 @@ class TestContinueDir:
         assert result == 1
         captured = capsys.readouterr()
         assert "already exists" in captured.out
+
+    def test_continue_yes_flag_skips_prompt(
+        self,
+        dpack_config_dir: Path,
+        previous_session: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """--yes should auto-confirm --continue-dir without --work-dir."""
+        result: int = self._run_continue(
+            dpack_config_dir,
+            previous_session,
+            yes=True,
+            no_sandboxing=True,
+        )
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Will continue session in:" in captured.out
+        assert "Aborted." not in captured.out
+
+    def test_continue_non_tty_auto_confirms(
+        self,
+        dpack_config_dir: Path,
+        previous_session: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Non-interactive mode (no TTY) should auto-confirm continue."""
+        monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+        result: int = self._run_continue(
+            dpack_config_dir,
+            previous_session,
+            no_sandboxing=True,
+        )
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Will continue session in:" in captured.out
+        assert "Aborted." not in captured.out
 
     # --- Local mode (--no-sandboxing) ---
 

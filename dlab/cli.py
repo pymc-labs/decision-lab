@@ -217,6 +217,13 @@ def _main(
             help="Run opencode locally without Docker (no container isolation)",
         ),
     ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            help="Auto-confirm interactive prompts (e.g. --continue-dir without --work-dir)",
+        ),
+    ] = False,
 ) -> None:
     """Run opencode in automated mode, sandboxed with Docker."""
     if ctx.resilient_parsing:
@@ -237,6 +244,7 @@ def _main(
             rebuild=rebuild,
             env_file=env_file,
             no_sandboxing=no_sandboxing,
+            yes=yes,
         )
         raise typer.Exit(code=exit_code)
 
@@ -255,6 +263,7 @@ def cmd_run(
     rebuild: bool = False,
     env_file: str | None = None,
     no_sandboxing: bool = False,
+    yes: bool = False,
 ) -> int:
     """
     Handle run mode - create session and start agent.
@@ -389,13 +398,17 @@ def cmd_run(
             work_dir = str(work_path)
             print(f"Copied {_continue_dir} to {work_dir}")
         else:
-            # Continue in place - ask for confirmation
+            # Continue in place - ask for confirmation in interactive mode
             work_dir = str(_continue_dir)
             print(f"Will continue session in: {work_dir}")
-            confirm = input("Continue? [y/N]: ").strip().lower()
-            if confirm != "y":
-                print("Aborted.")
-                return 0
+            if yes or not sys.stdin.isatty():
+                # Auto-confirm when --yes is passed or stdin is not a TTY
+                pass
+            else:
+                confirm = input("Continue? [y/N]: ").strip().lower()
+                if confirm != "y":
+                    print("Aborted.")
+                    return 0
 
         # Overwrite .opencode with latest from decision-pack (agent prompts may have changed)
         opencode_dir = Path(work_dir) / ".opencode"
