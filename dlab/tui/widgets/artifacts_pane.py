@@ -153,6 +153,32 @@ def is_parallel_run_dir(name: str) -> bool:
     return name == "parallel" or name.startswith("run-")
 
 
+def _looks_binary(path: Path) -> bool:
+    """
+    Heuristically decide whether a file is binary, reading only a bounded
+    prefix (never the whole file).
+
+    A file is treated as binary if the first 8 KB contains a NUL byte or is
+    not valid UTF-8. Used to show a metadata card instead of previewing
+    non-text files as garbled text (issue #48).
+    """
+    try:
+        with open(path, "rb") as f:
+            chunk: bytes = f.read(8192)
+    except OSError:
+        return False
+    if b"\x00" in chunk:
+        return True
+    try:
+        chunk.decode("utf-8")
+    except UnicodeDecodeError:
+        # A multibyte char split at the 8 KB boundary would also raise; that
+        # is rare and only misclassifies a borderline text file as binary,
+        # which merely shows a card — acceptable.
+        return True
+    return False
+
+
 def discover_artifacts(
     work_dir: Path, agent_dir: Path | None, is_main: bool = False
 ) -> list[Path]:
@@ -424,10 +450,16 @@ class FileViewer(VerticalScroll, can_focus=True):
         # reading the whole file into memory (issue #55).
         try:
             if path.stat().st_size > MAX_PREVIEW_BYTES:
-                self.mount(LargeFileDisplay(path))
+                self.mount(NonPreviewableDisplay(path, "Too large to preview inline."))
                 return
         except OSError:
             pass
+
+        # Binary (parquet, nc, pkl, ...) — a metadata card, not garbled text
+        # (issue #48). Images and PDFs were already handled above.
+        if _looks_binary(path):
+            self.mount(NonPreviewableDisplay(path, "Binary file — not previewable."))
+            return
 
         # Read text content
         try:
@@ -584,12 +616,15 @@ class PdfDisplay(Static):
         open_file_externally(self._path)
 
 
-class LargeFileDisplay(Static):
-    """Metadata card for a file too large to preview inline (issue #55)."""
+class NonPreviewableDisplay(Static):
+    """Metadata card for a file that is not previewed inline — because it is
+    too large (issue #55) or binary (issue #48). Shows name/size and an
+    open-externally hint instead of dumping bytes into the viewer."""
 
-    def __init__(self, path: Path, **kwargs) -> None:
+    def __init__(self, path: Path, reason: str, **kwargs) -> None:
         super().__init__(**kwargs)
         self._path = path
+        self._reason = reason
 
     def render(self) -> Text:
         if not self._path.exists():
@@ -605,7 +640,7 @@ class LargeFileDisplay(Static):
         text = Text()
         text.append(f"{self._path.name}\n\n", style="bold")
         text.append(f"Size: {size_str}\n", style="dim")
-        text.append("Too large to preview inline.\n\n", style="yellow")
+        text.append(f"{self._reason}\n\n", style="yellow")
         text.append("Path: ", style="")
         text.append(f"{self._path}", style="underline cyan")
         text.append("\n\n")
