@@ -1,0 +1,4 @@
+{"type": "dlab_start", "timestamp": 1700000000400, "model": "anthropic/claude-sonnet-4-5", "agent": "poet"}
+{"type": "step_start", "timestamp": 1700000000400, "part": {"type": "step-start"}}
+{"type": "text", "timestamp": 1700000000500, "part": {"type": "text", "text": "A sonnet about logs."}}
+{"type": "step_finish", "timestamp": 1700000001400, "part": {"type": "step-finish", "reason": "stop", "cost": 0.004}}
