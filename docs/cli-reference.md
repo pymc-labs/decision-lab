@@ -304,6 +304,31 @@ dlab view WORK_DIR [--port PORT] [--no-open] [--export FILE]
 
 ---
 
+## digest
+
+Build a deterministic session digest — an LLM-facing map of a completed run (per-agent sections, workflow tree, artifact write-chains, script runs, reasoning excerpts). This is the same digest the notebook composer consumes; the command exposes it for inspection and for materializing the `_digest/` plumbing by hand. No LLM, no execution — pure extraction on top of `opencode_logparser`.
+
+```bash
+dlab digest [WORK_DIR] [--brief] [--write]
+```
+
+### Arguments
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `WORK_DIR` | Current directory (if it contains `_opencode_logs`) | Path to session work directory |
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--brief` | — | Collapse the per-agent tool tables to one-line counts |
+| `--write`, `-w` | — | Write `_digest/digest.md` and `_digest/index.json` into the work dir instead of printing the digest to stdout |
+
+Without `--write`, the digest markdown is printed to stdout (pipe-friendly: `dlab digest ./run | less`). The machine index (`index.json`) is only emitted in `--write` mode, since it is only meaningful as a file alongside the markdown (it is what the `digest-get` tool reads).
+
+---
+
 ## Help
 
 ```bash
@@ -313,5 +338,6 @@ dlab create-parallel-agent --help
 dlab connect --help
 dlab timeline --help
 dlab view --help
+dlab digest --help
 dlab install --help
 ```

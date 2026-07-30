@@ -1174,6 +1174,97 @@ def cmd_timeline(work_dir: str | None = None) -> int:
     return run_timeline(work_dir_path)
 
 
+@app.command("digest")
+def _cmd_digest(
+    work_dir: Annotated[
+        str | None,
+        typer.Argument(
+            metavar="WORK_DIR",
+            help="Path to session work directory "
+            "(default: cwd if it contains _opencode_logs)",
+        ),
+    ] = None,
+    brief: Annotated[
+        bool,
+        typer.Option(
+            "--brief",
+            help="Collapse per-agent tool tables to one-line counts",
+        ),
+    ] = False,
+    write: Annotated[
+        bool,
+        typer.Option(
+            "--write",
+            "-w",
+            help="Write _digest/digest.md and _digest/index.json into the "
+            "work dir instead of printing the digest to stdout",
+        ),
+    ] = False,
+) -> None:
+    """Build a deterministic session digest (the composer's LLM-facing map)."""
+    exit_code = cmd_digest(work_dir=work_dir, brief=brief, write=write)
+    raise typer.Exit(code=exit_code)
+
+
+def cmd_digest(
+    work_dir: str | None = None, brief: bool = False, write: bool = False
+) -> int:
+    """
+    Handle digest mode - build a deterministic session digest from a work dir.
+
+    Prints the digest markdown to stdout by default; with ``write`` set,
+    materializes ``_digest/digest.md`` and ``_digest/index.json`` into the work
+    directory (the same pair the composer step consumes).
+
+    Parameters
+    ----------
+    work_dir : str | None
+        Session work directory. If None, uses the current directory when it
+        contains an ``_opencode_logs`` folder.
+    brief : bool
+        Collapse the per-agent tool tables to one-line counts.
+    write : bool
+        Write the digest files into the work dir instead of printing.
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, non-zero for failure).
+    """
+    from dlab.session_digest import build_digest, generate_digest
+
+    if work_dir:
+        work_dir_path: Path = Path(work_dir).resolve()
+    else:
+        cwd: Path = Path.cwd()
+        if (cwd / "_opencode_logs").is_dir():
+            work_dir_path = cwd
+        else:
+            print(
+                "Error: No work directory specified and no _opencode_logs in "
+                "current directory",
+                file=sys.stderr,
+            )
+            return 1
+
+    if not (work_dir_path / "_opencode_logs").is_dir():
+        print(
+            f"Error: No _opencode_logs directory found in {work_dir_path}",
+            file=sys.stderr,
+        )
+        print("Make sure this is a valid dlab session directory.", file=sys.stderr)
+        return 1
+
+    if write:
+        out_dir: Path = generate_digest(work_dir_path, brief=brief)
+        print(f"Wrote {out_dir / 'digest.md'}")
+        print(f"Wrote {out_dir / 'index.json'}")
+    else:
+        markdown, _index = build_digest(work_dir_path, brief=brief)
+        sys.stdout.write(markdown)
+    return 0
+
+
 @app.command("create-dpack")
 def _cmd_create_dpack(
     output_dir: Annotated[

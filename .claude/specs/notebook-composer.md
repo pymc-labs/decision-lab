@@ -455,7 +455,12 @@ Changed files:
 2. Level C: `dlab notebooks --execute` with `long-running` skipping.
 3. Per-dpack composer hints / output-dir config.
 4. Derived-stats layer refactor (timeline + viewer + digest sharing rollups).
-5. Promoting `dlab digest` to a documented subcommand.
+5. ~~Promoting `dlab digest` to a documented subcommand.~~ **Done** (Ben pulled
+   this forward and shipped it with #85): `dlab digest [WORK_DIR] [--brief]
+   [--write]` prints the digest to stdout, or with `--write` materializes the
+   `_digest/` pair. The digest remains internal plumbing for the composer step;
+   this is only a read/inspect surface over the same `build_digest`/
+   `generate_digest` functions.
 
 ## 12. Open implementation checks (the only genuinely open points)
 

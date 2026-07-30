@@ -86,6 +86,9 @@ dlab timeline [work-dir]
 
 # Browser-based session viewer (DAG visualization)
 dlab view <work-dir> [--port PORT] [--no-open] [--export FILE]
+
+# Print (or write) a deterministic session digest
+dlab digest [work-dir] [--brief] [--write]
 ```
 
 ## Coding Style
@@ -143,6 +146,8 @@ dlab view <work-dir> [--port PORT] [--no-open] [--export FILE]
 - `local.py` - Local (no-Docker) execution backend for `--no-sandboxing`
 - `model_fallback.py` - Model validation and provider fallback (`preflight_check` before session creation, `process_opencode_dir` during setup) so a single API key suffices
 - `opencode_logparser.py` - Canonical OpenCode NDJSON log parser (`LogEvent`, `SessionNode`, `parse_log_file`, `build_session_graph`); single source of truth used by `timeline.py`, `tui/`, and `viewer/`
+- `session_digest.py` - Deterministic session digest for the notebook composer (`build_digest`, `generate_digest`); builds `_digest/digest.md` + `_digest/index.json` on top of `opencode_logparser`. Surfaced by the `dlab digest` subcommand.
+- `js/digest-get.ts` - In-container retrieval tool (loaded as `DIGEST_GET_SOURCE`) that reads one indexed NDJSON line by ID and renders it decoded/sliced
 - `parallel_tool.py` - Loads parallel-agents.ts from `js/`
 - `js/parallel-agents.ts` - TypeScript source bundled as package data
 - `data/models.json` - Bundled models.dev model list (package data)

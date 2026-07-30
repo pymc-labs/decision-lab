@@ -1,11 +1,14 @@
 """Tests for the deterministic session digest + digest-get tool (issue #85)."""
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+from typer.testing import CliRunner
 
+from dlab.cli import app, cmd_digest
 from dlab.session_digest import (
     DIGEST_GET_SOURCE,
     build_digest,
@@ -177,3 +180,63 @@ console.log("ok");
         js.write_text(driver)
         r = subprocess.run(["node", str(js)], capture_output=True, text=True, timeout=15)
         assert r.returncode == 0, r.stderr
+
+
+class TestDigestCommand:
+    """The `dlab digest` CLI subcommand (thin wrapper over build/generate)."""
+
+    def test_stdout_default(self, capsys: pytest.CaptureFixture) -> None:
+        rc = cmd_digest(str(FIXTURE))
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert out.startswith("# Session digest: sample_session")
+        assert "### main — orchestrator" in out
+
+    def test_write_materializes_pair(self, tmp_path: Path,
+                                     capsys: pytest.CaptureFixture) -> None:
+        run = tmp_path / "run"
+        shutil.copytree(FIXTURE, run)
+        rc = cmd_digest(str(run), write=True)
+        assert rc == 0
+        digest_md = run / "_digest" / "digest.md"
+        index_json = run / "_digest" / "index.json"
+        assert digest_md.is_file() and index_json.is_file()
+        # stdout reports the written paths, not the digest body.
+        out = capsys.readouterr().out
+        assert "digest.md" in out and "index.json" in out
+        assert "# Session digest" not in out
+        index = json.loads(index_json.read_text())
+        assert any(k.startswith("main/") for k in index)
+
+    def test_brief_is_shorter_than_full(self) -> None:
+        full, _ = build_digest(FIXTURE, brief=False)
+        brief, _ = build_digest(FIXTURE, brief=True)
+        assert len(brief) <= len(full)
+
+    def test_cwd_fallback(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                          capsys: pytest.CaptureFixture) -> None:
+        run = tmp_path / "run"
+        shutil.copytree(FIXTURE, run)
+        monkeypatch.chdir(run)
+        rc = cmd_digest(None)
+        assert rc == 0
+        assert "# Session digest" in capsys.readouterr().out
+
+    def test_missing_logs_errors(self, tmp_path: Path,
+                                 capsys: pytest.CaptureFixture) -> None:
+        rc = cmd_digest(str(tmp_path))
+        assert rc == 1
+        assert "_opencode_logs" in capsys.readouterr().err
+
+    def test_no_arg_without_logs_errors(self, tmp_path: Path,
+                                        monkeypatch: pytest.MonkeyPatch,
+                                        capsys: pytest.CaptureFixture) -> None:
+        monkeypatch.chdir(tmp_path)
+        rc = cmd_digest(None)
+        assert rc == 1
+        assert "No work directory specified" in capsys.readouterr().err
+
+    def test_command_is_registered(self) -> None:
+        result = CliRunner().invoke(app, ["digest", "--help"])
+        assert result.exit_code == 0
+        assert "session digest" in result.output.lower()
