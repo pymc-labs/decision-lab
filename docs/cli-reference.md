@@ -8,14 +8,14 @@ Complete reference for all dlab commands and options.
 dlab [command] [options]
 ```
 
-If no command is specified and run-mode arguments are provided, dlab runs in **run mode**.
+The primary command is `dlab run`. As a backward-compatible shorthand, its options may also be passed directly at the root — `dlab --dpack ...` is equivalent to `dlab run --dpack ...`.
 
-## Run Mode
+## run
 
 Execute opencode in a Docker container with your data and prompt.
 
 ```bash
-dlab --dpack PATH --data PATH [--data PATH ...] --prompt TEXT [options]
+dlab run --dpack PATH --data PATH [--data PATH ...] --prompt TEXT [options]
 ```
 
 ### Required Arguments
@@ -52,7 +52,7 @@ All environment variables starting with `DLAB_` are automatically forwarded from
 
 ```bash
 # Example: MMM decision-pack uses this to control local vs Modal fitting
-DLAB_FIT_MODEL_LOCALLY=1 dlab --dpack mmm --data ./data --prompt "..."
+DLAB_FIT_MODEL_LOCALLY=1 dlab run --dpack mmm --data ./data --prompt "..."
 ```
 
 ### Continue Mode
@@ -60,7 +60,7 @@ DLAB_FIT_MODEL_LOCALLY=1 dlab --dpack mmm --data ./data --prompt "..."
 Resume an interrupted session:
 
 ```bash
-dlab --dpack ./my-dpack --continue-dir ./analysis-001 --prompt "Continue"
+dlab run --dpack ./my-dpack --continue-dir ./analysis-001 --prompt "Continue"
 ```
 
 This refreshes the `.opencode` config and hook scripts from the decision-pack, then runs opencode in the existing work directory. Cannot be combined with `--data`.
@@ -69,22 +69,22 @@ This refreshes the `.opencode` config and hook scripts from the decision-pack, t
 
 ```bash
 # Basic usage
-dlab --dpack ./my-dpack --data ./data --prompt "Analyze this CSV"
+dlab run --dpack ./my-dpack --data ./data --prompt "Analyze this CSV"
 
 # Multiple data files (repeat --data for each file)
-dlab --dpack ./my-dpack --data file1.csv --data file2.csv --prompt "Compare"
+dlab run --dpack ./my-dpack --data file1.csv --data file2.csv --prompt "Compare"
 
 # With model override
-dlab --dpack ./my-dpack --data ./data \
+dlab run --dpack ./my-dpack --data ./data \
          --prompt "Build a model" \
          --model anthropic/claude-opus-4
 
 # Resume interrupted session
-dlab --dpack ./my-dpack --continue-dir ./analysis-001 \
+dlab run --dpack ./my-dpack --continue-dir ./analysis-001 \
          --prompt "Continue the analysis"
 
 # Environment file (auto-detected from decision-pack .env if present)
-dlab --dpack ./my-dpack --data ./data --prompt "Analyze"
+dlab run --dpack ./my-dpack --data ./data --prompt "Analyze"
 ```
 
 ### CLI Output

@@ -349,6 +349,75 @@ class TestApplyModelFallback:
         assert len(replacements) == 1
 
 
+class TestMarkdownFallbackScope:
+    """apply_model_fallback with is_markdown=True only rewrites frontmatter,
+    never the prompt body (issue #51: no false replacements in prose, code
+    blocks, URLs, or examples)."""
+
+    OPTS = ("anthropic/claude-opus-4-0", {"google", "openai"})
+
+    def test_frontmatter_model_replaced(self) -> None:
+        text: str = textwrap.dedent("""\
+            ---
+            mode: primary
+            model: google/gemini-2.5-pro
+            ---
+            body
+        """)
+        new_text, reps = apply_model_fallback(text, *self.OPTS, is_markdown=True)
+        assert "model: anthropic/claude-opus-4-0" in new_text
+        assert len(reps) == 1
+
+    def test_body_prose_not_replaced(self) -> None:
+        text: str = textwrap.dedent("""\
+            ---
+            mode: primary
+            ---
+            Unlike google/gemini-2.5-pro, our approach uses openai/gpt-4 sparingly.
+        """)
+        new_text, reps = apply_model_fallback(text, *self.OPTS, is_markdown=True)
+        assert new_text == text
+        assert reps == []
+
+    def test_body_code_block_not_replaced(self) -> None:
+        text: str = textwrap.dedent("""\
+            ---
+            mode: primary
+            ---
+            Example config:
+            ```yaml
+            default_model: "google/gemini-2.5-pro"
+            ```
+        """)
+        new_text, reps = apply_model_fallback(text, *self.OPTS, is_markdown=True)
+        assert '"google/gemini-2.5-pro"' in new_text
+        assert reps == []
+
+    def test_body_url_not_replaced(self) -> None:
+        text: str = textwrap.dedent("""\
+            ---
+            mode: primary
+            ---
+            See https://example.com/openai/gpt-4-guide for details.
+        """)
+        new_text, reps = apply_model_fallback(text, *self.OPTS, is_markdown=True)
+        assert new_text == text
+
+    def test_no_frontmatter_means_no_replacement(self) -> None:
+        # A skill doc with no frontmatter is all prose/examples.
+        text: str = 'Set default_model: "google/gemini-2.5-pro" in config.yaml.\n'
+        new_text, reps = apply_model_fallback(text, *self.OPTS, is_markdown=True)
+        assert new_text == text
+        assert reps == []
+
+    def test_yaml_still_fully_processed(self) -> None:
+        # is_markdown=False (a .yaml file): value replaced as before.
+        text: str = 'default_model: "google/gemini-2.5-pro"\n'
+        new_text, reps = apply_model_fallback(text, *self.OPTS, is_markdown=False)
+        assert "google/" not in new_text
+        assert len(reps) == 1
+
+
 class TestProcessOpencodeDir:
     """Tests for process_opencode_dir()."""
 
@@ -394,15 +463,18 @@ class TestProcessOpencodeDir:
         assert "anthropic/claude-opus-4-0" in content
         assert any("-> " in msg for msg in result)
 
-    def test_fallback_replaces_in_markdown(self, tmp_path: Path) -> None:
+    def test_fallback_replaces_md_frontmatter_only(self, tmp_path: Path) -> None:
+        # Issue #51: a .md agent file's frontmatter model is replaced, but a
+        # model mentioned in the prompt BODY (example / prose) is left intact.
         opencode_dir: Path = tmp_path / ".opencode"
         agents_dir: Path = opencode_dir / "agents"
         agents_dir.mkdir(parents=True)
         (agents_dir / "orchestrator.md").write_text(textwrap.dedent("""\
             ---
             mode: primary
+            model: google/gemini-2.5-pro
             ---
-            Use "models": ["google/gemini-2.5-pro"]
+            Example call: parallel-agents with "google/gemini-2.5-pro".
         """))
         env_file: Path = tmp_path / ".env"
         env_file.write_text("ANTHROPIC_API_KEY=sk-123\n")
@@ -411,8 +483,10 @@ class TestProcessOpencodeDir:
             str(opencode_dir), "anthropic/claude-opus-4-0", str(env_file),
         )
         content: str = (agents_dir / "orchestrator.md").read_text()
-        assert "google/" not in content
-        assert "anthropic/claude-opus-4-0" in content
+        # Frontmatter model was replaced ...
+        assert "model: anthropic/claude-opus-4-0" in content
+        # ... but the body example was not touched.
+        assert '"google/gemini-2.5-pro"' in content
 
     def test_skips_when_orchestrator_key_missing(self, tmp_path: Path) -> None:
         opencode_dir: Path = tmp_path / ".opencode"
@@ -453,7 +527,9 @@ class TestProcessOpencodeDir:
         )
         yaml_content: str = (pa_dir / "modeler.yaml").read_text()
         md_content: str = (agents_dir / "orchestrator.md").read_text()
+        # YAML config is fully rewritten ...
         assert "google/" not in yaml_content
-        assert "google/" not in md_content
         assert yaml_content.count("anthropic/claude-opus-4-0") == 2
-        assert md_content.count("anthropic/claude-opus-4-0") == 1
+        # ... but the .md body prose is left intact (issue #51).
+        assert "google/gemini-2.5-pro" in md_content
+        assert "anthropic/claude-opus-4-0" not in md_content

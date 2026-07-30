@@ -146,7 +146,7 @@ Get Modal tokens at https://modal.com/settings/tokens.
 Models are fit on Modal by default. To fit locally instead (slower, no Modal credentials needed), set `DLAB_FIT_MODEL_LOCALLY=1` in your `.env` or pass it as an env var:
 
 ```bash
-DLAB_FIT_MODEL_LOCALLY=1 dlab --dpack decision-packs/mmm --data ./data --prompt "..."
+DLAB_FIT_MODEL_LOCALLY=1 dlab run --dpack decision-packs/mmm --data ./data --prompt "..."
 ```
 
 Local fitting runs at 1-2 it/s (PyTensor) or 3-8 it/s (numpyro). Modal runs at 5-10 it/s.

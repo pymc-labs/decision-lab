@@ -1,0 +1,4 @@
+{"type": "dlab_start", "timestamp": 1700000005000, "model": "anthropic/claude-sonnet-4-5", "agent": "consolidator"}
+{"type": "step_start", "timestamp": 1700000005000, "part": {"type": "step-start"}}
+{"type": "text", "timestamp": 1700000005100, "part": {"type": "text", "text": "Instance 2 was best."}}
+{"type": "step_finish", "timestamp": 1700000006000, "part": {"type": "step-finish", "reason": "stop", "cost": 0.004}}

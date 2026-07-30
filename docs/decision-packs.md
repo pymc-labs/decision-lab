@@ -83,7 +83,7 @@ hooks:
 
 ### Model Roles
 
-`default_model` is the orchestrator model (overridable at run time with `dlab --model`). The optional `models:` block overrides models for the other roles: at session setup, `forecaster` is injected as `default_model` and `consolidator` as `summarizer_model` into each YAML file under `opencode/parallel_agents/`. Omitted roles fall back to `default_model`.
+`default_model` is the orchestrator model (overridable at run time with `dlab run --model`). The optional `models:` block overrides models for the other roles: at session setup, `forecaster` is injected as `default_model` and `consolidator` as `summarizer_model` into each YAML file under `opencode/parallel_agents/`. Omitted roles fall back to `default_model`.
 
 ## opencode/opencode.json
 
@@ -249,7 +249,7 @@ For example, the MMM decision-pack uses `DLAB_FIT_MODEL_LOCALLY=1` to switch bet
 To use from the command line:
 
 ```bash
-DLAB_FIT_MODEL_LOCALLY=1 dlab --dpack mmm --data ./data --prompt "..."
+DLAB_FIT_MODEL_LOCALLY=1 dlab run --dpack mmm --data ./data --prompt "..."
 ```
 
 Or add to your `.env` file:

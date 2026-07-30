@@ -280,13 +280,38 @@ def preflight_check(
     return errors, warnings
 
 
+def _split_frontmatter(text: str) -> tuple[str, str, str] | None:
+    """
+    Split a markdown document into (opening, frontmatter, remainder).
+
+    Returns None if the text has no leading YAML frontmatter block (a ``---``
+    line, some content, and a closing ``---`` line). ``opening`` is the first
+    ``---`` line, ``frontmatter`` is the inner YAML, and ``remainder`` is the
+    closing ``---`` line plus the document body.
+    """
+    lines: list[str] = text.splitlines(keepends=True)
+    if not lines or lines[0].rstrip("\n") != "---":
+        return None
+    for i in range(1, len(lines)):
+        if lines[i].rstrip("\n") == "---":
+            return lines[0], "".join(lines[1:i]), "".join(lines[i:])
+    return None
+
+
 def apply_model_fallback(
     text: str,
     orchestrator_model: str,
     unavailable_providers: set[str],
+    is_markdown: bool = False,
 ) -> tuple[str, list[str]]:
     """
     Replace model strings whose providers are unavailable.
+
+    For markdown agent files (``is_markdown=True``) only the YAML frontmatter
+    is rewritten; the body is left untouched. Model-like strings in an agent
+    prompt's prose, code blocks, URLs, or examples are not live configuration
+    and must never be rewritten (issue #51). For YAML files the whole file is
+    configuration, so all non-comment lines are processed.
 
     Parameters
     ----------
@@ -296,6 +321,9 @@ def apply_model_fallback(
         Model to substitute in place of unavailable ones.
     unavailable_providers : set[str]
         Provider names whose API keys are missing.
+    is_markdown : bool
+        True if ``text`` is a markdown (.md) agent file; only its frontmatter
+        is treated as configuration.
 
     Returns
     -------
@@ -315,15 +343,24 @@ def apply_model_fallback(
             return orchestrator_model
         return model_str
 
-    # Only replace on non-comment lines
-    new_lines: list[str] = []
-    for line in text.splitlines(keepends=True):
-        if line.lstrip().startswith("#"):
-            new_lines.append(line)
-        else:
-            new_lines.append(_MODEL_PATTERN.sub(_replace, line))
+    def _process(region: str) -> str:
+        out: list[str] = []
+        for line in region.splitlines(keepends=True):
+            if line.lstrip().startswith("#"):
+                out.append(line)
+            else:
+                out.append(_MODEL_PATTERN.sub(_replace, line))
+        return "".join(out)
 
-    return "".join(new_lines), replacements
+    if is_markdown:
+        parts: tuple[str, str, str] | None = _split_frontmatter(text)
+        if parts is None:
+            # No frontmatter — the whole file is prose/examples, never config.
+            return text, []
+        opening, frontmatter, remainder = parts
+        return opening + _process(frontmatter) + remainder, replacements
+
+    return _process(text), replacements
 
 
 def process_opencode_dir(
@@ -382,7 +419,7 @@ def process_opencode_dir(
     for f in config_files:
         text: str = f.read_text()
         new_text, replacements = apply_model_fallback(
-            text, orchestrator_model, unavailable,
+            text, orchestrator_model, unavailable, is_markdown=f.suffix == ".md",
         )
         if replacements:
             f.write_text(new_text)

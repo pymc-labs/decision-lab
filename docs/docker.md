@@ -57,12 +57,12 @@ Images are cached based on a hash of the `docker/` directory contents and the `o
 
 ```bash
 # First run: builds the image
-dlab --dpack ./my-dpack --data ./data --prompt "Test"
+dlab run --dpack ./my-dpack --data ./data --prompt "Test"
 # [1/4] Setting up environment
 #       Building image: my-dpack-img
 
 # Second run: uses cached image
-dlab --dpack ./my-dpack --data ./data --prompt "Test"
+dlab run --dpack ./my-dpack --data ./data --prompt "Test"
 # [1/4] Setting up environment
 #       Image: my-dpack-img (cached)
 ```

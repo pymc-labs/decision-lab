@@ -204,6 +204,14 @@ def _collect_artifacts(
                 continue
 
             mime: str = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+            try:
+                size: int = file_path.stat().st_size
+            except OSError:
+                continue
+            if size > MAX_INLINE_BYTES:
+                # Too large to inline — list as metadata; served on demand via /file.
+                artifact_map[path_str] = {"type": "too_large", "size": size, "mime": mime}
+                continue
             if mime.startswith("text/") or mime in ("application/json",) or file_path.suffix in (".md", ".py", ".txt", ".csv"):
                 try:
                     content: str = file_path.read_text(encoding="utf-8", errors="replace")
@@ -302,6 +310,13 @@ def _inline_cdn_resources(html: str) -> str:
 
 
 CSV_MAX_ROWS: int = 1000
+
+# Artifacts larger than this are not inlined into the session JSON (issue #55).
+# They are listed as metadata only; the file itself is still served on demand
+# through the streaming /file endpoint. Inlining reads the whole file into
+# memory (and base64 inflates binaries ~33%), so a multi-GB artifact would OOM
+# the viewer at page load.
+MAX_INLINE_BYTES: int = 5 * 1024 * 1024
 
 
 def export_viewer(work_dir: Path, output_path: Path) -> int:

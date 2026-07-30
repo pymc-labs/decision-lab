@@ -43,7 +43,7 @@ API keys are passed to the Docker container via `--env-file`. The create-dpack w
 cp my-dpack/.env.example my-dpack/.env
 
 # The CLI auto-detects .env in the decision-pack directory
-dlab --dpack ./my-dpack --data ./data --prompt "Analyze"
+dlab run --dpack ./my-dpack --data ./data --prompt "Analyze"
 ```
 
 ## Platform Support

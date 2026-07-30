@@ -1,0 +1,5 @@
+{
+  "dpack_name": "poem",
+  "status": "completed",
+  "model": "anthropic/claude-sonnet-4-5"
+}
