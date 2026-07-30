@@ -26,6 +26,10 @@ from textual.widgets import DataTable, ListItem, ListView, Static
 # File extensions to include as artifacts
 ARTIFACT_EXTENSIONS = {".md", ".py", ".txt", ".csv", ".png", ".jpg", ".jpeg", ".pdf"}
 
+# Files larger than this are not read into memory for preview (issue #55);
+# a metadata card with an "open externally" hint is shown instead.
+MAX_PREVIEW_BYTES = 5 * 1024 * 1024
+
 # Directories to exclude from artifact discovery
 EXCLUDE_DIRS = {
     ".git",
@@ -147,6 +151,32 @@ def is_parallel_run_dir(name: str) -> bool:
     """Check if directory name matches parallel run pattern."""
     # Matches both 'parallel' dir and 'run-TIMESTAMP' subdirs
     return name == "parallel" or name.startswith("run-")
+
+
+def _looks_binary(path: Path) -> bool:
+    """
+    Heuristically decide whether a file is binary, reading only a bounded
+    prefix (never the whole file).
+
+    A file is treated as binary if the first 8 KB contains a NUL byte or is
+    not valid UTF-8. Used to show a metadata card instead of previewing
+    non-text files as garbled text (issue #48).
+    """
+    try:
+        with open(path, "rb") as f:
+            chunk: bytes = f.read(8192)
+    except OSError:
+        return False
+    if b"\x00" in chunk:
+        return True
+    try:
+        chunk.decode("utf-8")
+    except UnicodeDecodeError:
+        # A multibyte char split at the 8 KB boundary would also raise; that
+        # is rare and only misclassifies a borderline text file as binary,
+        # which merely shows a card — acceptable.
+        return True
+    return False
 
 
 def discover_artifacts(
@@ -416,6 +446,21 @@ class FileViewer(VerticalScroll, can_focus=True):
             self.mount(PdfDisplay(path))
             return
 
+        # Too large to preview safely — show a metadata card instead of
+        # reading the whole file into memory (issue #55).
+        try:
+            if path.stat().st_size > MAX_PREVIEW_BYTES:
+                self.mount(NonPreviewableDisplay(path, "Too large to preview inline."))
+                return
+        except OSError:
+            pass
+
+        # Binary (parquet, nc, pkl, ...) — a metadata card, not garbled text
+        # (issue #48). Images and PDFs were already handled above.
+        if _looks_binary(path):
+            self.mount(NonPreviewableDisplay(path, "Binary file — not previewable."))
+            return
+
         # Read text content
         try:
             content = path.read_text(encoding="utf-8", errors="replace")
@@ -568,6 +613,44 @@ class PdfDisplay(Static):
 
     def _open_file(self) -> None:
         """Open the file in system default viewer."""
+        open_file_externally(self._path)
+
+
+class NonPreviewableDisplay(Static):
+    """Metadata card for a file that is not previewed inline — because it is
+    too large (issue #55) or binary (issue #48). Shows name/size and an
+    open-externally hint instead of dumping bytes into the viewer."""
+
+    def __init__(self, path: Path, reason: str, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._path = path
+        self._reason = reason
+
+    def render(self) -> Text:
+        if not self._path.exists():
+            return Text(f"File not found: {self._path}", style="red")
+
+        size: int = self._path.stat().st_size
+        size_str: str = (
+            f"{size / (1024 * 1024):.1f} MB"
+            if size >= 1024 * 1024
+            else f"{size / 1024:.1f} KB"
+        )
+
+        text = Text()
+        text.append(f"{self._path.name}\n\n", style="bold")
+        text.append(f"Size: {size_str}\n", style="dim")
+        text.append(f"{self._reason}\n\n", style="yellow")
+        text.append("Path: ", style="")
+        text.append(f"{self._path}", style="underline cyan")
+        text.append("\n\n")
+        text.append("Click path or press ", style="dim")
+        text.append("o", style="bold cyan")
+        text.append(" to open externally", style="dim")
+        return text
+
+    def on_click(self) -> None:
+        """Handle click - open the file externally."""
         open_file_externally(self._path)
 
 
