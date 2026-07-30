@@ -10,6 +10,8 @@ import csv
 import io
 import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 from rich.console import Group
@@ -43,6 +45,41 @@ EXCLUDE_DIRS = {
     ".tox",
     ".mypy_cache",
 }
+
+
+def open_file_externally(path: Path | None) -> bool:
+    """
+    Open a file with the system's default application, without a shell.
+
+    Artifact filenames are agent-controlled, so they must never pass
+    through a shell: on Windows this uses ``os.startfile`` (no cmd.exe),
+    on macOS/Linux the platform opener binary with an argument list.
+
+    Parameters
+    ----------
+    path : Path | None
+        File to open.
+
+    Returns
+    -------
+    bool
+        True if an opener was launched, False if the path is missing/does
+        not exist or no opener is available on this system.
+    """
+    if not path or not path.exists():
+        return False
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(path))
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(path)])
+        else:
+            subprocess.Popen(["xdg-open", str(path)])
+    except OSError:
+        # Opener binary missing (e.g. no xdg-open) or file vanished —
+        # report failure instead of crashing the TUI.
+        return False
+    return True
 
 # Image extensions
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
@@ -325,21 +362,7 @@ class ArtifactList(ListView):
         bool
             True if file was opened, False if no file highlighted.
         """
-        import subprocess
-        import sys
-
-        path = self.get_highlighted_path()
-        if not path or not path.exists():
-            return False
-
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", str(path)])
-        elif sys.platform == "win32":
-            subprocess.Popen(["start", str(path)], shell=True)
-        else:
-            subprocess.Popen(["xdg-open", str(path)])
-
-        return True
+        return open_file_externally(self.get_highlighted_path())
 
 
 class FileViewer(VerticalScroll, can_focus=True):
@@ -452,21 +475,7 @@ class FileViewer(VerticalScroll, can_focus=True):
         bool
             True if file was opened, False if no file selected.
         """
-        import subprocess
-        import sys
-
-        if not self._file_path or not self._file_path.exists():
-            return False
-
-        # Open with system default viewer
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", str(self._file_path)])
-        elif sys.platform == "win32":
-            subprocess.Popen(["start", str(self._file_path)], shell=True)
-        else:
-            subprocess.Popen(["xdg-open", str(self._file_path)])
-
-        return True
+        return open_file_externally(self._file_path)
 
 
 class ImageDisplay(Static):
@@ -522,18 +531,7 @@ class ImageDisplay(Static):
 
     def _open_file(self) -> None:
         """Open the file in system default viewer."""
-        import subprocess
-        import sys
-
-        if not self._path.exists():
-            return
-
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", str(self._path)])
-        elif sys.platform == "win32":
-            subprocess.Popen(["start", str(self._path)], shell=True)
-        else:
-            subprocess.Popen(["xdg-open", str(self._path)])
+        open_file_externally(self._path)
 
 
 class PdfDisplay(Static):
@@ -570,18 +568,7 @@ class PdfDisplay(Static):
 
     def _open_file(self) -> None:
         """Open the file in system default viewer."""
-        import subprocess
-        import sys
-
-        if not self._path.exists():
-            return
-
-        if sys.platform == "darwin":
-            subprocess.Popen(["open", str(self._path)])
-        elif sys.platform == "win32":
-            subprocess.Popen(["start", str(self._path)], shell=True)
-        else:
-            subprocess.Popen(["xdg-open", str(self._path)])
+        open_file_externally(self._path)
 
 
 class MarkdownDisplay(Static):
