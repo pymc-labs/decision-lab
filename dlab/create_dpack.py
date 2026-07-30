@@ -169,7 +169,7 @@ NAME_PATTERN: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
 # default_value is "allow" or "deny".
 # Ordered by importance — high-impact first, internal/basic last.
 # The wizard renders a visual separator at HIGH_IMPACT_PERMISSION_COUNT.
-HIGH_IMPACT_PERMISSION_COUNT: int = 6
+HIGH_IMPACT_PERMISSION_COUNT: int = 5
 
 CONFIGURABLE_PERMISSIONS: list[tuple[str, str, str, str]] = [
     # --- High-impact (affect agent capabilities) ---
@@ -191,9 +191,8 @@ CONFIGURABLE_PERMISSIONS: list[tuple[str, str, str, str]] = [
      "Read files outside /workspace (e.g. Python site-packages, system configs). "
      "Useful for exploring installed libraries programmatically.",
      "allow"),
-    ("task", "Spawn subagent tasks",
-     "Let the agent spawn subagent tasks. Required for multi-agent workflows.",
-     "allow"),
+    # NB: `task` is intentionally NOT here — it is hardcoded to allow, because
+    # denying it silently breaks parallel-agents/subagent workflows (issue #47).
     # --- Internal/basic (rarely need to change) ---
     ("skill", "Use skills",
      "Let the agent use opencode skills (knowledge files). "
@@ -220,6 +219,10 @@ HARDCODED_PERMISSIONS: dict[str, str] = {
     "glob": "allow",
     "grep": "allow",
     "list": "allow",
+    # Always allowed, not user-configurable: an orchestrator with parallel
+    # agents / subagents needs `task`, and denying it silently breaks the
+    # parallel-agents workflow. Harmless when unused (issue #47).
+    "task": "allow",
     "question": "deny",   # meaningless in automated mode
     # TODO: decide on doom_loop default. OpenCode defaults to "ask" (auto-approved
     # in run mode). Setting "deny" would stop agents stuck in loops but might block

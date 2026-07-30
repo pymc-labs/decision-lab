@@ -555,9 +555,9 @@ def print_timeline(timeline: dict[str, Any]) -> None:
             for i in range(max(idle_start_pos, start_pos), min(idle_end_pos + 1, end_pos, width)):
                 bar_chars[i] = "░"
 
-        # If source is still running, use different end character
-        if source_running and end_pos > 0 and end_pos <= width:
-            bar_chars[end_pos - 1] = "░"
+        # A running source is shown active to its end (solid █); the "..."
+        # duration suffix marks it as ongoing. Only real idle periods above are
+        # greyed — don't grey the running tail, which reads as idle (issue #64).
 
         bar = "".join(bar_chars)
         duration = format_duration(summary["duration_ms"])
