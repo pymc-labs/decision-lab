@@ -22,14 +22,31 @@ def _event(timestamp: int, event_type: str, **part: object) -> LogEvent:
 
 
 class TestAddEventDedup:
-    """AgentState.add_event deduplicates by timestamp via the _seen set."""
+    """AgentState.add_event collapses re-read duplicates but keeps distinct
+    events, including two that share a millisecond timestamp (issue #58)."""
 
-    def test_duplicate_timestamp_rejected(self) -> None:
+    def test_identical_event_rejected_as_reread(self) -> None:
+        # Same timestamp AND same content = a re-read (e.g. file replaced,
+        # watcher reset to offset 0). Must be dropped.
         state = AgentState(name="agent")
         assert state.add_event(_event(100, "text", text="a")) is True
-        # Same timestamp -> treated as a duplicate, not added again.
-        assert state.add_event(_event(100, "text", text="b")) is False
+        assert state.add_event(_event(100, "text", text="a")) is False
         assert len(state.events) == 1
+
+    def test_distinct_events_same_timestamp_both_kept(self) -> None:
+        # The #58 bug: two legitimately different events in the same
+        # millisecond. Both must be kept, not collapsed to one.
+        state = AgentState(name="agent")
+        assert state.add_event(_event(100, "text", text="a")) is True
+        assert state.add_event(_event(100, "text", text="b")) is True
+        assert len(state.events) == 2
+
+    def test_same_timestamp_different_type_both_kept(self) -> None:
+        # e.g. a step_finish and the following step_start in the same ms.
+        state = AgentState(name="agent")
+        assert state.add_event(_event(100, "step_finish")) is True
+        assert state.add_event(_event(100, "step_start")) is True
+        assert len(state.events) == 2
 
     def test_distinct_timestamps_kept(self) -> None:
         state = AgentState(name="agent")
