@@ -264,6 +264,49 @@ class TestUpsertYamlScalar:
         assert 'default_model: "anthropic/claude-haiku-4-5"' in result
         assert result.index("failure_behavior") < result.index("default_model")
 
+    def test_preserves_comments_and_block_scalars(self) -> None:
+        # Issue #65: proper parsing must not mangle the rest of the document.
+        text: str = (
+            "# pack comment\n"
+            "name: modeler\n"
+            "failure_behavior: continue\n"
+            'default_model: "old/x"\n'
+            "\n"
+            "summarizer_prompt: |\n"
+            "  Compare the instances.\n"
+            "  Pick the best.\n"
+        )
+        result: str = upsert_yaml_scalar(text, "default_model", "new/x")
+        assert "# pack comment" in result
+        assert "summarizer_prompt: |" in result
+        assert "  Compare the instances." in result
+        assert '"new/x"' in result and '"old/x"' not in result
+        # round-trips as valid YAML with the block scalar intact
+        parsed = yaml.safe_load(result)
+        assert parsed["summarizer_prompt"].strip().startswith("Compare")
+        assert parsed["default_model"] == "new/x"
+
+    def test_does_not_touch_nested_same_named_key(self) -> None:
+        # A `default_model:` nested under another mapping must be left alone;
+        # only the top-level scalar is upserted (the old regex could match it).
+        text: str = (
+            'default_model: "top/old"\n'
+            "nested:\n"
+            '  default_model: "inner/keep"\n'
+        )
+        result: str = upsert_yaml_scalar(text, "default_model", "top/new")
+        parsed = yaml.safe_load(result)
+        assert parsed["default_model"] == "top/new"
+        assert parsed["nested"]["default_model"] == "inner/keep"
+
+    def test_inserts_before_anchor(self) -> None:
+        text: str = "name: x\nsummarizer_prompt: |\n  hi\n"
+        result: str = upsert_yaml_scalar(
+            text, "summarizer_model", "a/b", insert_before="summarizer_prompt"
+        )
+        assert result.index("summarizer_model") < result.index("summarizer_prompt")
+        assert yaml.safe_load(result)["summarizer_model"] == "a/b"
+
 
 class TestApplyModelRolesToOpencode:
     """Tests for apply_model_roles_to_opencode()."""

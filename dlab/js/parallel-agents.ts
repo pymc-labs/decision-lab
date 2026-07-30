@@ -274,7 +274,14 @@ export default tool({
 
       // Copy entire work directory to instance (excluding special dirs)
       // This gives subagents access to all work done by the orchestrator so far
-      copyWorkDir(cwd, instanceDir, [".opencode", "_opencode_logs", "parallel", ".state.json", ".git"])
+      // Data files ARE copied (an instance may need them); but skip session
+      // internals and heavy regenerable caches/envs so each instance copy stays
+      // cheap (issue #59).
+      copyWorkDir(cwd, instanceDir, [
+        ".opencode", "_opencode_logs", "parallel", ".state.json", ".git",
+        "node_modules", ".venv", "venv", "__pycache__", ".pixi", ".conda",
+        ".mypy_cache", ".pytest_cache", ".ruff_cache",
+      ])
 
       // Copy .opencode with ONLY allowed tools
       copyAllowedTools(join(cwd, ".opencode"), join(instanceDir, ".opencode"), args.agent)

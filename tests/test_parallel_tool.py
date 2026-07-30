@@ -195,3 +195,16 @@ class TestStreamReaderErrorHandling:
         assert PARALLEL_AGENTS_SOURCE.count("stream error: ${e}") == 3
         # and each getReader loop is preceded by a `try {`
         assert PARALLEL_AGENTS_SOURCE.count("} catch (e) {") >= 3
+
+
+class TestInstanceCopyExcludes:
+    """copyWorkDir must skip heavy regenerable dirs but keep data (issue #59)."""
+
+    def test_excludes_caches_and_envs(self) -> None:
+        for name in ("node_modules", ".venv", "__pycache__", ".pixi", ".conda"):
+            assert f'"{name}"' in PARALLEL_AGENTS_SOURCE, name
+
+    def test_does_not_exclude_data_dir(self) -> None:
+        # The exclude list passed to copyWorkDir must not contain "data".
+        block = PARALLEL_AGENTS_SOURCE.split("copyWorkDir(cwd, instanceDir, [")[1].split("])")[0]
+        assert '"data"' not in block
