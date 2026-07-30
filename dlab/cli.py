@@ -40,10 +40,16 @@ from dlab.timeline import run_timeline
 
 app = typer.Typer(
     name="dlab",
-    help="Run opencode in automated mode, sandboxed with Docker",
+    help=(
+        "Run opencode in automated mode, sandboxed with Docker.\n\n"
+        "The primary command is [bold]dlab run[/bold]; its options may also "
+        "be passed directly at the root as a shorthand "
+        "(dlab --dpack ... = dlab run --dpack ...)."
+    ),
     no_args_is_help=False,
     add_completion=True,
     suggest_commands=True,
+    rich_markup_mode="rich",
 )
 
 
@@ -140,7 +146,7 @@ CONFIG_DIR = "{config_dir}"
 
 
 def main() -> None:
-    cmd = ["dlab", "--dpack", CONFIG_DIR] + sys.argv[1:]
+    cmd = ["dlab", "run", "--dpack", CONFIG_DIR] + sys.argv[1:]
     result = subprocess.run(cmd)
     sys.exit(result.returncode)
 
@@ -153,6 +159,89 @@ if __name__ == "__main__":
 @app.callback(invoke_without_command=True)
 def _main(
     ctx: typer.Context,
+    # Run-mode options are accepted at the root as a backward-compatible
+    # shorthand for `dlab run` but hidden from the root help so that
+    # `dlab --help` cleanly lists the commands (see issue #32). The
+    # documented definitions live on the `run` command below.
+    dpack: Annotated[
+        str | None,
+        typer.Option("--dpack", metavar="PATH", hidden=True),
+    ] = None,
+    data: Annotated[
+        list[str] | None,
+        typer.Option("--data", metavar="PATH", hidden=True),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", metavar="MODEL", hidden=True),
+    ] = None,
+    prompt: Annotated[
+        str | None,
+        typer.Option("--prompt", metavar="TEXT", hidden=True),
+    ] = None,
+    prompt_file: Annotated[
+        str | None,
+        typer.Option("--prompt-file", metavar="PATH", hidden=True),
+    ] = None,
+    work_dir: Annotated[
+        str | None,
+        typer.Option("--work-dir", metavar="PATH", hidden=True),
+    ] = None,
+    continue_dir: Annotated[
+        str | None,
+        typer.Option("--continue-dir", metavar="PATH", hidden=True),
+    ] = None,
+    rebuild: Annotated[
+        bool,
+        typer.Option("--rebuild", hidden=True),
+    ] = False,
+    env_file: Annotated[
+        str | None,
+        typer.Option("--env-file", metavar="PATH", hidden=True),
+    ] = None,
+    no_sandboxing: Annotated[
+        bool,
+        typer.Option("--no-sandboxing", hidden=True),
+    ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", hidden=True),
+    ] = False,
+) -> None:
+    """Run opencode in automated mode, sandboxed with Docker.
+
+    The primary command is `dlab run` (see `dlab run --help`). Its options
+    may also be passed directly at the root as a shorthand:
+    `dlab --dpack ... --prompt ...` is equivalent to `dlab run --dpack ...`.
+    """
+    if ctx.resilient_parsing:
+        return
+
+    if ctx.invoked_subcommand is not None:
+        return
+
+    if any([dpack, data, prompt, prompt_file, continue_dir]):
+        exit_code = cmd_run(
+            dpack=dpack,
+            data=data,
+            model=model,
+            prompt=prompt,
+            prompt_file=prompt_file,
+            work_dir=work_dir,
+            continue_dir=continue_dir,
+            rebuild=rebuild,
+            env_file=env_file,
+            no_sandboxing=no_sandboxing,
+            yes=yes,
+        )
+        raise typer.Exit(code=exit_code)
+
+    typer.echo(ctx.get_help())
+    raise typer.Exit(code=0)
+
+
+@app.command("run")
+def _cmd_run_command(
     dpack: Annotated[
         str | None,
         typer.Option(
@@ -225,31 +314,21 @@ def _main(
         ),
     ] = False,
 ) -> None:
-    """Run opencode in automated mode, sandboxed with Docker."""
-    if ctx.resilient_parsing:
-        return
-
-    if ctx.invoked_subcommand is not None:
-        return
-
-    if any([dpack, data, prompt, prompt_file, continue_dir]):
-        exit_code = cmd_run(
-            dpack=dpack,
-            data=data,
-            model=model,
-            prompt=prompt,
-            prompt_file=prompt_file,
-            work_dir=work_dir,
-            continue_dir=continue_dir,
-            rebuild=rebuild,
-            env_file=env_file,
-            no_sandboxing=no_sandboxing,
-            yes=yes,
-        )
-        raise typer.Exit(code=exit_code)
-
-    typer.echo(ctx.get_help())
-    raise typer.Exit(code=0)
+    """Run opencode in automated mode, sandboxed with Docker (default command)."""
+    exit_code = cmd_run(
+        dpack=dpack,
+        data=data,
+        model=model,
+        prompt=prompt,
+        prompt_file=prompt_file,
+        work_dir=work_dir,
+        continue_dir=continue_dir,
+        rebuild=rebuild,
+        env_file=env_file,
+        no_sandboxing=no_sandboxing,
+        yes=yes,
+    )
+    raise typer.Exit(code=exit_code)
 
 
 def cmd_run(

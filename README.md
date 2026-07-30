@@ -52,7 +52,7 @@ pip install dlab-cli
 echo "ANTHROPIC_API_KEY=your-key-here" >> .env
 
 # Run the MMM decision-pack on the included example dataset
-dlab --dpack decision-packs/mmm \
+dlab run --dpack decision-packs/mmm \
   --data decision-packs/mmm/example-data/example_dataset.csv \
   --env-file .env \
   --work-dir ./mmm-run \
@@ -92,7 +92,7 @@ my-dpack/
 See the [poem decision-pack](decision-packs/poem/) for a fully annotated example showing how all the pieces connect. Here's what happens when you run it:
 
 ```bash
-dlab --dpack decision-packs/poem --env-file .env --prompt "Write me a poem about the ocean"
+dlab run --dpack decision-packs/poem --env-file .env --prompt "Write me a poem about the ocean"
 ```
 
 1. dlab builds the Docker image from [`docker/Dockerfile`](decision-packs/poem/docker/Dockerfile) (cached after first run)
@@ -110,7 +110,7 @@ The session directory ends up with parallel instance outputs, logs, and the fina
 ### Run sessions
 
 ```bash
-dlab --dpack PATH --data PATH --prompt TEXT --env-file .env
+dlab run --dpack PATH --data PATH --prompt TEXT --env-file .env
 ```
 
 Builds the Docker image (cached between runs), starts the container, runs pre-run hooks, launches the agent, runs post-run hooks, fixes file ownership, and stops the container. Without `--work-dir`, sessions are auto-numbered by dpack name (`dlab-mmm-workdir-001`, `dlab-mmm-workdir-002`, ...) and can be resumed with `--continue-dir`.
@@ -185,13 +185,13 @@ All environment variables starting with `DLAB_` are automatically forwarded from
 
 ```bash
 # MMM decision-pack: fit models locally instead of on Modal
-DLAB_FIT_MODEL_LOCALLY=1 dlab --dpack mmm --data ./data --prompt "..."
+DLAB_FIT_MODEL_LOCALLY=1 dlab run --dpack mmm --data ./data --prompt "..."
 ```
 
 ## CLI reference
 
 ```bash
-dlab --dpack PATH --data PATH --prompt TEXT   # Run a session
+dlab run --dpack PATH --data PATH --prompt TEXT   # Run a session
 dlab connect WORK_DIR                         # Live TUI monitor
 dlab timeline [WORK_DIR]                      # Execution Gantt chart
 dlab view WORK_DIR                            # Browser-based DAG viewer

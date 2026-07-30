@@ -11,10 +11,10 @@ with credible intervals.
 
 ```bash
 # With local data
-dlab --dpack . --data path/to/data --prompt "When will X happen? Horizons: ..."
+dlab run --dpack . --data path/to/data --prompt "When will X happen? Horizons: ..."
 
 # Without data (domain knowledge only)
-dlab --dpack . --prompt "When will X happen? Horizons: ..."
+dlab run --dpack . --prompt "When will X happen? Horizons: ..."
 ```
 
 ## What it does
@@ -77,4 +77,4 @@ models:
 
 At session setup, dlab injects `models.forecaster` and `models.consolidator` into
 `opencode/parallel_agents/forecaster.yaml`. Override the orchestrator for a single
-run with `dlab --model ...`.
+run with `dlab run --model ...`.
