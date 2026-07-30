@@ -26,6 +26,10 @@ from textual.widgets import DataTable, ListItem, ListView, Static
 # File extensions to include as artifacts
 ARTIFACT_EXTENSIONS = {".md", ".py", ".txt", ".csv", ".png", ".jpg", ".jpeg", ".pdf"}
 
+# Files larger than this are not read into memory for preview (issue #55);
+# a metadata card with an "open externally" hint is shown instead.
+MAX_PREVIEW_BYTES = 5 * 1024 * 1024
+
 # Directories to exclude from artifact discovery
 EXCLUDE_DIRS = {
     ".git",
@@ -416,6 +420,15 @@ class FileViewer(VerticalScroll, can_focus=True):
             self.mount(PdfDisplay(path))
             return
 
+        # Too large to preview safely — show a metadata card instead of
+        # reading the whole file into memory (issue #55).
+        try:
+            if path.stat().st_size > MAX_PREVIEW_BYTES:
+                self.mount(LargeFileDisplay(path))
+                return
+        except OSError:
+            pass
+
         # Read text content
         try:
             content = path.read_text(encoding="utf-8", errors="replace")
@@ -568,6 +581,41 @@ class PdfDisplay(Static):
 
     def _open_file(self) -> None:
         """Open the file in system default viewer."""
+        open_file_externally(self._path)
+
+
+class LargeFileDisplay(Static):
+    """Metadata card for a file too large to preview inline (issue #55)."""
+
+    def __init__(self, path: Path, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._path = path
+
+    def render(self) -> Text:
+        if not self._path.exists():
+            return Text(f"File not found: {self._path}", style="red")
+
+        size: int = self._path.stat().st_size
+        size_str: str = (
+            f"{size / (1024 * 1024):.1f} MB"
+            if size >= 1024 * 1024
+            else f"{size / 1024:.1f} KB"
+        )
+
+        text = Text()
+        text.append(f"{self._path.name}\n\n", style="bold")
+        text.append(f"Size: {size_str}\n", style="dim")
+        text.append("Too large to preview inline.\n\n", style="yellow")
+        text.append("Path: ", style="")
+        text.append(f"{self._path}", style="underline cyan")
+        text.append("\n\n")
+        text.append("Click path or press ", style="dim")
+        text.append("o", style="bold cyan")
+        text.append(" to open externally", style="dim")
+        return text
+
+    def on_click(self) -> None:
+        """Handle click - open the file externally."""
         open_file_externally(self._path)
 
 
