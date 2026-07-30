@@ -2,15 +2,41 @@
 Tests for opening artifacts externally (issues #57, #62).
 
 Artifact filenames are agent-controlled; opening them must never route
-through a shell. These tests guard the fix without actually launching
-system viewers.
+through a shell. The behavioral tests below spawn a REAL fake opener (a
+recording shim placed on PATH) rather than mocking subprocess, per the
+project's no-mocks policy — so they exercise the actual spawn path and
+prove the filename arrives as one intact argument with no shell parsing.
 """
+
+import os
+import sys
+
+import pytest
 
 from pathlib import Path
 
 from dlab.tui.widgets.artifacts_pane import open_file_externally
 
 TUI_DIR = Path(__file__).parent.parent / "dlab" / "tui"
+
+
+@pytest.fixture
+def fake_opener(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Put a recording `xdg-open` (and `open`) shim first on PATH.
+
+    monkeypatch here only edits the PATH env var and argv-recording target
+    — no library call is patched; the helper really execs the shim.
+    """
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    record = tmp_path / "argv.txt"
+    shim = "#!/bin/sh\n" f'printf "%s\\n" "$@" > "{record}"\n'
+    for name in ("xdg-open", "open"):
+        p = bindir / name
+        p.write_text(shim)
+        p.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
+    return record
 
 
 class TestOpenFileExternally:
@@ -27,6 +53,48 @@ class TestOpenFileExternally:
         # doesn't exist, so no opener may be spawned at all.
         hostile = tmp_path / "report & echo pwned.md"
         assert open_file_externally(hostile) is False
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="POSIX opener shim; Windows uses os.startfile (no argv to record)",
+)
+class TestSpawnPassesFilenameSafely:
+    """Behavioral tests: the real spawn path receives the filename as one
+    intact argument, with shell metacharacters inert (issue #57)."""
+
+    def test_plain_file_passed_as_single_arg(
+        self, tmp_path: Path, fake_opener: Path
+    ) -> None:
+        f = tmp_path / "report.md"
+        f.write_text("x")
+        assert open_file_externally(f) is True
+        # Wait for the detached shim to write its record.
+        import time
+        for _ in range(50):
+            if fake_opener.exists():
+                break
+            time.sleep(0.02)
+        recorded = fake_opener.read_text().splitlines()
+        assert recorded == [str(f)]
+
+    def test_hostile_filename_is_inert_single_arg(
+        self, tmp_path: Path, fake_opener: Path
+    ) -> None:
+        # The classic injection payload as a real, existing filename.
+        f = tmp_path / "report & touch PWNED.md"
+        f.write_text("x")
+        assert open_file_externally(f) is True
+        import time
+        for _ in range(50):
+            if fake_opener.exists():
+                break
+            time.sleep(0.02)
+        recorded = fake_opener.read_text().splitlines()
+        # Exactly one argument — the whole name — not split on the shell '&'.
+        assert recorded == [str(f)]
+        # And the injected side effect never happened.
+        assert not (tmp_path / "PWNED").exists()
 
 
 class TestNoShellInTui:
