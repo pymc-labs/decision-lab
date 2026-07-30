@@ -382,12 +382,15 @@ def get_dlab_start_model(events: list[LogEvent]) -> str | None:
     str | None
         Model string (e.g. "anthropic/claude-sonnet-4-5") or None.
     """
+    # dlab writes dlab_start as the log's first line, but a non-JSON stderr
+    # line (or other noise) can precede it. Return the first dlab_start found,
+    # regardless of position — the earlier version broke out at the first
+    # timestamped event and missed a dlab_start behind leading noise (#61).
+    # No early exit: this runs once per session-graph build (not per frame),
+    # so scanning the in-memory event list is cheap even when a log has none.
     for event in events:
         if event.event_type == "dlab_start":
             return event.part.get("model") or event.raw.get("model")
-        # Only check the first few events — dlab_start is always first
-        if event.timestamp is not None:
-            break
     return None
 
 
