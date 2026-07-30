@@ -345,8 +345,8 @@ class AgentState:
     is_complete : bool
         Cached flag: True once the agent's log file has been confirmed complete.
         Avoids re-parsing the entire log file on every timer tick.
-    _seen_timestamps : set[int]
-        Set of already-seen timestamps for O(1) duplicate detection.
+    _seen_keys : set[tuple[int, str, int]]
+        Set of already-seen event keys for O(1) duplicate detection.
     """
 
     name: str
@@ -356,14 +356,19 @@ class AgentState:
     start_time: datetime | None = None
     end_time: datetime | None = None
     is_complete: bool = False
-    _seen_timestamps: set[int] = field(default_factory=set, repr=False, compare=False)
+    _seen_keys: set[tuple[int, str, int]] = field(
+        default_factory=set, repr=False, compare=False
+    )
 
     def add_event(self, event: LogEvent) -> bool:
         """
         Add event and update computed state.
 
-        Deduplicates events based on timestamp to prevent duplicates
-        from watchdog firing multiple events.
+        Deduplicates events to absorb re-reads (e.g. the log file being
+        replaced/truncated, resetting the watcher to offset 0). The key is
+        the full event content, not the timestamp alone — two legitimately
+        distinct events can share a millisecond timestamp, and keying on
+        timestamp dropped the second one (issue #58).
 
         Parameters
         ----------
@@ -375,13 +380,20 @@ class AgentState:
         bool
             True if event was added, False if it was a duplicate.
         """
-        # Deduplicate based on timestamp (events with same timestamp are duplicates).
+        # Deduplicate on (timestamp, event_type, content-hash-of-raw-line).
+        # The raw JSON of the source line distinguishes two same-millisecond
+        # events; a byte-identical re-read collapses to the same key.
         # Skip deduplication for timestamp=0 events (raw_text, additional_output).
-        # O(1) set lookup instead of O(n) linear scan.
         if event.timestamp > 0:
-            if event.timestamp in self._seen_timestamps:
+            content_hash: int = hash(
+                json.dumps(event.raw, sort_keys=True, default=str)
+            )
+            key: tuple[int, str, int] = (
+                event.timestamp, event.event_type, content_hash,
+            )
+            if key in self._seen_keys:
                 return False
-            self._seen_timestamps.add(event.timestamp)
+            self._seen_keys.add(key)
 
         self.events.append(event)
         self.total_cost += event.cost
