@@ -315,6 +315,11 @@ def build_timeline(
                 "idle_periods": idle_periods_by_source.get(source_name, []),
             }
 
+    # All log files were empty
+    if not file_summaries:
+        print(f"All .log files in {logs_dir} are empty", file=sys.stderr)
+        return {}
+
     # Sort all events by timestamp
     all_events.sort(key=lambda e: e["timestamp"])
 
