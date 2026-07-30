@@ -292,7 +292,9 @@ class TestCmdRun:
             prompt="test prompt",
             work_dir=str(tmp_path / "work"),
         )
-        # opencode runs but fails (no API key / invalid model) — exit code 0
+        # The session lifecycle completed (image built, container ran opencode,
+        # cleanup ran), so cmd_run returns 0. opencode's own agent failing for
+        # lack of an API key is not a dlab session failure (issue #67).
         assert result == 0
 
         captured = capsys.readouterr()
@@ -320,7 +322,8 @@ class TestCmdRun:
             prompt_file=str(prompt_file),
             work_dir=str(tmp_path / "work"),
         )
-        # opencode runs but fails (no API key) — exit code 0
+        # exit 0: the session lifecycle completed; opencode's agent failing
+        # for lack of an API key is not a dlab session failure (issue #67).
         assert result == 0
 
     def test_run_uses_default_model(
@@ -924,3 +927,14 @@ class TestCLIIntegration:
         assert "No such option: --dpack" not in result.stderr
         assert "No such option: --data" not in result.stderr
         assert "No such option: --prompt" not in result.stderr
+
+
+def test_spinner_stops_threads_on_exception() -> None:
+    """_run_with_log_spinner must stop its threads even if run_fn raises (#52)."""
+    import inspect
+    from dlab import cli
+
+    src = inspect.getsource(cli._run_with_log_spinner)
+    assert "finally:" in src
+    # the running=False reset lives in the finally block, after run_fn()
+    assert src.index("run_fn()") < src.index("finally:") < src.rindex("running = False")
