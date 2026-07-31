@@ -7,10 +7,23 @@ an actual .ipynb, then validate its structure.
 """
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+# A stub of @opencode-ai/plugin so the REAL tool files load and their execute()
+# functions can be driven directly (the package isn't installed in the env).
+_PLUGIN_STUB = """
+function chainable() {
+  const c = new Proxy(function () { return c }, { get() { return () => c }, apply() { return c } })
+  return c
+}
+const tool = (config) => config
+tool.schema = new Proxy({}, { get: () => () => chainable() })
+export { tool }
+"""
 
 JS_DIR = Path(__file__).parent.parent / "dlab" / "js"
 NB_TOOLS = [
@@ -21,6 +34,20 @@ NB_TOOLS = [
 
 def _src(name: str) -> str:
     return (JS_DIR / f"{name}.ts").read_text()
+
+
+def _make_harness(tmp_path: Path) -> Path:
+    """A temp dir where the real tool files run: stub plugin in node_modules,
+    tool .ts files copied in unchanged."""
+    plugin = tmp_path / "node_modules" / "@opencode-ai" / "plugin"
+    plugin.mkdir(parents=True)
+    (plugin / "package.json").write_text(json.dumps({
+        "name": "@opencode-ai/plugin", "version": "0.0.0",
+        "type": "module", "main": "index.js"}))
+    (plugin / "index.js").write_text(_PLUGIN_STUB)
+    for name in NB_TOOLS:
+        shutil.copy(JS_DIR / f"{name}.ts", tmp_path / f"{name}.ts")
+    return tmp_path
 
 
 def _have_node() -> bool:
@@ -154,3 +181,62 @@ finalize(p); finalize(p)  // twice — must not double the header
                    (c["source"] if isinstance(c["source"], str) else "".join(c["source"]))]
         assert len(headers) == 1  # exactly one, despite two finalize calls
         assert nb["cells"][0] is headers[0] or nb["cells"].index(headers[0]) == 0
+
+
+class TestNbToolsEndToEnd:
+    """Drive ALL FIVE real tools (their actual execute() functions) in sequence
+    on one notebook, then validate the composed .ipynb."""
+
+    def test_full_compose_chain(self, tmp_path: Path) -> None:
+        if not _have_node():
+            pytest.skip("node not available")
+        h = _make_harness(tmp_path)
+        fig = h / "roas.png"
+        fig.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x01\x02\x03" * 500)  # >1KB
+        nb_path = h / "overview.ipynb"
+        (h / "compose.ts").write_text('''
+import md from "./nb-add-markdown-cell.ts"
+import code from "./nb-add-code-cell.ts"
+import edit from "./nb-edit-cell.ts"
+import read from "./nb-read.ts"
+import finalize from "./nb-finalize.ts"
+const NB = process.argv[2], FIG = process.argv[3]
+await md.execute({ notebook: NB, text: "# MMM\\n\\nTotal spend $6.77M." })
+await code.execute({ notebook: NB, code: "import pandas as pd", outputs: [{ stream: "ready\\n" }] })
+await code.execute({ notebook: NB, code: "idata = pm.sample()", tags: ["long-running"], outputs: [{ stream: "Sampling...\\nDone.\\n" }] })
+await code.execute({ notebook: NB, code: "print(roas)", outputs: [{ stream: "Local-Ads 5.21\\n" }, { image: FIG }] })
+await edit.execute({ notebook: NB, index: 1, code: "import pandas as pd, pymc as pm" })
+const before = await read.execute({ notebook: NB, head: 40 })
+await finalize.execute({ notebook: NB })
+await finalize.execute({ notebook: NB })  // idempotent — must not double the header
+console.log(JSON.stringify({ read: before }))
+''')
+        r = subprocess.run(["node", str(h / "compose.ts"), str(nb_path), str(fig)],
+                           capture_output=True, text=True, timeout=60, cwd=h)
+        assert r.returncode == 0, r.stderr
+
+        nb = json.loads(nb_path.read_text())
+        assert nb["nbformat"] == 4
+        # exactly one provenance header, at the top, despite two finalize calls
+        headers = [c for c in nb["cells"] if isinstance(c["source"], str)
+                   and "Auto-composed from session artifacts" in c["source"]]
+        assert len(headers) == 1
+        assert nb["cells"][0] is headers[0]
+        # currency escaped in the markdown body
+        body = next(c for c in nb["cells"] if "Total spend" in
+                    (c["source"] if isinstance(c["source"], str) else "".join(c["source"])))
+        assert "\\$6.77M" in body["source"]
+        # code cells: sequential execution counts, edit applied, tag kept
+        code_cells = [c for c in nb["cells"] if c["cell_type"] == "code"]
+        assert [c["execution_count"] for c in code_cells] == [1, 2, 3]
+        assert "pymc as pm" in code_cells[0]["source"]  # nb-edit-cell applied
+        assert sum(c["metadata"].get("tags") == ["long-running"] for c in code_cells) == 1
+        # the figure is embedded as base64 with its source path tracked
+        imgs = [o for c in code_cells for o in c["outputs"]
+                if o["output_type"] == "display_data"]
+        assert len(imgs) == 1 and len(imgs[0]["data"]["image/png"]) > 1000
+        assert imgs[0]["metadata"]["dlab_source"].endswith("roas.png")
+        # nb-read gave a compact, base64-free view (figure named by PATH)
+        read_out = json.loads(r.stdout.strip())["read"]
+        assert "image: " in read_out and "roas.png" in read_out
+        assert "iVBOR" not in read_out and "base64" not in read_out.lower()
