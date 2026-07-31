@@ -247,22 +247,50 @@ Outputs written into the workdir:
 
 - `_digest/digest.md` — the LLM-facing map (format below).
 - `_digest/index.json` — machine index: every ID → `{log_file, line_no,
-  event_type}`. **Thin index** (pointers, not payloads): a fat index storing
-  extracted payloads would duplicate log content on disk.
+  line_end?, event_type}`. **Thin index** (pointers, not payloads): a fat index
+  storing extracted payloads would duplicate log content on disk. `line_end` is
+  present for multi-line payloads — a `raw_text` block, or a `tool_use` whose
+  mapped raw_text stream extends past its own line.
 
 ### 7.1 Digest format
+
+> **Revised 2026-07-30** after reviewing the digest against a real completed mmm
+> run (`dlab-mmm-agent-oc-workdir-008`). Changes, all validated on that run:
+> artifacts are **provenance-first** (every file links to the tool call that
+> produced/copied it; inherited untouched copies dropped by sha256; the parent's
+> `cp`'d files stay, linked to the copy); **all producing tool calls are
+> labeled** (not just bash), so every referenced ID is a visible row; and
+> **`raw_text` (the majority of a real log — the tracebacks and sampler output)
+> is a first-class `r`-id**, mapped to its tool call and retrievable, because it
+> is what the composer embeds as a cell's `stream` output. The `dlab digest`
+> command (spec §11.5) and the produced/inherited attribution already shipped in
+> PR #87; the tool-call-labeling + `raw_text` mapping are the remaining build.
 
 Header: dpack name, models, total duration, total cost. Workflow tree. Then
 **one `###` section per agent (orchestrator AND every instance AND
 consolidators), identical structure** (Ben's requirement).
 
 **ID scheme — one shared event counter per agent; the numbering IS the
-timeline** (this resolved Ben's chronology concern; it is load-bearing):
-`t07` (tool call), `x08` (text/reasoning), `t09` — kind-prefix says *what*,
-the shared number says *when*. Artifact IDs (`a1`, `a2`, …) are per-agent and
-not on the event counter (artifacts are files, not events); their provenance
-is expressed through event IDs. Fully-qualified form for retrieval:
-`<agent-path>/<id>`, e.g. `main/t17`, `poet.r2.i2/t4`.
+timeline** (load-bearing, resolved Ben's chronology concern): `t07` (tool
+call), `x08` (text/reasoning), `r09` (raw_text stream) — the kind-prefix says
+*what*, the shared number says *when*. Every event is addressable.
+
+`raw_text` is the plain stdout/stderr the opencode process emits **outside** the
+structured tool events. On a real mmm instance it is the *majority* of the log
+(e.g. 166 of 266 lines) and holds the material that matters most — the
+Modal/PyMC tracebacks, sampler diagnostics, "saved to fitted_model.nc" lines.
+It carries **no timestamp**, so it is ordered by line position and a run of
+consecutive raw_text is associated with the **most recent `tool_use` before it**
+(positional; the parser already groups the run into one block). Each block gets
+one `r`-id on the shared counter and is **mapped to its tool call**. This is the
+material the composer embeds as a cell's `stream` output (§5). Remote Modal-side
+fit logs are **not** fetched (out of scope) — only what the local session log
+captured.
+
+Artifact IDs (`a1`, `a2`, …) and the Task ID (`p0`) are per-agent and off the
+event counter (files/prompts are not events); their provenance is expressed
+through event IDs. Fully-qualified form for retrieval: `<agent-path>/<id>`,
+e.g. `main/t17`, `poet.r2.i2/r4`.
 
 **Task field** (per agent section, required): the *differentiating* portion of
 the agent's prompt — for parallel instances, the orchestrator-supplied prompt
@@ -272,13 +300,28 @@ full prompt retrievable via `digest-get <agent>/p0`. Rationale: the composer
 cannot narrate alternatives ("instance 2 tried geometric adstock, instance 3
 Weibull") without knowing what each instance was asked to do.
 
-**Artifact write chains**: every artifact lists its full write history in
-order — `[a5] summary.md (written t12, overwritten t31)` — content attributed
-to the **last** writer, earlier writers kept visible so the composer knows a
-retry replaced it. Derived deterministically from write/edit tool inputs.
-Cross-agent overwrites (e.g. orchestrator regenerating `report.md`) appear the
-same way in the main-agent section; instance workdirs are isolated and cannot
-clobber each other.
+**Artifact provenance (produced vs. inherited)** — every artifact links to the
+tool call in *this agent* that produced or copied it:
+
+- `write`/`edit` → chain by `filePath`: `written t6, edited t9` (full write
+  history in order; content attributed to the last writer, earlier writers kept
+  visible so the composer sees a retry replaced it).
+- `bash` / custom tool (`fit-model-modal`, `analyze-model`) / `cp` → matched by
+  **mtime ∈ [call.start, call.end]** — the file was written during that call's
+  window: `← from t10 (bash: python fit_model.py)`, `← from t16
+  (fit-model-modal)`. mtime is safe here because it is used **only on files
+  already proven produced**, never to detect copies (Ben's tier-3, applied
+  where it cannot misfire).
+
+The **parent's `cp`'d artifacts stay visible**, linked to the copy call —
+`best_model.nc ← from t52 (cp)` — because the copy IS a producing call.
+
+A file is **dropped** only when it has **no producing call in this agent** *and*
+is byte-identical (sha256) to the workspace-root seed — i.e. it arrived via the
+invisible `copyWorkDir` fan-out and was never touched. Chronology +
+sibling-isolation gate this so a creator never loses its own file to a later
+`cp`, and isolated siblings never shadow each other. A seeded file the agent
+then *edited* is kept — it has an edit call.
 
 **Header + workflow-tree format** (schematic):
 
@@ -310,36 +353,44 @@ model: anthropic/claude-sonnet-4-5 | 214s | $0.31 | 19 tool calls
 workdir: parallel/run-1784571692537/instance-2/
 
 **Task** [p0]: "Fit a geometric-adstock MMM with saturating priors on /workspace/data;
-run seeds [0,1,2] and report median F1…" (differentiating portion of the instance
-prompt; full prompt via digest-get poet.r2.i2/p0)
+run seeds [0,1,2] and report median F1…" (differentiating portion; full prompt
+via digest-get poet.r2.i2/p0)
 
-**Artifacts** (7)
-- [a1] fit_model.py            (4.1KB, written t6, edited t9)
-- [a2] idata.nc                (2.3MB, from t10)
-- [a3] figures/adstock_curves.png   (142KB)
-- [a4] figures/posterior_roas.png   (98KB)
-- [a5] summary.md              (1.8KB)   ← instance conclusion
-- [a6] analysis_output/analysis_summary.json (0.9KB)
+**Artifacts** (6 produced)
+- [a1] fit_model.py            (4.1KB)  ← written t6, edited t9
+- [a2] idata.nc               (2.3MB)  ← from t10 (bash: python fit_model.py)
+- [a3] figures/adstock_curves.png (142KB) ← from t14 (bash: python make_figures.py)
+- [a4] figures/posterior_roas.png (98KB)  ← from t14
+- [a5] summary.md             (1.8KB)  ← written t16   (instance conclusion)
+- [a6] analysis_output/analysis_summary.json (0.9KB) ← from t12 (analyze-model)
+(cleaned_data.parquet, data_summary.md — inherited, untouched → hidden)
 
-**Script runs**
-- [t7]  bash `python fit_model.py`         ✗ error   (stderr 41 lines — KeyError: 'is_valid')
-- [t10] bash `python fit_model.py`         ✓ 312s    (stdout 6,204 lines — sampler progress + diagnostics)
-- [t14] bash `python make_figures.py`      ✓ 8s      (stdout 12 lines)
-
-**Other tool calls**: read×4, edit×2, write×3
+**Tool calls**  (producing calls, each addressable; raw_text stream mapped in)
+- [t6]  write fit_model.py
+- [t7]  bash  `python fit_model.py`     ✗ error  0s   → r8  (stderr 41 ln — KeyError: 'is_valid')
+- [t9]  edit  fit_model.py              (fix)
+- [t10] bash  `python fit_model.py`     ✓ 312s        → r11 (stdout 6,204 ln — sampler + diagnostics)
+- [t12] analyze-model                   ✓             → analysis_output/
+- [t14] bash  `python make_figures.py`  ✓ 8s          → r15 (stdout 12 ln)
+- [t16] write summary.md
+**Navigational**: read×4, todowrite×3, glob×1
 **Reasoning excerpts**
-- [x8] "The first fit failed on the validation key; fixing and rerunning…"
-- [x16] "r̂ ≤ 1.01 on all parameters, 0 divergences — this configuration converged. Writing summary…"
+- [x8]  "The first fit failed on the validation key; fixing and rerunning…"
+- [x18] "r̂ ≤ 1.01 on all parameters, 0 divergences — converged. Writing summary…"
 ```
 
-(Note the shared counter: `t7 → x8 → t9(edit) → t10` reads as the story arc
-"failed → reasoned → fixed → succeeded" directly off the numbers.)
+(The shared counter runs `t6 → t7 → r8 → x… → t9 → t10 → r11 …`: "wrote → ran →
+it errored (r8) → reasoned → fixed → ran → it worked (r11)" reads straight off
+the numbering — raw_text now included as a first-class element. Every `← from
+tN` and every `→ rN` points at a labeled row, so no ID is referenced without
+being shown.)
 
 **`--brief` variant** (agreed): keeps per-agent header stats, Artifacts with
-write chains, Script runs with ✓/✗, Reasoning excerpts; collapses the tool
-tables to the one-line counts. The index is unaffected — brief trims the map,
-not addressability. Expected size: full digest for a big mmm run ≈ 500–1500
-dense lines (acceptable: it is the map, ~100× smaller than the logs).
+their provenance links, and the ✓/✗ + raw_text-tail for producing calls;
+collapses the full Tool-calls table and Reasoning to one-line counts/first
+lines. The index is unaffected — brief trims the *map*, not addressability.
+Expected size: full digest for a big mmm run ≈ 500–1500 dense lines (acceptable:
+it is the map, ~100× smaller than the logs).
 
 ### 7.2 Retrieval: the `digest-get` tool
 
@@ -356,15 +407,17 @@ output embedded as an escaped string; reading it hands the composer a wall of
 lines of stdlib TS, no parser port, no drift; intelligence stays in the
 host-side Python indexer):
 
-- Args: `id` (fully qualified, e.g. `poet.r2.i2/t7`), optional `head`, `tail`,
+- Args: `id` (fully qualified, e.g. `poet.r2.i2/r8`), optional `head`, `tail`,
   `range` (line-based slicing of the payload).
-- Behavior: look up ID in `_digest/index.json` → read that single NDJSON line →
-  `JSON.parse` → extract the payload field for the event type (tool input +
-  output for `t`-ids, verbatim text for `x`-ids) → render **decoded** (clean
-  stdout/stderr, not escaped JSON) → slice.
-- Why slicing is required: a PyMC fit log can be thousands of lines; the
-  composer grabs `digest-get poet.r2.i2/t7 --tail 15` for a traceback without
-  paying for sampler progress.
+- Behavior: look up ID in `_digest/index.json` → read the referenced NDJSON
+  line(s), `line_no..line_end` → render the payload for the event type:
+  `t`-ids → tool input + structured output **plus the mapped raw_text block**;
+  `r`-ids → the raw_text block verbatim; `x`-ids → the verbatim text — all
+  **decoded** (clean stdout/stderr, not escaped JSON) → slice.
+- Why slicing is required: a PyMC fit's raw_text can be thousands of lines; the
+  composer grabs `digest-get poet.r2.i2/r11 --tail 15` for a traceback without
+  paying for sampler progress. (It is also how the composer pulls a cell's
+  `stream` output — full or tail — to embed in the notebook, §5.)
 
 **Text/reasoning events are first-class retrievable elements** (`x`-ids) — the
 digest excerpts them truncated; the composer pulls full verbatim text by ID.
