@@ -50,6 +50,16 @@ Slice long output with `head`/`tail`/`range`. **Never** open files under `_openc
 
 Work out which attempt was adopted from the digest: the orchestrator copies the chosen outputs up to the workdir root, so follow the artifact provenance (`← from tN`) and the main agent's copy calls.
 
+## Narrate the reasoning — the markdown cells carry the *why*, not just the *what*
+
+A good analyst notebook explains itself. Weight your markdown cells toward **reasoning and decisions**, not captions. The digest hands you this material directly — mine it with `digest-get` and weave it into prose:
+
+- **Why each choice was made** — which plan / priors / configuration, and the thinking behind it. Pull the agent's own reasoning (`xN` excerpts) and its task (`p0`); explain the intent, not just the settings.
+- **What went wrong, and how it was resolved** — the failed attempts and the errors behind them (`rN` streams: a `KeyError`, a divergent fit, a crash), then the fix that followed. The retry arcs *are* the story: on the shared per-agent counter, `t7 → r8 → x9 → t10` reads "ran → it errored → reasoned about it → fixed and reran". Narrate that arc; don't hide the failures — they're why the reader can trust the result.
+- **The decision process** — how the adopted path was chosen over the alternatives: the comparison that was run, the metrics that decided it, the trade-offs weighed, and any caveats the agents themselves raised (e.g. "this term explains almost no variance"). The `00_overview` in particular should read like a decision memo, not a results dump.
+
+Ground every "why" in something you actually retrieved (an `xN`/`rN`/`aN`) — never invent motivation. Prefer a few sentences of real reasoning over a bare heading. A reader should come away understanding not just what the analysis found, but *why it was done this way and what it took to get there*.
+
 ## How to build: the nb-* tools (never write ipynb yourself)
 
 - `nb-add-markdown-cell` — prose. `$` is escaped by default (auto-mined text is usually currency); pass `math: true` for a cell that intentionally uses LaTeX.
