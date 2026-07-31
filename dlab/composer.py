@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
+import time
 from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path
@@ -35,6 +37,38 @@ NB_TOOLS: list[str] = [
     "nb-add-markdown-cell", "nb-add-code-cell", "nb-edit-cell",
     "nb-note", "nb-read", "nb-finalize",
 ]
+
+# Retry the composer run on a transient provider error (an error event with no
+# notebooks produced) — Anthropic in particular 500s intermittently on the first
+# request.
+_MAX_ATTEMPTS = 3
+_RETRY_BACKOFF_S = 8
+
+# The composer's opencode subprocess gets a CURATED env, not the full host
+# environment: leaking unrelated host vars into opencode makes its provider
+# request fail with an opaque server error (same class of bug as the #56 env
+# leak). Only base vars + provider API keys are forwarded.
+_BASE_ENV_VARS = frozenset({
+    "PATH", "HOME", "USER", "SHELL", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMPDIR",
+})
+_PROVIDER_KEY_VARS = frozenset({
+    "ANTHROPIC_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_API_KEY",
+    "GEMINI_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GROQ_API_KEY",
+    "XAI_API_KEY", "MISTRAL_API_KEY", "DEEPSEEK_API_KEY",
+})
+
+
+def _composer_env(provided: dict[str, str]) -> dict[str, str]:
+    """A minimal, curated environment for the composer's opencode subprocess:
+    base vars + provider API keys only (the caller's --env-file wins over any
+    inherited value). Nothing else from the host env is forwarded."""
+    env = {k: os.environ[k] for k in _BASE_ENV_VARS if k in os.environ}
+    for k in _PROVIDER_KEY_VARS:
+        if k in provided:
+            env[k] = provided[k]
+        elif k in os.environ:
+            env[k] = os.environ[k]
+    return env
 
 _LAUNCH_PROMPT = (
     "Compose the Jupyter notebooks for this finished run into the ./notebooks/ "
@@ -93,6 +127,42 @@ def cleanup_composer_env(added: list[Path]) -> None:
             pass
 
 
+def _isolate_composer_tools(work_dir: Path) -> list[tuple[Path, Path]]:
+    """Move every non-composer ``.opencode/tools/*.ts`` out of the way for the
+    run: opencode loads ALL tools in that dir and sends their schemas to the
+    model, and a strict provider (Anthropic) rejects the dpack's unrelated tool
+    schemas outright. The composer never calls those tools — it reads their code
+    from ``_digest/tool_sources/`` (via digest-get). Returns (original, stash)
+    pairs to restore afterwards."""
+    tools = work_dir / ".opencode" / "tools"
+    keep = {"digest-get.ts", *(f"{n}.ts" for n in NB_TOOLS)}
+    moved: list[tuple[Path, Path]] = []
+    if not tools.is_dir():
+        return moved
+    stash = work_dir / ".opencode" / "_tools_stash"
+    for f in sorted(tools.glob("*.ts")):
+        if f.name not in keep:
+            stash.mkdir(exist_ok=True)
+            dest = stash / f.name
+            shutil.move(str(f), str(dest))
+            moved.append((f, dest))
+    return moved
+
+
+def _restore_tools(moved: list[tuple[Path, Path]]) -> None:
+    for original, dest in moved:
+        try:
+            shutil.move(str(dest), str(original))
+        except OSError:
+            pass
+    if moved:
+        stash = moved[0][1].parent
+        try:
+            stash.rmdir()
+        except OSError:
+            pass
+
+
 def compose(
     work_dir: str | Path,
     *,
@@ -138,25 +208,47 @@ def compose(
             "full fidelity."
         )
 
+    # Digest first (it copies custom-tool sources into _digest/tool_sources/),
+    # then materialize the composer's tools, then isolate them from the dpack's
+    # tools so a strict provider doesn't choke on unrelated tool schemas.
     generate_digest(work_dir)
     (work_dir / "notebooks").mkdir(exist_ok=True)
     added = materialize_composer_env(work_dir)
+    moved = _isolate_composer_tools(work_dir)
 
-    run_env = {**os.environ, **(env or {})}
+    run_env = _composer_env(env or {})
+    returncode, log = 1, ""
     try:
-        proc = subprocess.run(
-            ["opencode", "run", "--agent", "composer", "--model", model,
-             "--format", "json", _LAUNCH_PROMPT],
-            cwd=str(work_dir), capture_output=True, text=True,
-            timeout=timeout, env=run_env,
-        )
-        returncode = proc.returncode
-        log = proc.stdout + proc.stderr
-    except subprocess.TimeoutExpired as exc:
-        returncode = 124
-        log = (exc.stdout or "") + (exc.stderr or "")
-        warnings.append(f"Composer run timed out after {timeout}s.")
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
+            try:
+                proc = subprocess.run(
+                    ["opencode", "run", "--agent", "composer", "--model", model,
+                     "--format", "json", _LAUNCH_PROMPT],
+                    cwd=str(work_dir), capture_output=True, text=True,
+                    timeout=timeout, env=run_env,
+                )
+                returncode = proc.returncode
+                log = proc.stdout + proc.stderr
+            except subprocess.TimeoutExpired as exc:
+                returncode = 124
+                log = (exc.stdout or "") + (exc.stderr or "")
+                warnings.append(f"Composer run timed out after {timeout}s.")
+                break
+            # A transient provider error (opencode emits an error event and
+            # exits before any tool call) leaves no notebooks — retry it.
+            produced = any((work_dir / "notebooks").glob("*.ipynb"))
+            if returncode == 0 and produced:
+                break
+            if attempt < _MAX_ATTEMPTS:
+                warnings.append(
+                    f"Composer attempt {attempt} produced nothing (likely a "
+                    f"transient provider error) — retrying."
+                )
+                # Back off so retries span a provider instability window rather
+                # than all landing inside the same few-second bad spell.
+                time.sleep(_RETRY_BACKOFF_S * attempt)
     finally:
+        _restore_tools(moved)
         cleanup_composer_env(added)
 
     # Persist the composer's opencode log so a failed/empty run is diagnosable.

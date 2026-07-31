@@ -531,6 +531,15 @@ class TestCustomToolSource:
         assert "tool_source" in DIGEST_GET_SOURCE
         assert "the code this tool ran" in DIGEST_GET_SOURCE
 
+    def test_generate_digest_copies_sources_and_rewrites_paths(self, tmp_path: Path) -> None:
+        # so the composer can read a tool's code without that tool being loaded
+        wd = self._workdir(tmp_path)
+        out = generate_digest(wd)
+        assert (out / "tool_sources" / "analyze-thing.ts").is_file()
+        index = json.loads((out / "index.json").read_text())
+        srcs = [v["tool_source"] for v in index.values() if v.get("tool_source")]
+        assert srcs and all(s == "_digest/tool_sources/analyze-thing.ts" for s in srcs)
+
 
 def _have_node() -> bool:
     try:

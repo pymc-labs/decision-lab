@@ -1265,8 +1265,8 @@ def cmd_digest(
     return 0
 
 
-@app.command("compose")
-def _cmd_compose(
+@app.command("notebooks")
+def _cmd_notebooks(
     work_dir: Annotated[
         str,
         typer.Argument(metavar="WORK_DIR", help="Completed session work directory"),
@@ -1288,8 +1288,8 @@ def _cmd_compose(
                      "composer run (auto-detected from the dpack's .env)."),
     ] = None,
 ) -> None:
-    """Compose Jupyter notebooks from a finished run (the notebook composer)."""
-    raise typer.Exit(code=cmd_compose(
+    """Generate Jupyter notebooks from a finished run (the notebook composer)."""
+    raise typer.Exit(code=cmd_notebooks(
         work_dir=work_dir, model=model, dpack=dpack, env_file=env_file,
     ))
 
@@ -1306,14 +1306,14 @@ def _load_env_file(path: Path) -> dict[str, str]:
     return out
 
 
-def cmd_compose(
+def cmd_notebooks(
     work_dir: str,
     model: str | None = None,
     dpack: str | None = None,
     env_file: str | None = None,
 ) -> int:
     """
-    Handle compose mode — run the notebook composer over a finished work dir.
+    Handle notebooks mode — run the notebook composer over a finished work dir.
 
     Returns
     -------

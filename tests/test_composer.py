@@ -9,12 +9,14 @@ from pathlib import Path
 
 from dlab.composer import (
     NB_TOOLS,
+    _isolate_composer_tools,
+    _restore_tools,
     cleanup_composer_env,
     compose,
     materialize_composer_env,
 )
 from dlab.config import resolve_model_roles
-from dlab.cli import _load_env_file, cmd_compose
+from dlab.cli import _load_env_file, cmd_notebooks
 
 
 class TestMaterializeEnv:
@@ -43,6 +45,28 @@ class TestMaterializeEnv:
         assert not (wd / ".opencode" / "agents" / "composer.md").exists()
 
 
+class TestToolIsolation:
+    def test_isolate_moves_dpack_tools_keeps_composer(self, tmp_path: Path) -> None:
+        wd = tmp_path / "w"
+        tools = wd / ".opencode" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "analyze-model.ts").write_text("DPACK")   # a strict provider
+        (tools / "fit-model-modal.ts").write_text("DPACK") # rejects these schemas
+        materialize_composer_env(wd)
+        moved = _isolate_composer_tools(wd)
+        # during the run: only the composer's own tools remain loadable
+        remaining = {p.name for p in tools.glob("*.ts")}
+        assert "digest-get.ts" in remaining
+        assert all(f"{n}.ts" in remaining for n in NB_TOOLS)
+        assert "analyze-model.ts" not in remaining
+        assert "fit-model-modal.ts" not in remaining
+        # restore puts the dpack tools back and clears the stash
+        _restore_tools(moved)
+        after = {p.name for p in tools.glob("*.ts")}
+        assert "analyze-model.ts" in after and "fit-model-modal.ts" in after
+        assert not (wd / ".opencode" / "_tools_stash").exists()
+
+
 class TestComposerModelRole:
     def test_composer_falls_back_to_default(self) -> None:
         roles = resolve_model_roles({"default_model": "anthropic/opus"})
@@ -57,6 +81,20 @@ class TestComposerModelRole:
 
 
 class TestEnvAndGuards:
+    def test_composer_env_is_curated(self, monkeypatch) -> None:
+        # host env must NOT leak into opencode (it breaks the provider request);
+        # only base vars + provider keys are forwarded.
+        from dlab.composer import _composer_env
+        monkeypatch.setenv("PATH", "/usr/bin")
+        monkeypatch.setenv("SOME_HOST_JUNK", "leak")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "from_host")
+        env = _composer_env({"GOOGLE_GENERATIVE_AI_API_KEY": "g", "opencode_zen": "z"})
+        assert env["PATH"] == "/usr/bin"
+        assert "SOME_HOST_JUNK" not in env          # host junk dropped
+        assert "opencode_zen" not in env            # non-provider --env-file key dropped
+        assert env["ANTHROPIC_API_KEY"] == "from_host"        # provider key from host
+        assert env["GOOGLE_GENERATIVE_AI_API_KEY"] == "g"     # provider key from --env-file
+
     def test_load_env_file(self, tmp_path: Path) -> None:
         f = tmp_path / ".env"
         f.write_text('# comment\nA=1\nB="two"\nGOOGLE_KEY=\'xyz\'\nbad line\n')
@@ -69,9 +107,9 @@ class TestEnvAndGuards:
         assert any("_opencode_logs" in w for w in result.warnings)
         assert result.notebooks == []
 
-    def test_cmd_compose_needs_model_or_dpack(self, tmp_path: Path) -> None:
+    def test_cmd_notebooks_needs_model_or_dpack(self, tmp_path: Path) -> None:
         (tmp_path / "_opencode_logs").mkdir()
-        assert cmd_compose(str(tmp_path)) == 1  # neither --model nor --dpack
+        assert cmd_notebooks(str(tmp_path)) == 1  # neither --model nor --dpack
 
-    def test_cmd_compose_rejects_non_workdir(self, tmp_path: Path) -> None:
-        assert cmd_compose(str(tmp_path), model="x/y") == 1  # no _opencode_logs
+    def test_cmd_notebooks_rejects_non_workdir(self, tmp_path: Path) -> None:
+        assert cmd_notebooks(str(tmp_path), model="x/y") == 1  # no _opencode_logs

@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from collections import Counter
 from dataclasses import dataclass, field
 from importlib.resources import files
@@ -801,12 +802,36 @@ def generate_digest(work_dir: str | Path, *, brief: bool = False) -> Path:
     """
     Write ``_digest/digest.md`` and ``_digest/index.json`` into ``work_dir``.
 
+    Custom-tool sources are copied into ``_digest/tool_sources/`` and the index's
+    ``tool_source`` pointers are rewritten to them. This makes the digest
+    self-contained (retrieval no longer depends on ``.opencode/tools/``) and —
+    crucially — lets the composer read a tool's code WITHOUT that tool being
+    loaded as an active tool: a strict provider (e.g. Anthropic) rejects the
+    schemas of the dpack's unrelated tools, so the composer runs with only its
+    own tools while still reproducing what the dpack tools ran.
+
     Returns the path to the digest directory.
     """
     work_dir = Path(work_dir)
     md, index = build_digest(work_dir, brief=brief)
     out_dir = work_dir / DIGEST_DIR
     out_dir.mkdir(exist_ok=True)
+
+    src_dir = out_dir / "tool_sources"
+    copied: set[str] = set()
+    for entry in index.values():
+        ts = entry.get("tool_source")
+        if not ts:
+            continue
+        name = Path(ts).name
+        if name not in copied:
+            src = work_dir / ts
+            if src.is_file():
+                src_dir.mkdir(exist_ok=True)
+                shutil.copy(src, src_dir / name)
+            copied.add(name)
+        entry["tool_source"] = f"{DIGEST_DIR}/tool_sources/{name}"
+
     (out_dir / "digest.md").write_text(md, encoding="utf-8")
     (out_dir / "index.json").write_text(json.dumps(index, indent=2), encoding="utf-8")
     return out_dir
