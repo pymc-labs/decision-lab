@@ -21,7 +21,7 @@ from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.text import Text
 
-from dlab.config import load_dpack_config
+from dlab.config import load_dpack_config, resolve_model_roles
 
 # Note: Console must be created per-call (not module-level) so pytest capsys
 # can capture output. Use _make_console() in command functions.
@@ -1263,6 +1263,99 @@ def cmd_digest(
         markdown, _index = build_digest(work_dir_path, brief=brief)
         sys.stdout.write(markdown)
     return 0
+
+
+@app.command("compose")
+def _cmd_compose(
+    work_dir: Annotated[
+        str,
+        typer.Argument(metavar="WORK_DIR", help="Completed session work directory"),
+    ],
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="Composer model (provider/model). "
+                     "Falls back to the dpack's models.composer / default_model."),
+    ] = None,
+    dpack: Annotated[
+        str | None,
+        typer.Option("--dpack", help="Decision-pack path — resolves the composer "
+                     "model and signals its environment is available. A fidelity "
+                     "warning is emitted if omitted."),
+    ] = None,
+    env_file: Annotated[
+        str | None,
+        typer.Option("--env-file", help="File of KEY=VALUE provider keys for the "
+                     "composer run (auto-detected from the dpack's .env)."),
+    ] = None,
+) -> None:
+    """Compose Jupyter notebooks from a finished run (the notebook composer)."""
+    raise typer.Exit(code=cmd_compose(
+        work_dir=work_dir, model=model, dpack=dpack, env_file=env_file,
+    ))
+
+
+def _load_env_file(path: Path) -> dict[str, str]:
+    """Parse a KEY=VALUE env file into a dict (quotes stripped)."""
+    out: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        out[key.strip()] = val.strip().strip('"').strip("'")
+    return out
+
+
+def cmd_compose(
+    work_dir: str,
+    model: str | None = None,
+    dpack: str | None = None,
+    env_file: str | None = None,
+) -> int:
+    """
+    Handle compose mode — run the notebook composer over a finished work dir.
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, non-zero for failure).
+    """
+    from dlab.composer import compose
+
+    console = _make_console()
+    work_dir_path: Path = Path(work_dir).resolve()
+    if not (work_dir_path / "_opencode_logs").is_dir():
+        print(f"Error: No _opencode_logs in {work_dir_path} — not a work directory.",
+              file=sys.stderr)
+        return 1
+
+    # Resolve the composer model: --model, else the dpack's composer role.
+    if model is None:
+        if dpack is None:
+            print("Error: provide --model or --dpack (to resolve models.composer).",
+                  file=sys.stderr)
+            return 1
+        config = load_dpack_config(dpack)
+        model = resolve_model_roles(config)["composer"]
+
+    # Provider keys for the opencode subprocess: --env-file, else the dpack .env.
+    if env_file is None and dpack is not None:
+        cand = Path(dpack) / ".env"
+        if cand.is_file():
+            env_file = str(cand)
+    env: dict[str, str] = _load_env_file(Path(env_file)) if env_file else {}
+
+    console.print(f"Composing notebooks for [bold]{work_dir_path.name}[/bold] "
+                  f"with [cyan]{model}[/cyan] …")
+    result = compose(work_dir_path, model=model, dpack=dpack, env=env)
+
+    for w in result.warnings:
+        console.print(f"[yellow]![/yellow] {w}")
+    if result.notebooks:
+        console.print(f"[green]✓[/green] {len(result.notebooks)} notebook(s):")
+        for nb in result.notebooks:
+            console.print(f"    {nb}")
+    return result.returncode if result.returncode == 0 else (result.returncode or 1)
 
 
 @app.command("create-dpack")
