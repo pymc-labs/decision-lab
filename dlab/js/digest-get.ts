@@ -70,10 +70,19 @@ function renderPayload(obj: any, eventType: string): string {
   if (eventType === "tool_use") {
     const state = part.state ?? {}
     const input = JSON.stringify(state.input ?? {}, null, 2)
-    const output = state.output ?? state.error ?? ""
+    const output = stripLsp(state.output ?? state.error ?? "")
     return `# input\n${input}\n\n# output\n${output}`
   }
   return JSON.stringify(obj, null, 2)
+}
+
+// Drop the LSP/type-checker diagnostics opencode appends to write/edit output —
+// false positives that otherwise pollute retrieval (composer feedback).
+function stripLsp(text: string): string {
+  return text
+    .replace(/<diagnostics\b[^>]*>[\s\S]*?<\/diagnostics>/g, "")
+    .replace(/\n*LSP errors detected[^\n]*/g, "")
+    .replace(/\s+$/, "")
 }
 
 function sliceText(text: string, head?: number, tail?: number, range?: string): string {

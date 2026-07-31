@@ -375,6 +375,73 @@ class TestRawTextAndToolCalls:
         assert "**Navigational**" not in section or "read" in section
 
 
+class TestComposerFeedbackFixes:
+    """Digest tweaks from the composer experiment: input signatures, error
+    tails, LSP-noise stripping, and consolidator failure flagging."""
+
+    def test_custom_tool_shows_input_signature(self, tmp_path: Path) -> None:
+        wd = tmp_path / "c"
+        logs = wd / "_opencode_logs"
+        logs.mkdir(parents=True)
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 1000, model="m", agent="main"),
+            _line("tool_use", 2000, part={"tool": "fit-model-modal", "state": {
+                "status": "completed",
+                "input": {"model_bundle_path": "model_to_fit.pkl",
+                          "output_path": "fitted_model.nc"},
+                "time": {"start": 2000, "end": 3000}}}),
+        ]) + "\n")
+        md, _ = build_digest(wd)
+        row = next(l for l in md.splitlines()
+                   if "fit-model-modal" in l and l.strip().startswith("- [t"))
+        assert "model_bundle_path=model_to_fit.pkl" in row
+        assert "output_path=fitted_model.nc" in row
+
+    def test_error_line_keeps_its_tail(self, tmp_path: Path) -> None:
+        wd = tmp_path / "e"
+        logs = wd / "_opencode_logs"
+        logs.mkdir(parents=True)
+        errline = ("TypeError: MMMPlotSuite.prior_predictive() got an "
+                   "unexpected keyword argument 'original_scale'")
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 1000, model="m", agent="main"),
+            _line("tool_use", 2000, part={"tool": "bash", "state": {
+                "status": "completed", "input": {"command": "python x.py"},
+                "output": errline, "time": {"start": 2000, "end": 2100}}}),
+        ]) + "\n")
+        md, _ = build_digest(wd)
+        row = next(l for l in md.splitlines() if "python x.py" in l)
+        assert "original_scale" in row  # the offending key (line end) survives
+
+    def test_strip_lsp_removes_diagnostics(self) -> None:
+        from dlab.session_digest import _strip_lsp
+        t = ("Edit applied successfully.\n\nLSP errors detected in this file, "
+             "please fix:\n<diagnostics file=\"x.py\">\nERROR [1:2] bad\n</diagnostics>")
+        out = _strip_lsp(t)
+        assert "Edit applied successfully." in out
+        assert "LSP errors" not in out and "diagnostics" not in out
+        assert "ERROR [1:2]" not in out
+
+    def test_digest_get_source_strips_lsp(self) -> None:
+        assert "function stripLsp" in DIGEST_GET_SOURCE
+        assert "diagnostics" in DIGEST_GET_SOURCE
+
+    def test_consolidator_without_output_is_flagged(self, tmp_path: Path) -> None:
+        wd = tmp_path / "c"
+        run = wd / "_opencode_logs" / "poet-parallel-run-500"
+        run.mkdir(parents=True)
+        (run / "instance-1.log").write_text(
+            _line("dlab_start", 500, model="m", agent="poet") + "\n")
+        (run / "consolidator.log").write_text(
+            _line("dlab_start", 900, model="m", agent="consolidator") + "\n")
+        (wd / "parallel" / "run-500" / "instance-1").mkdir(parents=True)
+        md, _ = build_digest(wd)  # no consolidated_summary.md
+        assert "NO consolidated_summary.md (treat as failed)" in md
+        (wd / "parallel" / "run-500" / "consolidated_summary.md").write_text("cmp")
+        md2, _ = build_digest(wd)
+        assert "NO consolidated_summary.md" not in md2
+
+
 def _have_node() -> bool:
     try:
         subprocess.run(["node", "--version"], capture_output=True, timeout=5)

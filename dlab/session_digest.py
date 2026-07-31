@@ -201,7 +201,7 @@ def _digest_agent(qual: str, role: str, heading: str, log_path: Path,
         for t in reversed(texts):
             s = t.replace("[STDERR]", "").strip()
             if s:
-                tail = _truncate(s, 80)
+                tail = _tail_line(s, 80)
                 break
         block = {"id": rid, "n_lines": len(texts),
                  "stream": "stderr" if is_err else "stdout", "tail": tail}
@@ -292,21 +292,37 @@ def _tool_call(tid: str, name: str, ev: LogEvent) -> dict[str, Any]:
     else:
         raw_summary = inp.get("filePath") or inp.get("description") or inp.get("command") or ""
         summary = " ".join(str(raw_summary).split())
+    # Compact input signature for custom tools — the call's args (paths, flags)
+    # are exactly what a notebook cell needs to reproduce it, and were otherwise
+    # invisible until retrieved (composer feedback). bash/write/edit already
+    # carry their arg in `summary`.
+    input_sig = ""
+    if name not in ("bash", "write", "edit"):
+        parts = []
+        for k, v in inp.items():
+            if isinstance(v, (bool, int, float)):
+                parts.append(f"{k}={v}")
+            elif isinstance(v, str):
+                parts.append(f"{k}={_short_value(v, 40)}")
+            else:
+                parts.append(k)
+        input_sig = ", ".join(parts)
     start = end = None
     tt = ev.part.get("state", {}).get("time", {}) if isinstance(ev.part, dict) else {}
     if isinstance(tt, dict):
         start, end = tt.get("start"), tt.get("end")
     dur = (end - start) / 1000 if start and end else None
-    out = get_tool_output(ev) or ""
-    err = get_tool_error(ev) or ""
+    out = _strip_lsp(get_tool_output(ev) or "")
+    err = _strip_lsp(get_tool_error(ev) or "")
     stream = err if err else out
+    stream_lines = stream.splitlines()
     return {
         "id": tid, "name": name, "summary": summary, "ok": ok,
         "status": status, "start": start, "end": end, "duration_s": dur,
-        "raw_ids": [],
+        "input_sig": input_sig, "raw_ids": [],
         "out_stream": "stderr" if err else "stdout",
-        "out_n_lines": len(stream.splitlines()) if stream else 0,
-        "out_tail": _truncate(stream.splitlines()[-1].strip(), 80) if stream else "",
+        "out_n_lines": len(stream_lines),
+        "out_tail": _tail_line(stream_lines[-1].strip(), 80) if stream_lines else "",
     }
 
 
@@ -350,9 +366,12 @@ def _collect_agents(work_dir: Path) -> list[_AgentDigest]:
             cons_log = d / "consolidator.log"
             if cons_log.exists():
                 qual = f"{agent}.r{round_idx}.cons"
+                cons_ok = (work_dir / f"parallel/run-{ts}"
+                           / "consolidated_summary.md").exists()
                 agents.append(_digest_agent(
                     qual, agent, f"{agent} consolidator{retry}",
                     cons_log, work_dir, f"parallel/run-{ts}", run_id=d.name,
+                    summary_ok=cons_ok,
                 ))
     return agents
 
@@ -571,7 +590,12 @@ def _render_tree(work_dir: Path, agents: list[_AgentDigest]) -> list[str]:
         lines.append(f"  - parallel fan-out: **{agent}** ({run_key})")
         for a in members:
             if a.qual.endswith(".cons"):
-                lines.append(f"    - {a.qual}: {a.duration_s:.0f}s, ${a.cost:.3f} — consolidator")
+                cons_tail = ("" if a.summary_ok
+                             else " — NO consolidated_summary.md (treat as failed)")
+                lines.append(
+                    f"    - {a.qual}: {a.duration_s:.0f}s, ${a.cost:.3f} "
+                    f"— consolidator{cons_tail}"
+                )
             else:
                 status = "summary written" if a.summary_ok else "NO summary.md (treat as failed)"
                 lines.append(
@@ -653,6 +677,8 @@ def _render_tool_call(tc: dict[str, Any]) -> str:
     row = f"[{tc['id']}] {tc['name']}"
     if tc["summary"]:
         row += f" `{tc['summary']}`" if tc["name"] == "bash" else f" {tc['summary']}"
+    if tc.get("input_sig"):
+        row += f" {{{tc['input_sig']}}}"
     # write/edit are instantaneous file ops — no status/stream to show.
     if tc["name"] not in ("write", "edit"):
         mark = "✓" if tc["ok"] else "✗ error"
@@ -714,6 +740,45 @@ def _basename(path: str) -> str:
 def _truncate(text: str, n: int) -> str:
     text = " ".join(text.split())
     return text if len(text) <= n else text[: n - 1] + "…"
+
+
+_ERROR_MARKERS = ("Error", "Exception", "Traceback", "Errno", "assert",
+                  "Failed", "FAILED")
+
+
+def _short_value(v: str, n: int) -> str:
+    """Shorten an input value; for a path keep the END (the filename is the
+    reproducible part), otherwise keep the start."""
+    v = " ".join(v.split())
+    if len(v) <= n:
+        return v
+    if "/" in v:
+        return "…" + v[-(n - 1):]
+    return v[: n - 1] + "…"
+
+
+def _tail_line(text: str, n: int) -> str:
+    """Truncate to n chars, but for an error-like line keep the END — the
+    payload of a traceback (the exception, the offending key) is its tail, and
+    head-truncation cut it off exactly where it mattered (composer feedback)."""
+    text = " ".join(text.split())
+    if len(text) <= n:
+        return text
+    if any(m in text for m in _ERROR_MARKERS):
+        return "…" + text[-(n - 1):]
+    return text[: n - 1] + "…"
+
+
+_DIAG_RE = re.compile(r"<diagnostics\b[^>]*>.*?</diagnostics>", re.DOTALL)
+_LSP_RE = re.compile(r"\n*LSP errors detected[^\n]*")
+
+
+def _strip_lsp(text: str) -> str:
+    """Drop the LSP/type-checker diagnostics block opencode appends to
+    write/edit output — false positives that otherwise pollute retrieval."""
+    text = _DIAG_RE.sub("", text)
+    text = _LSP_RE.sub("", text)
+    return text.rstrip()
 
 
 def _human_size(n: int) -> str:
