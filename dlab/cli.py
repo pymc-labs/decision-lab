@@ -1201,7 +1201,7 @@ def _cmd_digest(
         ),
     ] = False,
 ) -> None:
-    """Build a deterministic session digest (the composer's LLM-facing map)."""
+    """Build a deterministic session digest (the notebook agent's LLM-facing map)."""
     exit_code = cmd_digest(work_dir=work_dir, brief=brief, write=write)
     raise typer.Exit(code=exit_code)
 
@@ -1214,7 +1214,7 @@ def cmd_digest(
 
     Prints the digest markdown to stdout by default; with ``write`` set,
     materializes ``_digest/digest.md`` and ``_digest/index.json`` into the work
-    directory (the same pair the composer step consumes).
+    directory (the same pair the notebook step consumes).
 
     Parameters
     ----------
@@ -1273,22 +1273,22 @@ def _cmd_notebooks(
     ],
     model: Annotated[
         str | None,
-        typer.Option("--model", help="Composer model (provider/model). "
-                     "Falls back to the dpack's models.composer / default_model."),
+        typer.Option("--model", help="Notebook agent model (provider/model). "
+                     "Falls back to the dpack's models.notebooks / default_model."),
     ] = None,
     dpack: Annotated[
         str | None,
-        typer.Option("--dpack", help="Decision-pack path — resolves the composer "
+        typer.Option("--dpack", help="Decision-pack path — resolves the notebook agent "
                      "model and signals its environment is available. A fidelity "
                      "warning is emitted if omitted."),
     ] = None,
     env_file: Annotated[
         str | None,
         typer.Option("--env-file", help="File of KEY=VALUE provider keys for the "
-                     "composer run (auto-detected from the dpack's .env)."),
+                     "notebook agent run (auto-detected from the dpack's .env)."),
     ] = None,
 ) -> None:
-    """Generate Jupyter notebooks from a finished run (the notebook composer)."""
+    """Generate Jupyter notebooks from a finished run (the notebook agent)."""
     raise typer.Exit(code=cmd_notebooks(
         work_dir=work_dir, model=model, dpack=dpack, env_file=env_file,
     ))
@@ -1313,14 +1313,14 @@ def cmd_notebooks(
     env_file: str | None = None,
 ) -> int:
     """
-    Handle notebooks mode — run the notebook composer over a finished work dir.
+    Handle notebooks mode — run the notebook agent over a finished work dir.
 
     Returns
     -------
     int
         Exit code (0 for success, non-zero for failure).
     """
-    from dlab.composer import compose
+    from dlab.notebooks import generate_notebooks
 
     console = _make_console()
     work_dir_path: Path = Path(work_dir).resolve()
@@ -1329,14 +1329,14 @@ def cmd_notebooks(
               file=sys.stderr)
         return 1
 
-    # Resolve the composer model: --model, else the dpack's composer role.
+    # Resolve the notebook agent model: --model, else the dpack's notebook agent role.
     if model is None:
         if dpack is None:
-            print("Error: provide --model or --dpack (to resolve models.composer).",
+            print("Error: provide --model or --dpack (to resolve models.notebooks).",
                   file=sys.stderr)
             return 1
         config = load_dpack_config(dpack)
-        model = resolve_model_roles(config)["composer"]
+        model = resolve_model_roles(config)["notebooks"]
 
     # Provider keys for the opencode subprocess: --env-file, else the dpack .env.
     if env_file is None and dpack is not None:
@@ -1347,7 +1347,7 @@ def cmd_notebooks(
 
     console.print(f"Composing notebooks for [bold]{work_dir_path.name}[/bold] "
                   f"with [cyan]{model}[/cyan] …")
-    result = compose(work_dir_path, model=model, dpack=dpack, env=env)
+    result = generate_notebooks(work_dir_path, model=model, dpack=dpack, env=env)
 
     for w in result.warnings:
         console.print(f"[yellow]![/yellow] {w}")

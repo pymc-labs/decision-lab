@@ -196,11 +196,11 @@ def load_dpack_config(config_dir: str) -> dict[str, Any]:
 
 def resolve_model_roles(config: dict[str, Any]) -> dict[str, str]:
     """
-    Resolve the orchestrator, forecaster, consolidator, and composer models.
+    Resolve the orchestrator, forecaster, consolidator, and notebook agent models.
 
     ``default_model`` is the orchestrator model. Optional ``models.forecaster``,
-    ``models.consolidator`` and ``models.composer`` override parallel agent
-    instance, consolidator, and notebook-composer models; each falls back to
+    ``models.consolidator`` and ``models.notebooks`` override parallel agent
+    instance, consolidator, and notebook models; each falls back to
     ``default_model`` when omitted.
     """
     default: str = config["default_model"]
@@ -211,7 +211,7 @@ def resolve_model_roles(config: dict[str, Any]) -> dict[str, str]:
         "orchestrator": default,
         "forecaster": models.get("forecaster", default),
         "consolidator": models.get("consolidator", default),
-        "composer": models.get("composer", default),
+        "notebooks": models.get("notebooks", default),
     }
 
 

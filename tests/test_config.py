@@ -231,6 +231,7 @@ class TestResolveModelRoles:
             "orchestrator": "anthropic/claude-sonnet-4-5",
             "forecaster": "anthropic/claude-sonnet-4-5",
             "consolidator": "anthropic/claude-sonnet-4-5",
+            "notebooks": "anthropic/claude-sonnet-4-5",
         }
 
     def test_individual_overrides(self) -> None:
