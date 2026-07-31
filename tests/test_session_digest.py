@@ -488,6 +488,50 @@ class TestArtifactRetrieval:
         assert 'event_type === "artifact"' in DIGEST_GET_SOURCE
 
 
+class TestCustomToolSource:
+    """A custom tool (has a .opencode/tools/<name>.ts) gets its source bundled
+    into its tN retrieval, so the composer can reproduce what it ran."""
+
+    def _workdir(self, tmp_path: Path) -> Path:
+        wd = tmp_path / "w"
+        logs = wd / "_opencode_logs"
+        logs.mkdir(parents=True)
+        tools = wd / ".opencode" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "analyze-thing.ts").write_text(
+            "// runs: python -m mypkg.analyze\nexport default 1\n")
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 1000, model="m", agent="main"),
+            _line("tool_use", 1100, part={"tool": "analyze-thing", "state": {
+                "status": "completed", "input": {"model_path": "m.nc"},
+                "time": {"start": 1100, "end": 1200}}}),
+            _line("tool_use", 1300, part={"tool": "bash", "state": {
+                "status": "completed", "input": {"command": "ls"},
+                "time": {"start": 1300, "end": 1310}}}),
+        ]) + "\n")
+        return wd
+
+    def test_custom_tool_indexed_with_source_builtin_not(self, tmp_path: Path) -> None:
+        wd = self._workdir(tmp_path)
+        _, index = build_digest(wd)
+        custom = {k: v for k, v in index.items()
+                  if v["event_type"] == "tool_use" and v.get("tool_source")}
+        assert len(custom) == 1
+        assert list(custom.values())[0]["tool_source"] == ".opencode/tools/analyze-thing.ts"
+        # the bash call is built-in — no tool_source
+        assert any(v["event_type"] == "tool_use" and "tool_source" not in v
+                   for v in index.values())
+
+    def test_custom_tool_row_flagged(self, tmp_path: Path) -> None:
+        md, _ = build_digest(self._workdir(tmp_path))
+        assert "analyze-thing (custom)" in md
+        assert "bash (custom)" not in md
+
+    def test_digest_get_appends_tool_source(self) -> None:
+        assert "tool_source" in DIGEST_GET_SOURCE
+        assert "the code this tool ran" in DIGEST_GET_SOURCE
+
+
 def _have_node() -> bool:
     try:
         subprocess.run(["node", "--version"], capture_output=True, timeout=5)

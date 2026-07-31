@@ -167,7 +167,7 @@ def _walk_workdir_files(base: Path) -> list[Path]:
 
 def _digest_agent(qual: str, role: str, heading: str, log_path: Path,
                   work_dir: Path, workdir_rel: str | None, run_id: str | None,
-                  summary_ok: bool = True) -> _AgentDigest:
+                  custom_tools: dict[str, str], summary_ok: bool = True) -> _AgentDigest:
     indexed = _iter_indexed(log_path)
     log_rel = _rel(log_path, work_dir)
 
@@ -236,14 +236,19 @@ def _digest_agent(qual: str, role: str, heading: str, log_path: Path,
         elif et == "tool_use":
             counter += 1
             tid = f"t{counter}"
-            index[f"{qual}/{tid}"] = {
+            name = get_tool_name(ev) or "?"
+            entry = {
                 "log_file": log_rel, "line_no": ie.line_no,
                 "event_type": "tool_use",
             }
+            # Custom tool (has a .opencode/tools/<name>.ts): point at its source
+            # so digest-get returns the call AND the code the tool actually ran.
+            if name in custom_tools:
+                entry["tool_source"] = custom_tools[name]
+            index[f"{qual}/{tid}"] = entry
             tool_count += 1
-            name = get_tool_name(ev) or "?"
             tool_counter[name] += 1
-            tc = _tool_call(tid, name, ev)
+            tc = _tool_call(tid, name, ev, name in custom_tools)
             tool_calls.append(tc)
             by_tid[tid] = tc
             last_tid = tid
@@ -282,10 +287,12 @@ def _digest_agent(qual: str, role: str, heading: str, log_path: Path,
     )
 
 
-def _tool_call(tid: str, name: str, ev: LogEvent) -> dict[str, Any]:
+def _tool_call(tid: str, name: str, ev: LogEvent, is_custom: bool = False) -> dict[str, Any]:
     """Capture one tool_use: label, status, time window (for artifact
     provenance), and a fallback for its structured output (raw_text, when
-    present, is attached separately and preferred at render time)."""
+    present, is attached separately and preferred at render time). ``is_custom``
+    flags a tool backed by a ``.opencode/tools/*.ts`` — its source (the code it
+    ran) is bundled into the tN retrieval, so the composer can reproduce it."""
     from dlab.opencode_logparser import get_tool_output
     inp = get_tool_input(ev) or {}
     status = get_tool_status(ev)
@@ -324,11 +331,24 @@ def _tool_call(tid: str, name: str, ev: LogEvent) -> dict[str, Any]:
     return {
         "id": tid, "name": name, "summary": summary, "ok": ok,
         "status": status, "start": start, "end": end, "duration_s": dur,
-        "input_sig": input_sig, "raw_ids": [],
+        "input_sig": input_sig, "custom": is_custom, "raw_ids": [],
         "out_stream": "stderr" if err else "stdout",
         "out_n_lines": len(stream_lines),
         "out_tail": _tail_line(stream_lines[-1].strip(), 80) if stream_lines else "",
     }
+
+
+def _custom_tool_sources(work_dir: Path) -> dict[str, str]:
+    """Map custom tool name → its ``.ts`` source path (relative to work_dir). A
+    tool is *custom* iff a ``.opencode/tools/<name>.ts`` exists — fully general,
+    no per-dpack knowledge. Built-in tools (bash/read/write/edit) have no such
+    file and are excluded; their "code" is already the command / file content."""
+    out: dict[str, str] = {}
+    tools_dir = work_dir / ".opencode" / "tools"
+    if tools_dir.is_dir():
+        for f in sorted(tools_dir.glob("*.ts")):
+            out[f.stem] = _rel(f, work_dir)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -339,12 +359,13 @@ def _tool_call(tid: str, name: str, ev: LogEvent) -> dict[str, Any]:
 def _collect_agents(work_dir: Path) -> list[_AgentDigest]:
     logs_dir = work_dir / "_opencode_logs"
     agents: list[_AgentDigest] = []
+    custom_tools = _custom_tool_sources(work_dir)
 
     main_log = logs_dir / "main.log"
     if main_log.exists():
         agents.append(_digest_agent(
             "main", "orchestrator", "orchestrator", main_log, work_dir, None,
-            run_id=None,
+            run_id=None, custom_tools=custom_tools,
         ))
 
     # Group parallel run dirs by agent name; rank timestamps → round number.
@@ -366,7 +387,7 @@ def _collect_agents(work_dir: Path) -> list[_AgentDigest]:
                 agents.append(_digest_agent(
                     qual, agent, f"{agent}, instance {n}{retry}",
                     inst_log, work_dir, inst_work, run_id=d.name,
-                    summary_ok=summary_ok,
+                    custom_tools=custom_tools, summary_ok=summary_ok,
                 ))
             cons_log = d / "consolidator.log"
             if cons_log.exists():
@@ -376,7 +397,7 @@ def _collect_agents(work_dir: Path) -> list[_AgentDigest]:
                 agents.append(_digest_agent(
                     qual, agent, f"{agent} consolidator{retry}",
                     cons_log, work_dir, f"parallel/run-{ts}", run_id=d.name,
-                    summary_ok=cons_ok,
+                    custom_tools=custom_tools, summary_ok=cons_ok,
                 ))
     return agents
 
@@ -742,6 +763,9 @@ def _render_agent(a: _AgentDigest, brief: bool) -> list[str]:
 def _render_tool_call(tc: dict[str, Any]) -> str:
     """One labeled Tool-calls row, with its mapped raw_text stream(s)."""
     row = f"[{tc['id']}] {tc['name']}"
+    if tc.get("custom"):
+        # digest-get on this id also returns the tool's source (the code it ran)
+        row += " (custom)"
     if tc["summary"]:
         row += f" `{tc['summary']}`" if tc["name"] == "bash" else f" {tc['summary']}"
     if tc.get("input_sig"):

@@ -13,7 +13,8 @@ export default tool({
   description:
     "Retrieve a single log element by its digest ID (the [tN]/[xN]/[rN]/[aN]/[p0] ids in _digest/digest.md). " +
     "IDs are fully qualified, e.g. 'main/t2', 'poet.r1.i2/x8', 'poet.r1.i2/r11', 'poet.r1.i2/a5'. Returns the " +
-    "decoded payload: for a tool call (tN) its input plus clean stdout/stderr; for a raw_text stream (rN) the " +
+    "decoded payload: for a tool call (tN) its input plus clean stdout/stderr — and for a CUSTOM tool, the " +
+    "code the tool ran (its implementation), so you can reproduce it in a notebook cell; for a raw_text stream (rN) the " +
     "verbatim stdout/stderr the run emitted — this is what you embed as a cell's stream output; for a text id " +
     "(xN) the verbatim reasoning; for a small artifact file (aN, e.g. a results .json/.csv/.md) its contents; " +
     "for p0 the full prompt. Read the shape hint next to an artifact in the digest first, then use " +
@@ -28,7 +29,7 @@ export default tool({
 
   async execute({ id, head, tail, range }) {
     const cwd = process.cwd()
-    let index: Record<string, { log_file: string; line_no: number; line_end?: number; event_type: string }>
+    let index: Record<string, { log_file: string; line_no: number; line_end?: number; event_type: string; tool_source?: string }>
     try {
       index = JSON.parse(readFileSync(join(cwd, "_digest", "index.json"), "utf-8"))
     } catch {
@@ -69,7 +70,16 @@ export default tool({
     } catch {
       return sliceText(rawLine, head, tail, range) // non-JSON line: return as-is
     }
-    return sliceText(renderPayload(obj, entry.event_type), head, tail, range)
+    let payload = renderPayload(obj, entry.event_type)
+    // Custom tool: append the code the tool actually ran (its implementation),
+    // so one retrieval gives "the call was XXX and this is the code it ran: YYY".
+    if (entry.event_type === "tool_use" && entry.tool_source) {
+      try {
+        const impl = readFileSync(join(cwd, entry.tool_source), "utf-8")
+        payload += `\n\n# the code this tool ran (${entry.tool_source})\n${impl}`
+      } catch {}
+    }
+    return sliceText(payload, head, tail, range)
   },
 })
 

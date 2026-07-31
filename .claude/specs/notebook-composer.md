@@ -143,6 +143,16 @@ tackle level C at a later stage."*
   order, imports present, paths relative to the workdir, code taken **verbatim
   from scripts that actually ran**, with a provenance comment per code cell:
   `# from parallel/run-1784.../instance-2/fit_model.py`.
+  - **Tool-generated outputs (correction, 2026-07-31):** "verbatim from scripts
+    that ran" silently assumed *agent-written* scripts. Many outputs (figures,
+    result files) are produced by a **custom tool** whose code lives in its
+    `.opencode/tools/<name>.ts` (which shells out to a library CLI), not in any
+    logged script. A figure embedded under a bare comment is not runnable. The
+    runnable representation is the **tool's own invocation**, reproduced from the
+    tool source the digest now surfaces (§7.2), at the deepest affordable level
+    (granular library call → top-level function → shell-out; §8). One tool call
+    = one regeneration cell (which produces all its outputs) + runnable
+    `Image(...)` display cells. Any such reconstruction is disclosed via `nb-note`.
 - **Level C — verified re-executable (deferred)**: `dlab notebooks --execute`,
   opt-in, runs in the container, skips cells tagged `long-running`.
 
@@ -208,8 +218,14 @@ lines of Bun). Tool surface (~5 tools, deliberately small):
 | `nb-add-markdown-cell` | `notebook, text, math?` | Appends markdown cell. Escapes `$` → `\$` by default (auto-mined text is almost always currency); `math: true` per cell opts into MathJax. |
 | `nb-add-code-cell` | `notebook, code, outputs?, tags?` | Appends code cell. `outputs` is a list of `{image: <path>}` \| `{stream: <text>}`; the TOOL reads the figure file and base64-encodes it into a proper `display_data`/`stream` output — the model only ever passes paths. Assigns sequential `execution_count`. `tags` for `long-running`. |
 | `nb-edit-cell` | `notebook, index, …` | Replace source/outputs of an existing cell (for fixes). |
+| `nb-note` | `notebook, text, math?` | Appends to the notebook's **first cell — the markdown "preamble"** (index-independent; creates it if the top isn't markdown). The composer's **disclosure** surface: whatever it reconstructed rather than took verbatim (regenerated figures, code reproduced at a coarser level, results trusted from a summary, inherited data). |
 | `nb-read` | `notebook` | **Compact rendering, base64 stripped**: `cell 7 [code, exec 7, 1 image output: figures/adstock.png]` + truncated sources. Agents must never read raw ipynb (base64 in context = the same poison we keep out of writing). |
-| `nb-finalize` | `notebook` | Injects the provenance header cell (idempotent), final consistency pass, writes canonical JSON. |
+| `nb-finalize` | `notebook` | Pins the provenance header to the top of the preamble cell (idempotent; provenance + notes stay ONE markdown cell), final consistency pass, writes canonical JSON. |
+
+**Invariant — the first cell is always the markdown preamble** (provenance line
++ any `nb-note` disclosures). Implemented (#86, PR #89): the six `.ts` tools are
+flat in `dlab/js/` (`nb-add-markdown-cell`, `nb-add-code-cell`, `nb-edit-cell`,
+`nb-note`, `nb-read`, `nb-finalize`).
 
 **Research record (2026-07-29)** — checked before deciding to build:
 
@@ -422,10 +438,25 @@ host-side Python indexer):
   `range` (line-based slicing of the payload).
 - Behavior: look up ID in `_digest/index.json` → read the referenced NDJSON
   line(s), `line_no..line_end` → render the payload for the event type:
-  `t`-ids → tool input + structured output **plus the mapped raw_text block**;
+  `t`-ids → tool input + structured output **plus the mapped raw_text block**,
+  and **for a custom tool the code the tool ran** (its `.opencode/tools/<name>.ts`
+  source, appended under `# the code this tool ran`) — so one retrieval gives
+  "the call was XXX and the code it ran was YYY";
   `r`-ids → the raw_text block verbatim; `x`-ids → the verbatim text;
   `a`-ids → the small text artifact's contents — all **decoded** (clean
   stdout/stderr, not escaped JSON) → slice.
+
+**Custom-tool provenance (general, no per-dpack knowledge)**: a tool call is
+*custom* iff a `.opencode/tools/<name>.ts` exists in the workdir (built-in
+`bash`/`read`/`write`/`edit` have none — their "code" is already the command or
+file content). Custom calls are flagged `(custom)` in the Tool-calls row, their
+`tN` index entry carries a `tool_source` pointer, and `digest-get` bundles that
+source into the retrieval. This is what lets the composer make tool-generated
+outputs runnable: it reads the source (e.g. that `analyze-model` runs
+`python -m mmm_lib.analyze_model_cli …`) and reproduces the invocation at the
+deepest affordable level (§5), instead of embedding an orphaned figure. Works
+for any pack's tools — the digest surfaces whatever `.ts` is there; the model
+interprets it.
 - Why slicing is required: a PyMC fit's raw_text can be thousands of lines; the
   composer grabs `digest-get poet.r2.i2/r11 --tail 15` for a traceback without
   paying for sampler progress. (It is also how the composer pulls a cell's
@@ -480,13 +511,22 @@ composer's analytical job, and in the experiment it did.
 
 ## 8. Composer agent environment
 
-- The composer is **dlab-internal**: its agent prompt is a template shipped as
-  dlab package data (like `js/parallel-agents.ts`), NOT part of any dpack.
-  Placeholder rules from CLAUDE.md apply (no hard-coded values; `<VALUE>`
-  placeholders).
+- The composer is **dlab-internal**: its system prompt is a versioned file,
+  **`dlab/agents/composer.md`** (implemented, PR #89; registered as `dlab.agents`
+  package data), NOT part of any dpack. It is **fully dpack-agnostic** — a test
+  asserts no library/pack specifics leak in (`mmm_lib`/`pymc`/…). Its frontmatter
+  wires the tools (`digest-get` + the six `nb-*`) and denies `edit`/`bash`/`task`.
+- **The composer's core rules (all in `composer.md`)**: composed-not-executed +
+  provenance; digest + `digest-get` as the *only* log interface; fit-then-load
+  runnability; the **general 3→2→1 reproduction of custom-tool-generated
+  outputs** (read the tool's source from its `tN` retrieval, then reproduce at
+  the deepest affordable level — granular library call per figure → top-level
+  function → reproduce the invocation; never inline library internals, never a
+  figure under a bare comment); and the **`nb-note` disclosure rule** — every
+  reconstruction is disclosed in the first-cell preamble.
 - dlab materializes the composer environment into the workdir at composer-launch
-  time (analogous to `setupConsolidator`): composer agent `.md`, the five `nb-*`
-  tools, `digest-get`, and permission config.
+  time (analogous to `setupConsolidator`): `composer.md`, the six `nb-*` tools,
+  `digest-get`, and permission config.
 - **Permissions** (lesson from PR #38 encoded here): the composer does NOT need
   the `edit` permission — all its file writes go through the custom `nb-*`
   tools, which are not gated by the `edit` permission key. So: `read`/`glob`/
