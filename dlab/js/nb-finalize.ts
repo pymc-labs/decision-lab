@@ -51,15 +51,18 @@ export default tool({
   async execute({ notebook }) {
     const nb = loadNb(notebook)
     if (!nb.cells) nb.cells = []
-    const firstSrc = nb.cells[0] ? srcText(nb.cells[0].source) : ""
-    if (!firstSrc.includes(HEADER_MARK)) {
-      nb.cells.unshift({
-        cell_type: "markdown",
-        metadata: {},
-        source:
-          `> **${HEADER_MARK}.** Outputs are embedded from the original run — this notebook was ` +
-          `composed, not executed. Open it to explore and re-run the analysis yourself.`,
-      })
+    // The first cell is always the markdown "preamble": the provenance line
+    // pinned to the very top, above any nb-note disclosures already collected
+    // there. Keep provenance + notes in ONE cell rather than stacking cells.
+    const header =
+      `> **${HEADER_MARK}.** Outputs are embedded from the original run — this notebook was ` +
+      `composed, not executed. Open it to explore and re-run the analysis yourself.`
+    const first = nb.cells[0]
+    if (first && first.cell_type === "markdown") {
+      const s = srcText(first.source)
+      if (!s.includes(HEADER_MARK)) first.source = header + "\n\n" + s
+    } else {
+      nb.cells.unshift({ cell_type: "markdown", metadata: {}, source: header })
     }
     nb.nbformat = 4
     if (nb.nbformat_minor == null) nb.nbformat_minor = 5
