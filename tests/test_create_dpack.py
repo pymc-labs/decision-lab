@@ -296,6 +296,25 @@ class TestPermissions:
         # question is hardcoded to deny, not configurable
         assert data["permission"]["question"] == "deny"
 
+    def test_task_is_always_allowed_and_not_configurable(self, tmp_path: Path) -> None:
+        """Issue #47: `task` must be hardcoded to allow — a user cannot deny it
+        (which would silently break parallel-agents/subagent workflows)."""
+        from dlab.create_dpack import CONFIGURABLE_PERMISSIONS
+
+        assert "task" not in {p[0] for p in CONFIGURABLE_PERMISSIONS}
+
+        config: dict[str, Any] = {
+            "name": "perm-task",
+            # Even if a caller tries to deny task, it must stay allowed.
+            "permissions": {"task": "deny"},
+            "skeletons": {"parallel_agents": True},
+        }
+        generate_dpack(tmp_path, config)
+        data: dict[str, Any] = json.loads(
+            (tmp_path / "perm-task" / "opencode" / "opencode.json").read_text()
+        )
+        assert data["permission"]["task"] == "allow"
+
 
 class TestSkeletonSubagents:
     """Tests for subagents skeleton (without parallel)."""
