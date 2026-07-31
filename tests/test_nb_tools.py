@@ -291,26 +291,27 @@ await finalize.execute({ notebook: NB })
                    else "".join(c["source"])) for c in cells) == 1  # not duplicated
 
 
-class TestComposerPrompt:
+class TestNotebookAgentPrompt:
     def test_prompt_file_exists_and_wires_tools(self) -> None:
-        p = AGENTS_DIR / "composer.md"
-        assert p.exists(), "dlab/agents/composer.md must exist"
+        p = AGENTS_DIR / "notebooks.md"
+        assert p.exists(), "dlab/agents/notebooks.md must exist"
         text = p.read_text()
         # frontmatter wires the nb-* tools + digest-get and denies edit/bash
         for t in NB_TOOLS + ["digest-get"]:
-            assert f"{t}: true" in text, f"composer prompt must enable {t}"
+            assert f"{t}: true" in text, f"notebook prompt must enable {t}"
         assert "bash: false" in text and "edit: false" in text
 
     def test_prompt_encodes_the_agreed_rules(self) -> None:
-        text = (AGENTS_DIR / "composer.md").read_text()
-        # composed-not-executed, digest-only, fit-then-load, tool-output
-        # reproduction (3->2->1), disclosure, preamble
-        for needle in ["composed", "digest-get", "long-running",
-                       "custom tool", "nb-note", "preamble", "attempts/"]:
-            assert needle in text, f"composer prompt missing: {needle}"
+        text = (AGENTS_DIR / "notebooks.md").read_text()
+        # never-invent-code, not-executed, digest-only, fit-then-load,
+        # tool-output reproduction, disclosure, preamble
+        for needle in ["NEVER invent code", "not executed", "digest-get",
+                       "long-running", "custom tool", "nb-note", "preamble",
+                       "attempts/"]:
+            assert needle in text, f"notebook prompt missing: {needle}"
 
     def test_prompt_is_dpack_agnostic(self) -> None:
         # generality is load-bearing: no hardcoded library/pack specifics
-        text = (AGENTS_DIR / "composer.md").read_text().lower()
+        text = (AGENTS_DIR / "notebooks.md").read_text().lower()
         for banned in ["mmm_lib", "pymc", "roas", "adstock", "sunrise"]:
-            assert banned not in text, f"composer prompt must stay general (found '{banned}')"
+            assert banned not in text, f"notebook prompt must stay general (found '{banned}')"
