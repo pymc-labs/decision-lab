@@ -46,6 +46,11 @@ DIGEST_GET_SOURCE: str = files("dlab.js").joinpath("digest-get.ts").read_text()
 
 _EXCERPT_LEN = 160
 _TASK_LEN = 240
+# Tools that navigate/inspect rather than produce durable output — shown as a
+# one-line count, not labeled rows (they never own an artifact).
+_NAV_TOOLS = {
+    "read", "glob", "list", "grep", "todowrite", "todoread", "webfetch",
+}
 # Work-dir entries that are session internals, not agent artifacts.
 _ROOT_SKIP = {
     "_opencode_logs", "_digest", "_docker", "_hooks", ".opencode",
@@ -74,7 +79,7 @@ class _AgentDigest:
     task_text: str | None                       # differentiating prompt (p0)
     task_line: int | None
     tool_counter: Counter                       # tool name -> n
-    script_runs: list[dict[str, Any]]           # bash calls
+    tool_calls: list[dict[str, Any]]            # every tool_use (with raw_ids)
     excerpts: list[tuple[str, str]]             # (id, truncated text)
     index: dict[str, dict[str, Any]]            # local ids -> pointer
     # attribution inputs (cross-agent pass fills ``artifacts`` from these)
@@ -168,14 +173,49 @@ def _digest_agent(qual: str, role: str, heading: str, log_path: Path,
     task_text: str | None = None
     task_line: int | None = None
     tool_counter: Counter = Counter()
-    script_runs: list[dict[str, Any]] = []
+    tool_calls: list[dict[str, Any]] = []
+    by_tid: dict[str, dict[str, Any]] = {}
     writes: dict[str, list[str]] = {}
     excerpts: list[tuple[str, str]] = []
     index: dict[str, dict[str, Any]] = {}
+    pending_raw: list[tuple[int, str]] = []
+    last_tid: str | None = None
+
+    def flush_raw() -> None:
+        # A run of consecutive raw_text lines (stdout/stderr the process emitted
+        # outside the tool events) becomes ONE r-id on the shared counter,
+        # indexed as a line range, and mapped to the most recent tool call.
+        nonlocal counter, last_tid
+        if not pending_raw:
+            return
+        counter += 1
+        rid = f"r{counter}"
+        first_ln, last_ln = pending_raw[0][0], pending_raw[-1][0]
+        texts = [t for _, t in pending_raw]
+        index[f"{qual}/{rid}"] = {
+            "log_file": log_rel, "line_no": first_ln, "line_end": last_ln,
+            "event_type": "raw_text",
+        }
+        is_err = any(t.startswith("[STDERR]") for t in texts)
+        tail = ""
+        for t in reversed(texts):
+            s = t.replace("[STDERR]", "").strip()
+            if s:
+                tail = _truncate(s, 80)
+                break
+        block = {"id": rid, "n_lines": len(texts),
+                 "stream": "stderr" if is_err else "stdout", "tail": tail}
+        if last_tid is not None and last_tid in by_tid:
+            by_tid[last_tid]["raw_ids"].append(block)
+        pending_raw.clear()
 
     for ie in indexed:
         ev = ie.event
         et = ev.event_type
+        if et == "raw_text":
+            pending_raw.append((ie.line_no, ev.part.get("text", "")))
+            continue
+        flush_raw()  # any structured event ends the current raw_text block
         if et == "dlab_start":
             model = ev.raw.get("model") or ev.part.get("model")
             prompt = ev.raw.get("prompt") or ev.part.get("prompt") or ""
@@ -198,8 +238,10 @@ def _digest_agent(qual: str, role: str, heading: str, log_path: Path,
             tool_count += 1
             name = get_tool_name(ev) or "?"
             tool_counter[name] += 1
-            if name == "bash":
-                script_runs.append(_script_run(tid, ev))
+            tc = _tool_call(tid, name, ev)
+            tool_calls.append(tc)
+            by_tid[tid] = tc
+            last_tid = tid
             if name in ("write", "edit"):
                 fp = (get_tool_input(ev) or {}).get("filePath")
                 if fp:
@@ -215,6 +257,7 @@ def _digest_agent(qual: str, role: str, heading: str, log_path: Path,
             txt = (get_text(ev) or "").strip()
             if txt:
                 excerpts.append((xid, _truncate(txt, _EXCERPT_LEN)))
+    flush_raw()  # trailing raw_text block
 
     ts = [ie.event.timestamp for ie in indexed if ie.event.timestamp]
     duration_s = (max(ts) - min(ts)) / 1000 if len(ts) > 1 else 0.0
@@ -227,37 +270,43 @@ def _digest_agent(qual: str, role: str, heading: str, log_path: Path,
         qual=qual, role=role, heading=heading, log_rel=log_rel,
         workdir_rel=workdir_rel, model=model, duration_s=duration_s, cost=cost,
         tool_count=tool_count, task_text=task_text, task_line=task_line,
-        tool_counter=tool_counter, script_runs=script_runs,
+        tool_counter=tool_counter, tool_calls=tool_calls,
         excerpts=excerpts, index=index, run_id=run_id, start_ts=start_ts,
         log_path=log_path, workdir_base=base, writes=writes,
         disk_files=disk_files, summary_ok=summary_ok,
     )
 
 
-def _script_run(tid: str, ev: LogEvent) -> dict[str, Any]:
+def _tool_call(tid: str, name: str, ev: LogEvent) -> dict[str, Any]:
+    """Capture one tool_use: label, status, time window (for artifact
+    provenance), and a fallback for its structured output (raw_text, when
+    present, is attached separately and preferred at render time)."""
+    from dlab.opencode_logparser import get_tool_output
     inp = get_tool_input(ev) or {}
     status = get_tool_status(ev)
     ok = status == "completed" and not get_tool_error(ev)
-    from dlab.opencode_logparser import get_tool_output
-    out = get_tool_output(ev) or ""
-    err = get_tool_error(ev) or ""
-    stream = err if err else out
-    n_lines = len(stream.splitlines()) if stream else 0
-    which = "stderr" if err else "stdout"
-    tail = ""
-    if stream:
-        last = stream.splitlines()[-1].strip()
-        tail = _truncate(last, 80)
-    start, end = None, None
+    if name == "bash":
+        summary = " ".join((inp.get("command") or inp.get("description") or "").split())
+    elif name in ("write", "edit"):
+        summary = _basename(inp.get("filePath") or "")
+    else:
+        raw_summary = inp.get("filePath") or inp.get("description") or inp.get("command") or ""
+        summary = " ".join(str(raw_summary).split())
+    start = end = None
     tt = ev.part.get("state", {}).get("time", {}) if isinstance(ev.part, dict) else {}
     if isinstance(tt, dict):
         start, end = tt.get("start"), tt.get("end")
     dur = (end - start) / 1000 if start and end else None
+    out = get_tool_output(ev) or ""
+    err = get_tool_error(ev) or ""
+    stream = err if err else out
     return {
-        "id": tid,
-        "cmd": inp.get("command") or inp.get("description") or "",
-        "ok": ok, "duration_s": dur, "stream": which,
-        "n_lines": n_lines, "tail": tail,
+        "id": tid, "name": name, "summary": summary, "ok": ok,
+        "status": status, "start": start, "end": end, "duration_s": dur,
+        "raw_ids": [],
+        "out_stream": "stderr" if err else "stdout",
+        "out_n_lines": len(stream.splitlines()) if stream else 0,
+        "out_tail": _truncate(stream.splitlines()[-1].strip(), 80) if stream else "",
     }
 
 
@@ -358,16 +407,62 @@ def _scan_mentions(log_path: Path, pattern: "re.Pattern | None") -> dict[str, in
     return mentions
 
 
+def _producing_call(mtime_ms: float, tool_calls: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The tool call whose [start, end] window contains the file's mtime — i.e.
+    the call that wrote it. Strict containment wins; a small grace catches
+    instant ops (a fast ``cp``) whose recorded window is sub-millisecond while
+    mtime is only second-granular. Navigational calls are excluded (they never
+    write). The latest-starting match wins (the final writer). Only used on files
+    already proven *produced*, so mtime cannot be misled by a copy.
+    """
+    grace = 2000  # ms
+    strict: dict[str, Any] | None = None
+    loose: dict[str, Any] | None = None
+    for tc in tool_calls:
+        if tc["name"] in _NAV_TOOLS:
+            continue
+        s, e = tc.get("start"), tc.get("end")
+        if s is None or e is None:
+            continue
+        if s <= mtime_ms <= e:
+            if strict is None or s >= strict["start"]:
+                strict = tc
+        elif s - grace <= mtime_ms <= e + grace:
+            if loose is None or s >= loose["start"]:
+                loose = tc
+    return strict or loose
+
+
+def _provenance(f: Path, name: str, agent: _AgentDigest) -> str | None:
+    """How this artifact was produced: the write/edit chain if a tool wrote it,
+    else the ``from tN`` call whose window contains its mtime (bash/custom/cp)."""
+    chain = agent.writes.get(name)
+    if chain:
+        return ", ".join(chain)
+    try:
+        mtime_ms = f.stat().st_mtime * 1000
+    except OSError:
+        return None
+    pc = _producing_call(mtime_ms, agent.tool_calls)
+    if pc is None:
+        return None
+    label = pc["name"]
+    if pc["summary"]:
+        label += f": {_truncate(pc['summary'], 40)}"
+    return f"from {pc['id']} ({label})"
+
+
 def _attribute_artifacts(agents: list[_AgentDigest], work_dir: Path) -> None:
-    """Fill each agent's ``artifacts`` list, dropping inherited copies.
+    """Fill each agent's ``artifacts`` list: link every file to the tool call
+    that produced it, and drop untouched inherited copies.
 
     A file ``f`` in agent ``A`` is *inherited* iff some agent **outside A's
     fan-out run** mentioned ``f``'s name **before A started** (chronology +
     sibling isolation — the later ``cp`` that lifts an instance's output to the
-    root cannot steal authorship, and isolated siblings cannot seed each other).
-    An inherited file is dropped only when it is byte-identical to the
-    workspace-root copy that seeded A; if A changed it, that is real derived
-    work and it is kept, flagged ``modified from inherited``.
+    root cannot steal authorship, and isolated siblings cannot seed each other)
+    AND the workspace root holds it at the same path. It is dropped only when
+    byte-identical to that seed; if A changed it, it is kept and flagged
+    ``modified from inherited`` (its edit/producing call is the provenance).
     """
     universe = {f.name for a in agents for f in a.disk_files}
     pattern = (
@@ -386,10 +481,6 @@ def _attribute_artifacts(agents: list[_AgentDigest], work_dir: Path) -> None:
             rel = str(f.relative_to(a.workdir_base))
             name = f.name
             seen.add(name)
-            # Inheritance needs BOTH: an external (non-sibling) agent named the
-            # file before A started (so it pre-existed A's work, not a basename
-            # collision with an independently-produced sibling/later file), AND
-            # the workspace-root seed actually holds it at the same path.
             foreign = [b.mentions[name] for b in agents
                        if b is not a and b.run_id != a.run_id
                        and name in b.mentions]
@@ -404,13 +495,13 @@ def _attribute_artifacts(agents: list[_AgentDigest], work_dir: Path) -> None:
             except OSError:
                 size = None
             arts.append({"path": rel, "size": size,
-                         "chain": a.writes.get(name), "note": note})
+                         "provenance": _provenance(f, name, a), "note": note})
         # Files written via tool but no longer on disk (renamed/deleted) keep
         # their provenance so the story isn't lost.
         for nm, chain in sorted(a.writes.items()):
             if nm not in seen:
-                arts.append({"path": nm, "size": None, "chain": chain,
-                             "note": None})
+                arts.append({"path": nm, "size": None,
+                             "provenance": ", ".join(chain), "note": None})
         a.artifacts = arts
 
 
@@ -528,43 +619,60 @@ def _render_agent(a: _AgentDigest, brief: bool) -> list[str]:
             bits: list[str] = []
             if art["size"] is not None:
                 bits.append(_human_size(art["size"]))
-            if art["chain"]:
-                bits.extend(art["chain"])
+            if art.get("provenance"):
+                bits.append(f"← {art['provenance']}")
             if art.get("note"):
                 bits.append(art["note"])
             meta = ", ".join(bits) if bits else "—"
             lines.append(f"- [a{i}] {art['path']} ({meta})")
         lines.append("")
 
-    if a.script_runs:
-        lines.append("**Script runs**")
-        for s in a.script_runs:
-            mark = "✓" if s["ok"] else "✗ error"
-            dur = f"{s['duration_s']:.0f}s" if s["duration_s"] is not None else ""
-            detail = f"{s['stream']} {s['n_lines']} lines" if s["n_lines"] else "no output"
-            if s["tail"]:
-                detail += f" — {s['tail']}"
-            # Full command verbatim (whitespace-collapsed to one line) — the
-            # composer needs the exact command that ran, not a preview.
-            cmd = " ".join(s["cmd"].split())
-            lines.append(f"- [{s['id']}] bash `{cmd}`  {mark}  {dur}  ({detail})")
-        lines.append("")
-
+    producing = [tc for tc in a.tool_calls if tc["name"] not in _NAV_TOOLS]
     if brief:
         counts = ", ".join(f"{k}×{v}" for k, v in a.tool_counter.most_common())
         if counts:
             lines.append(f"**Tool calls**: {counts}")
-    else:
-        other = {k: v for k, v in a.tool_counter.items() if k not in ("bash",)}
-        if other:
-            counts = ", ".join(f"{k}×{v}" for k, v in Counter(other).most_common())
-            lines.append(f"**Other tool calls**: {counts}")
+    elif producing:
+        lines.append("**Tool calls**")
+        for tc in producing:
+            lines.append("- " + _render_tool_call(tc))
+        nav = {k: v for k, v in a.tool_counter.items() if k in _NAV_TOOLS}
+        if nav:
+            counts = ", ".join(f"{k}×{v}" for k, v in Counter(nav).most_common())
+            lines.append(f"**Navigational**: {counts}")
 
     if a.excerpts:
         lines.append("**Reasoning excerpts**")
         for xid, txt in a.excerpts:
             lines.append(f"- [{xid}] \"{txt}\"")
     return lines
+
+
+def _render_tool_call(tc: dict[str, Any]) -> str:
+    """One labeled Tool-calls row, with its mapped raw_text stream(s)."""
+    row = f"[{tc['id']}] {tc['name']}"
+    if tc["summary"]:
+        row += f" `{tc['summary']}`" if tc["name"] == "bash" else f" {tc['summary']}"
+    # write/edit are instantaneous file ops — no status/stream to show.
+    if tc["name"] not in ("write", "edit"):
+        mark = "✓" if tc["ok"] else "✗ error"
+        dur = f"{tc['duration_s']:.0f}s" if tc["duration_s"] is not None else ""
+        row += f"  {mark}"
+        if dur:
+            row += f"  {dur}"
+    for blk in tc["raw_ids"]:
+        detail = f"{blk['stream']} {blk['n_lines']} ln"
+        if blk["tail"]:
+            detail += f" — {blk['tail']}"
+        row += f"  → {blk['id']} ({detail})"
+    # Fall back to the tool's structured output only when no raw_text mapped in,
+    # and never for write/edit (their output is just a "Wrote file" confirmation).
+    if not tc["raw_ids"] and tc["out_n_lines"] and tc["name"] not in ("write", "edit"):
+        detail = f"{tc['out_stream']} {tc['out_n_lines']} ln"
+        if tc["out_tail"]:
+            detail += f" — {tc['out_tail']}"
+        row += f"  ({detail})"
+    return row
 
 
 # ---------------------------------------------------------------------------

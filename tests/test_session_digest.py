@@ -164,7 +164,9 @@ class TestDigestRichFeatures:
         ]) + "\n")
         md, _ = build_digest(wd)
         assert f"`{long_cmd}`" in md
-        assert "…" not in md.split("**Script runs**", 1)[1].split("\n")[1]
+        cmd_row = next(l for l in md.splitlines()
+                       if "prepare_data.py" in l and "bash" in l)
+        assert "…" not in cmd_row  # command not truncated
 
     def test_brief_collapses_tool_tables(self, tmp_path: Path) -> None:
         wd = _rich_workdir(tmp_path)
@@ -300,6 +302,79 @@ class TestArtifactAttribution:
         assert "poem.txt" not in cons  # sibling's file, not the consolidator's
 
 
+class TestRawTextAndToolCalls:
+    def test_raw_text_gets_rid_range_and_maps_to_call(self, tmp_path: Path) -> None:
+        wd = tmp_path / "r"
+        logs = wd / "_opencode_logs"
+        logs.mkdir(parents=True)
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 1000, model="m", agent="main"),
+            _line("tool_use", 1100, part={"tool": "bash", "state": {
+                "status": "completed", "input": {"command": "python fit.py"},
+                "time": {"start": 1100, "end": 5100}}}),
+            "sampling chain 1 complete",
+            "sampling chain 2 complete",
+            "[STDERR] Traceback (most recent call last):",
+            "[STDERR] ValueError: boom",
+        ]) + "\n")
+        md, index = build_digest(wd)
+        # the raw_text block is one r-id, indexed as a line RANGE
+        rids = [k for k in index if k.startswith("main/r")]
+        assert len(rids) == 1
+        entry = index[rids[0]]
+        assert entry["event_type"] == "raw_text"
+        assert entry["line_end"] > entry["line_no"]
+        # the bash call row points at it, and a [STDERR] line marks it stderr
+        call_row = next(l for l in md.splitlines() if "python fit.py" in l)
+        assert "→ r" in call_row
+        assert "stderr" in call_row
+
+    def test_shared_counter_includes_raw_text(self, tmp_path: Path) -> None:
+        # r-ids share the per-agent counter with t/x (the numbering is time).
+        wd = tmp_path / "r"
+        logs = wd / "_opencode_logs"
+        logs.mkdir(parents=True)
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 1000, model="m", agent="main"),
+            _line("tool_use", 1100, part={"tool": "bash", "state": {
+                "status": "completed", "input": {"command": "x"},
+                "time": {"start": 1100, "end": 1200}}}),
+            "some stdout",
+            _line("text", 1300, part={"type": "text", "text": "done"}),
+        ]) + "\n")
+        _, index = build_digest(wd)
+        ids = {k.split("/")[1] for k in index if k != "main/p0"}
+        # bash=t1, its raw_text=r2, the text=x3 — consecutive on one counter
+        assert {"t1", "r2", "x3"} <= ids
+
+    def test_from_tool_call_provenance_via_mtime(self, tmp_path: Path) -> None:
+        import os
+        wd = tmp_path / "m"
+        logs = wd / "_opencode_logs"
+        logs.mkdir(parents=True)
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 1000, model="m", agent="main"),
+            _line("tool_use", 2000, part={"tool": "fit-model-modal", "state": {
+                "status": "completed", "input": {},
+                "time": {"start": 2000, "end": 8000}}}),
+        ]) + "\n")
+        f = wd / "fitted_model.nc"
+        f.write_text("x" * 100)
+        os.utime(f, (5.0, 5.0))  # mtime 5000ms, inside the call's [2000,8000]
+        md, _ = build_digest(wd)
+        row = next(l for l in md.splitlines()
+                   if "fitted_model.nc" in l and l.strip().startswith("- [a"))
+        assert "← from t1 (fit-model-modal)" in row
+
+    def test_custom_tools_labeled_not_just_bash(self, tmp_path: Path) -> None:
+        wd = _rich_workdir(tmp_path)  # bash + write + edit exist here
+        md, _ = build_digest(wd)
+        section = next(s for s in md.split("### ") if s.startswith("modeler.r1.i1"))
+        assert "**Tool calls**" in section
+        assert "write fit_model.py" in section  # write is a labeled row now
+        assert "**Navigational**" not in section or "read" in section
+
+
 def _have_node() -> bool:
     try:
         subprocess.run(["node", "--version"], capture_output=True, timeout=5)
@@ -313,6 +388,12 @@ class TestDigestGetTool:
         assert "_digest" in DIGEST_GET_SOURCE and "index.json" in DIGEST_GET_SOURCE
         assert "function renderPayload" in DIGEST_GET_SOURCE
         assert "function sliceText" in DIGEST_GET_SOURCE
+
+    def test_source_handles_raw_text_and_line_ranges(self) -> None:
+        # r-ids: reads a line range (line_no..line_end) and strips [STDERR].
+        assert "line_end" in DIGEST_GET_SOURCE
+        assert 'event_type === "raw_text"' in DIGEST_GET_SOURCE
+        assert "[STDERR]" in DIGEST_GET_SOURCE
 
     def test_runtime_render_and_slice(self, tmp_path: Path) -> None:
         if not _have_node():
