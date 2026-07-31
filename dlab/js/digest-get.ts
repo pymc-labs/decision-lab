@@ -11,12 +11,13 @@ const { join } = require("path")
 
 export default tool({
   description:
-    "Retrieve a single log element by its digest ID (the [tN]/[xN]/[rN]/[p0] ids in _digest/digest.md). " +
-    "IDs are fully qualified, e.g. 'main/t2', 'poet.r1.i2/x8', 'poet.r1.i2/r11'. Returns the decoded payload: " +
-    "for a tool call (tN) its input plus clean stdout/stderr; for a raw_text stream (rN) the verbatim " +
-    "stdout/stderr the run emitted — this is what you embed as a cell's stream output; for a text id (xN) " +
-    "the verbatim reasoning; for p0 the full prompt. Use head/tail/range to slice long output (e.g. a PyMC " +
-    "fit log) instead of paying for all of it.",
+    "Retrieve a single log element by its digest ID (the [tN]/[xN]/[rN]/[aN]/[p0] ids in _digest/digest.md). " +
+    "IDs are fully qualified, e.g. 'main/t2', 'poet.r1.i2/x8', 'poet.r1.i2/r11', 'poet.r1.i2/a5'. Returns the " +
+    "decoded payload: for a tool call (tN) its input plus clean stdout/stderr; for a raw_text stream (rN) the " +
+    "verbatim stdout/stderr the run emitted — this is what you embed as a cell's stream output; for a text id " +
+    "(xN) the verbatim reasoning; for a small artifact file (aN, e.g. a results .json/.csv/.md) its contents; " +
+    "for p0 the full prompt. Read the shape hint next to an artifact in the digest first, then use " +
+    "head/tail/range to slice instead of pulling the whole file.",
 
   args: {
     id: tool.schema.string().describe("Fully-qualified digest ID, e.g. 'poet.r1.i2/r11'"),
@@ -36,14 +37,23 @@ export default tool({
     const entry = index[id]
     if (!entry) return `ERROR: unknown digest id '${id}'`
 
-    let selected: string[]
+    let content: string
     try {
-      const content = readFileSync(join(cwd, entry.log_file), "utf-8").split("\n")
-      const end = entry.line_end ?? entry.line_no
-      selected = content.slice(entry.line_no - 1, end) // 1-based inclusive
+      content = readFileSync(join(cwd, entry.log_file), "utf-8")
     } catch {
       return `ERROR: cannot read ${entry.log_file}`
     }
+
+    // artifact: an id pointing at a small result file (json/csv/md) — return its
+    // whole content, sliced. The composer read the shape hint in the digest to
+    // decide it wanted this; head/tail/range keep it from over-reading.
+    if (entry.event_type === "artifact") {
+      return sliceText(content.replace(/\s+$/, ""), head, tail, range)
+    }
+
+    const lines = content.split("\n")
+    const end = entry.line_end ?? entry.line_no
+    const selected = lines.slice(entry.line_no - 1, end) // 1-based inclusive
 
     // raw_text: a block of plain stdout/stderr lines, no JSON. Strip the
     // [STDERR] markers so it reads as clean output ready to embed.

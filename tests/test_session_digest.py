@@ -442,6 +442,52 @@ class TestComposerFeedbackFixes:
         assert "NO consolidated_summary.md" not in md2
 
 
+def _artifacts_workdir(tmp_path: Path) -> Path:
+    wd = tmp_path / "art"
+    logs = wd / "_opencode_logs"
+    logs.mkdir(parents=True)
+    (logs / "main.log").write_text("\n".join([
+        _line("dlab_start", 1000, model="m", agent="main"),
+        _line("tool_use", 1100, part={"tool": "bash", "state": {
+            "status": "completed", "input": {"command": "python run.py"},
+            "output": "done", "time": {"start": 1100, "end": 3000}}}),
+    ]) + "\n")
+    (wd / "metrics.json").write_text(json.dumps({"r2": 0.84, "mape": 9.3, "ess": 965}))
+    (wd / "roas.csv").write_text("channel,roas\nEmail,25.5\nSearch,11.0\n")
+    (wd / "report.md").write_text("# Big Title\n\nsome text\nmore\n")
+    (wd / "model.nc").write_bytes(b"\x00" * 100)      # binary ext → not indexed
+    (wd / "huge.txt").write_text("x\n" * 40000)        # >32KB text → not indexed
+    return wd
+
+
+class TestArtifactRetrieval:
+    def test_shapes_rendered(self, tmp_path: Path) -> None:
+        md, _ = build_digest(_artifacts_workdir(tmp_path))
+        rows = {l.split("]")[1].split("(")[0].strip(): l
+                for l in md.splitlines() if l.strip().startswith("- [a")}
+        assert "keys: r2, mape, ess" in rows["metrics.json"]
+        assert "cols: channel, roas; 2 rows" in rows["roas.csv"]
+        assert "lines — Big Title" in rows["report.md"]
+
+    def test_small_text_indexed_big_and_binary_excluded(self, tmp_path: Path) -> None:
+        _, index = build_digest(_artifacts_workdir(tmp_path))
+        paths = {v["log_file"] for v in index.values()
+                 if v["event_type"] == "artifact"}
+        assert {"metrics.json", "roas.csv", "report.md"} <= paths
+        assert "model.nc" not in paths   # binary extension
+        assert "huge.txt" not in paths   # over the 32KB cap
+
+    def test_artifact_index_points_to_readable_file(self, tmp_path: Path) -> None:
+        wd = _artifacts_workdir(tmp_path)
+        _, index = build_digest(wd)
+        entry = next(v for v in index.values()
+                     if v["event_type"] == "artifact" and v["log_file"] == "roas.csv")
+        assert "channel,roas" in (wd / entry["log_file"]).read_text()
+
+    def test_digest_get_source_handles_artifacts(self) -> None:
+        assert 'event_type === "artifact"' in DIGEST_GET_SOURCE
+
+
 def _have_node() -> bool:
     try:
         subprocess.run(["node", "--version"], capture_output=True, timeout=5)

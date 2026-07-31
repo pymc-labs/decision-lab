@@ -250,7 +250,9 @@ Outputs written into the workdir:
   line_end?, event_type}`. **Thin index** (pointers, not payloads): a fat index
   storing extracted payloads would duplicate log content on disk. `line_end` is
   present for multi-line payloads — a `raw_text` block, or a `tool_use` whose
-  mapped raw_text stream extends past its own line.
+  mapped raw_text stream extends past its own line. For a small text artifact
+  (`event_type: "artifact"`), `log_file` points at the artifact file itself and
+  `digest-get` returns its contents — still a pointer, not a stored payload.
 
 ### 7.1 Digest format
 
@@ -289,8 +291,17 @@ captured.
 
 Artifact IDs (`a1`, `a2`, …) and the Task ID (`p0`) are per-agent and off the
 event counter (files/prompts are not events); their provenance is expressed
-through event IDs. Fully-qualified form for retrieval: `<agent-path>/<id>`,
-e.g. `main/t17`, `poet.r2.i2/r4`.
+through event IDs. **Small text artifacts (`.json/.csv/.md/.txt/.yaml` under
+32KB) are retrievable** — `digest-get <agent>/a5` returns the file's contents,
+sliced — and the digest shows a deterministic **shape hint** next to each so the
+composer decides *whether* and *which slice* to pull before spending context:
+JSON → top-level keys, CSV → header columns + row count, text → line count +
+first heading. Big/binary artifacts (`.nc`, `.png`, `.pkl`) stay pure pointers
+(size only, not retrievable). This closes a gap found in the composer experiment
+(§7.4): the per-instance result files — each non-adopted modeler's
+`analysis_summary.json`/`roas.csv` — were otherwise unreadable, forcing the
+composer to trust the orchestrator's transcription. Fully-qualified retrieval
+form: `<agent-path>/<id>`, e.g. `main/t17`, `poet.r2.i2/r4`, `poet.r2.i2/a5`.
 
 **Task field** (per agent section, required): the *differentiating* portion of
 the agent's prompt — for parallel instances, the orchestrator-supplied prompt
@@ -412,8 +423,9 @@ host-side Python indexer):
 - Behavior: look up ID in `_digest/index.json` → read the referenced NDJSON
   line(s), `line_no..line_end` → render the payload for the event type:
   `t`-ids → tool input + structured output **plus the mapped raw_text block**;
-  `r`-ids → the raw_text block verbatim; `x`-ids → the verbatim text — all
-  **decoded** (clean stdout/stderr, not escaped JSON) → slice.
+  `r`-ids → the raw_text block verbatim; `x`-ids → the verbatim text;
+  `a`-ids → the small text artifact's contents — all **decoded** (clean
+  stdout/stderr, not escaped JSON) → slice.
 - Why slicing is required: a PyMC fit's raw_text can be thousands of lines; the
   composer grabs `digest-get poet.r2.i2/r11 --tail 15` for a traceback without
   paying for sampler progress. (It is also how the composer pulls a cell's
@@ -436,6 +448,35 @@ run-grouping-by-agent-name, artifact discovery), currently duplicated in
 timeline.py and session_data.py and now needed a third time. Plan: digest ships
 first computing its own stats; lifting shared helpers into the parser layer is
 an **incremental, non-blocking** follow-up (§11.4).
+
+### 7.4 Validation: the composer experiment (2026-07-31)
+
+Before building the composer step, an LLM agent was given the digest of a real
+completed run (`dlab-mmm-agent-oc-workdir-008`, 8 agents) plus `digest-get`, and
+asked to compose the overview + adopted-path notebooks **from the digest alone —
+forbidden from reading raw logs**. It succeeded: it identified the adopted model
+(via the `cp`-provenance on `best_model.nc` + a size match), narrated the failed
+instance and the retry/fix arcs, and inlined the adopted path in fit-then-load
+order. So the format is LLM-legible. Its critique drove concrete digest fixes,
+all now shipped:
+
+- **Custom-tool input signatures** — `fit-model-modal`/`analyze-model`/
+  `optimize-budget` rows show `{key=value, …}` (the reproducible call args),
+  paths keeping their filename end. Previously invisible until retrieved.
+- **Error-preview tails keep the line's END** (the exception / offending key),
+  not the head.
+- **A consolidator that wrote no `consolidated_summary.md` is flagged failed**,
+  like a summary-less modeler.
+- **LSP/type-checker diagnostics are stripped** from tool output in both the
+  digest and `digest-get`.
+- **Small text artifacts became retrievable with shape hints** (this §7.1 point)
+  — the single highest-value gap it named.
+
+One finding was *not* a digest bug and was filed against the mmm dpack (issue
+#88): the orchestrator proposed a degenerate modeling plan ("channel-specific
+adstock" is PyMC-Marketing's default, so it duplicated the baseline). The digest
+surfaced the raw material correctly; recognizing the equivalence is the
+composer's analytical job, and in the experiment it did.
 
 ## 8. Composer agent environment
 

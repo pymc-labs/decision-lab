@@ -56,6 +56,11 @@ _ROOT_SKIP = {
     "_opencode_logs", "_digest", "_docker", "_hooks", ".opencode",
     "parallel", "data", ".state.json", ".git",
 }
+# Small text artifacts get a retrievable id + a shape hint; bigger/binary ones
+# stay pointers (size only). The composer reads the shape to decide whether/what
+# to pull, then digest-get slices it — nothing lands in context unasked.
+_ARTIFACT_TEXT_EXT = {".json", ".csv", ".tsv", ".md", ".txt", ".yaml", ".yml"}
+_ARTIFACT_MAX_BYTES = 32 * 1024
 
 
 @dataclass
@@ -471,6 +476,50 @@ def _provenance(f: Path, name: str, agent: _AgentDigest) -> str | None:
     return f"from {pc['id']} ({label})"
 
 
+def _artifact_shape(path: Path, size: int | None) -> tuple[str | None, bool]:
+    """A cheap, deterministic 'what's in this file' hint for small text
+    artifacts, plus whether it should be retrievable. JSON → top-level keys,
+    CSV/TSV → header columns + row count, text → line count + first heading.
+    Returns (shape_or_None, retrievable). Big/binary files are neither."""
+    if (size is None or size > _ARTIFACT_MAX_BYTES
+            or path.suffix.lower() not in _ARTIFACT_TEXT_EXT):
+        return None, False
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None, False
+    ext = path.suffix.lower()
+    n_lines = len(text.splitlines())
+    if ext == ".json":
+        try:
+            obj = json.loads(text)
+        except json.JSONDecodeError:
+            return f"{n_lines} lines", True
+        if isinstance(obj, dict):
+            keys = list(obj.keys())
+            shown = ", ".join(str(k) for k in keys[:8])
+            shape = f"keys: {shown}" + (" …" if len(keys) > 8 else "")
+        elif isinstance(obj, list):
+            shape = f"array of {len(obj)}"
+        else:
+            shape = "scalar"
+    elif ext in (".csv", ".tsv"):
+        sep = "\t" if ext == ".tsv" else ","
+        rows = text.splitlines()
+        header = rows[0].split(sep) if rows else []
+        shown = ", ".join(h.strip() for h in header[:8])
+        shape = f"cols: {shown}" + (" …" if len(header) > 8 else "") + f"; {max(0, len(rows) - 1)} rows"
+    else:  # md / txt / yaml
+        head = ""
+        for line in text.splitlines():
+            s = line.strip()
+            if s:
+                head = _truncate(s.lstrip("#").strip(), 50)
+                break
+        shape = f"{n_lines} lines" + (f" — {head}" if head else "")
+    return shape, True
+
+
 def _attribute_artifacts(agents: list[_AgentDigest], work_dir: Path) -> None:
     """Fill each agent's ``artifacts`` list: link every file to the tool call
     that produced it, and drop untouched inherited copies.
@@ -514,13 +563,29 @@ def _attribute_artifacts(agents: list[_AgentDigest], work_dir: Path) -> None:
             except OSError:
                 size = None
             arts.append({"path": rel, "size": size,
-                         "provenance": _provenance(f, name, a), "note": note})
+                         "provenance": _provenance(f, name, a), "note": note,
+                         "_file": f})
         # Files written via tool but no longer on disk (renamed/deleted) keep
         # their provenance so the story isn't lost.
         for nm, chain in sorted(a.writes.items()):
             if nm not in seen:
                 arts.append({"path": nm, "size": None,
-                             "provenance": ", ".join(chain), "note": None})
+                             "provenance": ", ".join(chain), "note": None,
+                             "_file": None})
+        # Assign a-ids in render order; give small text artifacts a shape hint
+        # and a retrievable index entry (digest-get reads the file, sliced).
+        for i, art in enumerate(arts, start=1):
+            f = art.pop("_file")
+            if f is None:
+                art["shape"] = None
+                continue
+            shape, retrievable = _artifact_shape(f, art["size"])
+            art["shape"] = shape
+            if retrievable:
+                a.index[f"{a.qual}/a{i}"] = {
+                    "log_file": _rel(f, work_dir), "line_no": 1,
+                    "event_type": "artifact",
+                }
         a.artifacts = arts
 
 
@@ -643,6 +708,8 @@ def _render_agent(a: _AgentDigest, brief: bool) -> list[str]:
             bits: list[str] = []
             if art["size"] is not None:
                 bits.append(_human_size(art["size"]))
+            if art.get("shape"):
+                bits.append(art["shape"])
             if art.get("provenance"):
                 bits.append(f"← {art['provenance']}")
             if art.get("note"):
