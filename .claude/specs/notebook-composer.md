@@ -36,13 +36,22 @@ generate_jupyter_notebooks_from_run: true   # default: false. Descriptive name c
                                             # deliberately over a terse `notebooks:` key.
 
 models:
-  composer: anthropic/claude-haiku-4-5      # optional role; falls back to default_model.
+  notebooks: anthropic/claude-sonnet-4-5    # optional role; falls back to default_model.
                                             # Rides the existing models: role mechanism
                                             # introduced for forecaster/consolidator (#34).
 ```
 
-v1 surface is deliberately minimal: on/off + model role. Per-dpack composer
-hints ("always show the adstock curves"), output-directory config, etc. are
+> **As-built note (2026-08-01):** the model role is `models.notebooks` (not
+> `models.composer` — the whole feature was renamed away from the ambiguous
+> "compose"/"composer" verb; see §8.5). `resolve_model_roles()` returns a
+> `notebooks` key. The config *flag* `generate_jupyter_notebooks_from_run` is
+> **not yet wired** — the step currently exists only as the standalone
+> `dlab notebooks` command (§8.5). Empirically, Sonnet is a good grounded default
+> (~$2.6/run); Opus is more thorough (~$8.8/run); a cheap flash model works but
+> narrates less. So the example default is Sonnet, not Haiku.
+
+v1 surface is deliberately minimal: on/off + model role. Per-dpack hints
+("always show the adstock curves"), output-directory config, etc. are
 explicitly deferred.
 
 ## 3. Placement in the run lifecycle (decided, with reasoning)
@@ -539,6 +548,70 @@ composer's analytical job, and in the experiment it did.
 - The composer reads freely (digest, summaries, reports, scripts) but composes
   exclusively through tools.
 
+## 8.5 As-built: the `dlab notebooks` step (2026-08-01)
+
+Built and validated end-to-end on `dlab-mmm-agent-oc-workdir-008`, on the
+`feat/composer-step` branch (dev branch stacked on #87 + #89). Deltas from the
+spec above:
+
+- **Everything renamed away from "compose"/"composer"** (Ben: too ambiguous).
+  Command **`dlab notebooks WORK_DIR [--model] [--dpack] [--env-file]`**; module
+  `dlab/notebooks.py`; `generate_notebooks()`; agent `dlab/agents/notebooks.md`
+  run via `--agent notebooks`; config role `models.notebooks`. "notebook agent",
+  not "composer".
+- **Standalone command first** (Ben's call), so it can be driven from the CLI for
+  testing before the run-lifecycle wiring. Resolves the model from `--model` else
+  the dpack's `models.notebooks`; warns when no `--dpack` is given (the pack's
+  library isn't importable → figures reproduce only coarsely, imports can't be
+  validated). Persists the opencode run to `_notebooks.log` for diagnosis.
+- **Robustness fixes found by running on Anthropic (Gemini masked them all):**
+  1. *Tool isolation* — opencode loads every `.opencode/tools/*.ts` and sends all
+     schemas to the model; Anthropic rejects the dpack's unrelated tool schemas
+     and 500s. `notebooks.py` moves the dpack tools aside for the run (only the
+     `nb-*` + `digest-get` load) and `generate_digest` copies the custom-tool
+     sources into `_digest/tool_sources/` so `digest-get` still reads them.
+  2. *Curated subprocess env* — forwarding the full host env (and whole
+     `--env-file`) broke opencode's provider request opaquely; only base vars +
+     provider API keys are forwarded now (same lesson as the #56 env leak).
+  3. *Retry with backoff* — transient provider 500s left no notebooks; retries up
+     to 3× with backoff.
+- **The `notebooks.md` prompt now hard-forbids inventing code** (this replaced the
+  softer "verbatim from scripts" guidance). Motivation: a real run had retrieved
+  only 8 elements but written 41 code cells — most model code was reconstructed
+  from the model's own library knowledge (right params, invented code). The rule:
+  **every code cell must come from a retrieval** (a `write`/`edit` `tN` script, a
+  bash command, or a custom-tool invocation from its source); the only allowed
+  edit is a *slight* adaptation to run in a cell; if the real code isn't in the
+  digest, reproduce the tool invocation and disclose via `nb-note` — never
+  fabricate a body. After this, both Sonnet and Opus inline the **verbatim**
+  scripts (confirmed: the real `#!/usr/bin/env python3` header + the run's own
+  helper functions appear in the cells).
+
+### 8.5.1 OPEN — the reproduction-depth gap (the current live problem)
+
+The `3→2→1` degradation only reaches level 1 (the CLI invocation, e.g.
+`!python -m mmm_lib.analyze_model_cli …`) because the composer **cannot reach the
+dpack library's source**: the run's workdir has only the tool *wrapper*
+(`fit-model-modal.ts`, which itself shells out to `python -m mmm_lib.MOD`), and
+`mmm_lib` is not installed in a local run. The real library source **exists in
+the dpack** (`decision-packs/mmm/docker/mmm_lib/{fit_model_modal,analyze_model_cli}.py`)
+— it was just never exposed to the agent.
+
+**Proposed fix (general, not `mmm_lib`-specific):** when `--dpack` is given, copy
+the pack's library source (it ships under `docker/`) into a readable spot in the
+workdir (e.g. `_dpack_source/`) and tell the agent in the prompt: "if a custom
+tool shells out to `python -m LIB.MOD`, its real source is under
+`_dpack_source/LIB/MOD.py` — read it and inline the actual code (level 2/3), not
+the CLI call." Clean up after.
+
+**Honest nuance to preserve (per-step):** the *analysis* tool is local plotting
+(`az.plot_*`) and genuinely benefits from inlining the real code; the *fit* tool
+runs remotely **on Modal**, so inlining its body would fabricate a local fit that
+never happened — its faithful representation is the invocation + a note. The rule
+stays "reproduce at the deepest *faithful* level," not "always level 3." **Ben
+still owes a decision on whether the Modal fit should stay an invocation or inline
+`fit_model_modal.py` (Modal setup and all).**
+
 ## 9. Implementation map — where what changes
 
 New files:
@@ -546,7 +619,7 @@ New files:
 | Path | Contents |
 |---|---|
 | `dlab/session_digest.py` | Digest + index generation on top of `opencode_logparser` (`build_session_graph`, `parse_log_file`, tool/text/cost getters). Groups runs by agent name; shared per-agent event counter; artifact write chains from write/edit inputs; `--brief` flag as function arg. |
-| `dlab/composer.py` | Orchestrates the composer step: generate digest, materialize composer env into workdir, launch `opencode run` (container via `exec_command`/`run_opencode`, or host in `--no-sandboxing` mode), collect/validate results, emit warnings. |
+| `dlab/notebooks.py` (renamed from `composer.py`) | Orchestrates the notebook step: generate digest, materialize the notebook agent env into the workdir, **isolate the dpack tools** (§8.5), launch `opencode run --agent notebooks` with a **curated env** and **retry** (host/local today; container is the deferred full-fidelity path), collect/validate, emit warnings. Exposed as `dlab notebooks`. |
 | `dlab/notebook_validation.py` | Host-side validation (§5): nbformat schema, ast.parse, path existence, import check via container exec. |
 | `dlab/agents/composer.md` | Composer system-prompt template (package data; new `dlab/agents/` package-data dir, registered in pyproject like `js/`). |
 | `dlab/js/nb_tools/*.ts` (or flat in `js/`) | `nb-add-markdown-cell`, `nb-add-code-cell`, `nb-edit-cell`, `nb-read`, `nb-finalize`, `digest-get` (package data). |
@@ -584,8 +657,13 @@ Changed files:
 
 ## 11. Explicitly deferred (do not build in v1)
 
-1. `dlab notebooks <work-dir>` retrofit subcommand for completed sessions
-   (design keeps it possible; not in v1).
+1. ~~`dlab notebooks <work-dir>` retrofit subcommand for completed sessions.~~
+   **Built** (2026-08-01, §8.5) — Ben asked for it first, as the standalone way
+   to drive and test the step from the CLI. What is still deferred is the
+   *automatic* post-orchestrator hook gated by
+   `generate_jupyter_notebooks_from_run` (the config flag is unwired), and
+   running the step **inside the dpack container** for full-fidelity reproduction
+   (§8.5.1) — the current command runs opencode locally.
 2. Level C: `dlab notebooks --execute` with `long-running` skipping.
 3. Per-dpack composer hints / output-dir config.
 4. Derived-stats layer refactor (timeline + viewer + digest sharing rollups).
