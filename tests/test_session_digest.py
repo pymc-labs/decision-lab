@@ -541,6 +541,74 @@ class TestCustomToolSource:
         assert srcs and all(s == "_digest/tool_sources/analyze-thing.ts" for s in srcs)
 
 
+class TestCodeMapResolution:
+    """With a --dpack, the digest resolves a custom tool to the REAL library code
+    it ran (via the pack's code map) instead of the thin .ts wrapper."""
+
+    def _pack_and_workdir(self, tmp_path: Path) -> tuple[Path, Path]:
+        dpack = tmp_path / "pack"
+        tools = dpack / "opencode" / "tools"
+        tools.mkdir(parents=True)
+        tool_ts = (
+            'import { tool } from "@opencode-ai/plugin"\n'
+            "export default tool({\n"
+            "  args: { model_path: tool.schema.string() },\n"
+            "  async execute(args) {\n"
+            "    await Bun.$`python -m mypkg.analyze ${args.model_path}`.nothrow()\n"
+            "  },\n})\n"
+        )
+        (tools / "analyze-thing.ts").write_text(tool_ts)
+        pkg = dpack / "docker" / "mypkg"
+        pkg.mkdir(parents=True)
+        (pkg / "__init__.py").write_text("")
+        (pkg / "analyze.py").write_text(
+            "import argparse\n"
+            "from mypkg.core import do_the_analysis\n"
+            "def main():\n"
+            "    p = argparse.ArgumentParser(); p.add_argument('model_path')\n"
+            "    a = p.parse_args(); do_the_analysis(a.model_path)\n"
+            "if __name__ == '__main__':\n    main()\n"
+        )
+        (pkg / "core.py").write_text(
+            "def do_the_analysis(path):\n"
+            "    print('REAL ANALYSIS CODE for', path)\n"
+        )
+
+        wd = tmp_path / "w"
+        logs = wd / "_opencode_logs"
+        logs.mkdir(parents=True)
+        wtools = wd / ".opencode" / "tools"
+        wtools.mkdir(parents=True)
+        (wtools / "analyze-thing.ts").write_text(tool_ts)
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 1000, model="m", agent="main"),
+            _line("tool_use", 1100, part={"tool": "analyze-thing", "state": {
+                "status": "completed", "input": {"model_path": "m.nc"},
+                "time": {"start": 1100, "end": 1200}}}),
+        ]) + "\n")
+        return dpack, wd
+
+    def test_resolved_library_code_replaces_wrapper(self, tmp_path: Path) -> None:
+        dpack, wd = self._pack_and_workdir(tmp_path)
+        out = generate_digest(wd, dpack=dpack)
+        resolved = out / "tool_sources" / "analyze-thing.py"
+        assert resolved.is_file()
+        body = resolved.read_text()
+        assert "def do_the_analysis" in body            # the real work function
+        assert "REAL ANALYSIS CODE" in body
+        assert "resolved from the decision-pack library" in body  # the header
+        # the .ts wrapper is NOT what the pointer resolves to anymore
+        index = json.loads((out / "index.json").read_text())
+        srcs = [v["tool_source"] for v in index.values() if v.get("tool_source")]
+        assert srcs and all(s.endswith("analyze-thing.py") for s in srcs)
+
+    def test_without_dpack_falls_back_to_wrapper(self, tmp_path: Path) -> None:
+        _, wd = self._pack_and_workdir(tmp_path)
+        out = generate_digest(wd)  # no dpack → no resolution
+        assert (out / "tool_sources" / "analyze-thing.ts").is_file()
+        assert not (out / "tool_sources" / "analyze-thing.py").exists()
+
+
 def _have_node() -> bool:
     try:
         subprocess.run(["node", "--version"], capture_output=True, timeout=5)

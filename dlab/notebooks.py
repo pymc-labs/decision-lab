@@ -201,17 +201,17 @@ def generate_notebooks(
         )
     if dpack is None:
         warnings.append(
-            "No decision-pack given: the notebook agent runs without the pack's "
-            "environment. The library its tools call (e.g. what produces the "
-            "figures) will not be importable, so figures can only be reproduced "
-            "at a coarse level and imports cannot be validated. Pass --dpack for "
-            "full fidelity."
+            "No decision-pack given: the digest cannot resolve the real code a "
+            "custom tool ran (its code map needs the pack's library source), so "
+            "tool-generated outputs reproduce only at the CLI-invocation level. "
+            "Pass --dpack for full fidelity."
         )
 
-    # Digest first (it copies custom-tool sources into _digest/tool_sources/),
-    # then materialize the notebook agent's tools, then isolate them from the dpack's
-    # tools so a strict provider doesn't choke on unrelated tool schemas.
-    generate_digest(work_dir)
+    # Digest first — with the dpack, it resolves each custom tool to the REAL
+    # library code (via the pack's code map) into _digest/tool_sources/; then
+    # materialize the notebook agent's tools and isolate them from the dpack's so a
+    # strict provider doesn't choke on unrelated tool schemas.
+    generate_digest(work_dir, dpack=dpack)
     (work_dir / "notebooks").mkdir(exist_ok=True)
     added = materialize_notebook_env(work_dir)
     moved = _isolate_notebook_tools(work_dir)

@@ -511,3 +511,13 @@ def write_code_map(dpack: str | Path) -> Path:
     dest = dpack / CODE_MAP_FILENAME
     dest.write_text(json.dumps(code_map, indent=2) + "\n", encoding="utf-8")
     return dest
+
+
+def load_code_map(dpack: str | Path) -> dict[str, Any]:
+    """Load a pack's committed ``code_map.json`` (what ships with the pack); build
+    it on the fly if none is committed yet."""
+    dpack = Path(dpack).resolve()
+    p = dpack / CODE_MAP_FILENAME
+    if p.is_file():
+        return json.loads(_read(p))
+    return build_code_map(dpack)

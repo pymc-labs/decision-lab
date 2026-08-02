@@ -798,17 +798,59 @@ def _render_tool_call(tc: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def generate_digest(work_dir: str | Path, *, brief: bool = False) -> Path:
+def _resolved_tool_code(dpack: str | Path) -> dict[str, str]:
+    """For each custom tool the pack's code map resolves, the REAL level-2 code it
+    ran (the library work function's source, reached through a remote dispatch when
+    applicable), with a header telling the composer what it is and how to inline it.
+    Keyed by tool name (the ``.ts`` stem). Tools that don't resolve are absent —
+    the digest then falls back to the tool's TS wrapper.
+    """
+    from dlab.dpack_codemap import load_code_map, resolve_entry_code
+
+    code_map = load_code_map(dpack)
+    out: dict[str, str] = {}
+    for tool_name, entry in code_map.get("tools", {}).items():
+        einfo = entry.get("entry")
+        if not einfo:
+            continue
+        code = resolve_entry_code(dpack, einfo)
+        if not code:
+            continue
+        header = [
+            f"# The actual code the `{tool_name}` tool ran, resolved from the "
+            "decision-pack library.",
+            f"# Level-2 entry: {einfo['function']} in {einfo['defined_in']}.",
+        ]
+        if einfo.get("reached_through") == "dispatch":
+            header.append(
+                "# NOTE: this executed remotely (a dispatched call). Inline it to "
+                "run locally, tag the cell long-running, and disclose with nb-note "
+                "that it ran remotely.")
+        header.append(
+            "# Inline this (adapt slightly for a cell); the tool was invoked with "
+            "the args shown in the call above.")
+        out[tool_name] = "\n".join(header) + "\n\n" + code
+    return out
+
+
+def generate_digest(
+    work_dir: str | Path, *, brief: bool = False, dpack: str | Path | None = None,
+) -> Path:
     """
     Write ``_digest/digest.md`` and ``_digest/index.json`` into ``work_dir``.
 
-    Custom-tool sources are copied into ``_digest/tool_sources/`` and the index's
-    ``tool_source`` pointers are rewritten to them. This makes the digest
+    Custom-tool code is materialized into ``_digest/tool_sources/`` and the index's
+    ``tool_source`` pointers are rewritten to it. This makes the digest
     self-contained (retrieval no longer depends on ``.opencode/tools/``) and —
     crucially — lets the composer read a tool's code WITHOUT that tool being
     loaded as an active tool: a strict provider (e.g. Anthropic) rejects the
     schemas of the dpack's unrelated tools, so the composer runs with only its
     own tools while still reproducing what the dpack tools ran.
+
+    When ``dpack`` is given, each custom tool the pack's code map resolves gets the
+    REAL library code it ran (the level-2 entry function, reached through a remote
+    dispatch when applicable) instead of the thin ``.ts`` wrapper — so the composer
+    inlines the genuine code deterministically rather than a bare CLI invocation.
 
     Returns the path to the digest directory.
     """
@@ -817,19 +859,28 @@ def generate_digest(work_dir: str | Path, *, brief: bool = False) -> Path:
     out_dir = work_dir / DIGEST_DIR
     out_dir.mkdir(exist_ok=True)
 
+    resolved = _resolved_tool_code(dpack) if dpack else {}
     src_dir = out_dir / "tool_sources"
-    copied: set[str] = set()
+    written: set[str] = set()
     for entry in index.values():
         ts = entry.get("tool_source")
         if not ts:
             continue
-        name = Path(ts).name
-        if name not in copied:
-            src = work_dir / ts
-            if src.is_file():
+        stem = Path(ts).stem  # e.g. "analyze-model"
+        if stem in resolved:
+            name = f"{stem}.py"  # the resolved library code
+            if name not in written:
                 src_dir.mkdir(exist_ok=True)
-                shutil.copy(src, src_dir / name)
-            copied.add(name)
+                (src_dir / name).write_text(resolved[stem], encoding="utf-8")
+                written.add(name)
+        else:
+            name = Path(ts).name  # fall back to the TS wrapper
+            if name not in written:
+                src = work_dir / ts
+                if src.is_file():
+                    src_dir.mkdir(exist_ok=True)
+                    shutil.copy(src, src_dir / name)
+                written.add(name)
         entry["tool_source"] = f"{DIGEST_DIR}/tool_sources/{name}"
 
     (out_dir / "digest.md").write_text(md, encoding="utf-8")

@@ -30,7 +30,7 @@ A data-science run just finished. Your job is to turn it into Jupyter notebooks 
 Where the code comes from:
 - A **script that actually ran** — the verbatim content of a `write`/`edit` tool call (`digest-get <agent>/tN`). This is your primary source: for every code cell you inline, retrieve the write/edit `tN` that produced that file and copy its code.
 - A **bash command** that ran (`digest-get <agent>/tN`).
-- A **custom tool's invocation**, reconstructed from the tool's own source (see "Tool-generated outputs") — used only when no script holds the code, because the code lived inside the tool.
+- A **custom tool's real code** — for a `(custom)` call, `digest-get <agent>/tN` returns the decision-pack library's actual work function, resolved for you as verbatim source (see "Tool-generated outputs"). You inline that; you never reconstruct it.
 
 The ONLY change you may make to retrieved code is to adapt it *slightly* so it runs in a notebook cell: fix a relative path, split one script into cells in dependency order, drop an `if __name__ == "__main__"` guard, or add an `Image(...)` display for a figure. You may **not** add logic, fill in a step you did not find, "clean up", or complete a partial snippet. If the real code for something is genuinely not in the digest, do **not** fabricate a body — reproduce the tool invocation that made it (below) and disclose it with `nb-note`. When in doubt, retrieve more; never guess.
 
@@ -93,19 +93,18 @@ Keep the notebook runnable in principle. For an expensive step (e.g. a model fit
 <result> = <load>("<path>")
 ```
 
-## Tool-generated outputs — reproduce the invocation, never the body
+## Tool-generated outputs — the real code is handed to you; inline it
 
-Many outputs — figures, result files — were **not** produced by a script the agent wrote. They were produced by a **custom tool** (in the digest its call is flagged `(custom)`, and its implementation is retrievable). There is no script code to copy; the code lived inside the tool. Do **not** invent a body that "would" make the figure. Instead:
+Many outputs — figures, result files — were produced by a **custom tool** (flagged `(custom)` in the digest), not by a script the agent wrote. You do **not** reconstruct or reimplement them, and you do **not** guess: for a custom tool, `digest-get <agent>/tN` returns the tool call **and the real code it ran** — the decision-pack library's actual work function, resolved for you as verbatim source, headed by a comment saying what it is. So:
 
 1. Find the tool call that produced the output (`← from tN` in the digest).
-2. `digest-get` that `tN` — for a custom tool it returns both the call **and the code the tool ran** (its implementation).
-3. Read that implementation and reproduce the **invocation** at the deepest level you can afford:
-   - **Best** — import the library the tool calls and use the granular function for *this specific output* (one readable cell per figure).
-   - **Otherwise** — call the top-level library function the tool invoked (one cell regenerates the whole batch of outputs).
-   - **Otherwise** (the tool wraps a non-modular script or CLI with no importable API) — reproduce the exact command the tool ran.
+2. `digest-get` that `tN` — read the resolved function source it returns (and the call's recorded input args).
+3. **Inline that function's body** into a cell, adapting only slightly: substitute the tool's recorded input args for the function's parameters, keep the logic verbatim, persist/display the output. One readable cell per output where practical.
 4. Display each figure with a runnable cell, e.g. `from IPython.display import Image; Image("<path>")`.
 
-This is general on purpose: read whatever the tool's source reveals and reproduce *that*. If reaching the granular level would cost too much, drop to the next level, and disclose the reconstruction with `nb-note`.
+If the resolved code's header says it **ran remotely** (a dispatched / cloud call), inline it anyway so the notebook shows the real computation as if it ran locally — tag the cell `long-running`, and add an `nb-note` recording that this step actually ran remotely (and what it needs to run). Then follow fit-then-load: downstream cells load the persisted result rather than recomputing.
+
+If a tool did **not** resolve — `digest-get` returns only its thin `.ts` wrapper (an ambiguous or non-library tool) — fall back: reproduce the command it ran and disclose the coarser reconstruction with `nb-note`. Never invent a body.
 
 ## Disclosure — the first cell is always the markdown preamble
 
