@@ -635,9 +635,30 @@ its numbers* instead of inlining the handed-over code — and, root cause, level
 resolution hadn't yet included the helper bodies. Round 2 fixed both: recursive
 resolution + a prompt that hard-forbids `Image()`-ing premade figures,
 `read_csv`-ing tool outputs, and hardcoding results, and makes the fit cell
-mandatory. (Judge verdict on round 2 tracked separately.) A host-side linter that
-*fails* a run when a resolved tool appears only as an artifact load is the
-proposed enforcement backstop (deferred).
+mandatory.
+
+**Round-2 judge verdict (Sonnet, 2 independent passes):** large improvement,
+does not yet fully land. Three criteria flipped FAIL→PASS — the **fit is inlined**
+(`mmm.fit(... nuts_sampler="numpyro" ...)`, `long-running`, saves `.nc`, Modal
+disclosure), **fit-then-load** works, and **`attempts/` structure** exists.
+Inline-generating-code rose from 36%→67% of cells; hardcoded literals 1→0;
+result-file loads 5→2. The **residual failure is precise and localized to
+`03_results`**: the composer inlines a helper when its product is a
+dataframe/scalar it can `print`, but still falls back to `IPImage()` for the ~5
+cells whose product is a *matplotlib figure* — even though those helpers
+(`roas_analysis` → `az.plot_forest`, `channel_contributions`, `saturation_curves`,
+`budget_optimization`) are now present in `tool_sources`. Plus one runnability bug
+(a dropped compute cell left `corr_matrix` undefined in `01_data`) and a
+provenance overstatement.
+
+**Highest-value next fix (deferred — the overnight budget was one round):**
+extend the "inline the source, never display the output" rule **explicitly to
+figure-producing cells**, with one worked figure example in the prompt (inline a
+helper's `az.plot_*` + `savefig` on the loaded model so the cell *produces* the
+figure), **and enforce it** with a host-side linter that fails a run when an
+`Image(`/`IPImage(` path matches a file a resolved tool wrote. That single rule
+converts all remaining orphaned figures and both result-loads — the whole of the
+remaining gap. Secondary: a runnability check for dangling references.
 
 ## 9. Implementation map — where what changes
 
