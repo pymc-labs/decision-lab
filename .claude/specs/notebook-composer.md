@@ -587,30 +587,57 @@ spec above:
   scripts (confirmed: the real `#!/usr/bin/env python3` header + the run's own
   helper functions appear in the cells).
 
-### 8.5.1 OPEN — the reproduction-depth gap (the current live problem)
+### 8.5.1 RESOLVED — reproduction depth via a deterministic dpack code map (2026-08-02)
 
-The `3→2→1` degradation only reaches level 1 (the CLI invocation, e.g.
-`!python -m mmm_lib.analyze_model_cli …`) because the composer **cannot reach the
-dpack library's source**: the run's workdir has only the tool *wrapper*
-(`fit-model-modal.ts`, which itself shells out to `python -m mmm_lib.MOD`), and
-`mmm_lib` is not installed in a local run. The real library source **exists in
-the dpack** (`decision-packs/mmm/docker/mmm_lib/{fit_model_modal,analyze_model_cli}.py`)
-— it was just never exposed to the agent.
+**The gap:** reproduction of tool-generated outputs only reached level 1 (the CLI
+invocation, e.g. `!python -m mmm_lib.analyze_model_cli …`) because the agent could
+not reach the dpack library's source — the workdir has only the tool *wrapper*,
+and the library is not installed in a local run.
 
-**Proposed fix (general, not `mmm_lib`-specific):** when `--dpack` is given, copy
-the pack's library source (it ships under `docker/`) into a readable spot in the
-workdir (e.g. `_dpack_source/`) and tell the agent in the prompt: "if a custom
-tool shells out to `python -m LIB.MOD`, its real source is under
-`_dpack_source/LIB/MOD.py` — read it and inline the actual code (level 2/3), not
-the CLI call." Clean up after.
+**Superseded first idea (`_dpack_source/`):** copy the pack's library into the
+workdir for the agent to read. Built, then reverted — it made the agent *hunt*
+for code the host can resolve deterministically, and (fatally) a plain package
+copy can't reach a function deployed *through* a remote dispatch (the Modal
+`fit_mmm` body lives outside any importable package).
 
-**Honest nuance to preserve (per-step):** the *analysis* tool is local plotting
-(`az.plot_*`) and genuinely benefits from inlining the real code; the *fit* tool
-runs remotely **on Modal**, so inlining its body would fabricate a local fit that
-never happened — its faithful representation is the invocation + a note. The rule
-stays "reproduce at the deepest *faithful* level," not "always level 3." **Ben
-still owes a decision on whether the Modal fit should stay an invocation or inline
-`fit_model_modal.py` (Modal setup and all).**
+**Shipped instead — the code map (Ben's design):** an agent can only run code it
+writes itself (already in the log as `write` tNs) or code a dpack tool invokes.
+That second wiring is **static and per-pack**, so it is compiled once,
+deterministically, by parsing the TS wrappers and the Python they call —
+`dlab/dpack_codemap.py` / `dlab map-dpack` → `<dpack>/code_map.json` (with
+source sha256s for a `--check` staleness gate). It maps each tool → the real
+level-2 entry function, **reaching through a `modal.Function.from_name` dispatch**
+to the deployed body so a remote fit inlines as if local. Pack shapes:
+`script-only` (no tools → nothing to resolve), `tool-backed`, `modal-inline`,
+`mixed`. Across all six in-repo dpacks there was **no irreducible LLM step** in
+the mapping (the one ambiguous case — a CLI that dispatches to several trainers
+by an arg — resolves from the run's recorded call args at join time).
+
+**The join happens in the digest.** `generate_digest(work_dir, dpack=…)` resolves
+each custom tool to its real code (`resolve_entry_code`) and writes it into
+`_digest/tool_sources/<tool>.py`; `digest-get tN` then hands the agent the genuine
+library code instead of the thin `.ts` wrapper. Crucially, resolution is
+**recursive** — the entry function *plus the pack helpers it transitively calls*
+(bounded ~60KB) — because the figure/metric-generating code (`az.plot_*`,
+`savefig`, ROAS/contribution math) lives in those helpers, not the entry. Tools
+that don't resolve fall back to the wrapper.
+
+**Modal decision (Ben, overruling the earlier "keep it an invocation"):** always
+inline the real code at the deepest level available, **including remote code** —
+inlining the deployed body faithfully *shows* the remote dispatch rather than
+hiding it behind a CLI string, and removes a local-vs-remote judgment the agent
+would get wrong. The remote-ness is disclosed with `nb-note`, and fit-then-load
+still applies (save the `.nc`, downstream loads it).
+
+**The remaining hard part is agent adherence, not resolution.** Round 1 (Sonnet,
+map wired) still *displayed the tool's premade PNGs / loaded its CSVs / hardcoded
+its numbers* instead of inlining the handed-over code — and, root cause, level-2
+resolution hadn't yet included the helper bodies. Round 2 fixed both: recursive
+resolution + a prompt that hard-forbids `Image()`-ing premade figures,
+`read_csv`-ing tool outputs, and hardcoding results, and makes the fit cell
+mandatory. (Judge verdict on round 2 tracked separately.) A host-side linter that
+*fails* a run when a resolved tool appears only as an artifact load is the
+proposed enforcement backstop (deferred).
 
 ## 9. Implementation map — where what changes
 
