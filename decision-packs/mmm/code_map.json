@@ -1,0 +1,274 @@
+{
+  "dpack": "mmm",
+  "shape": "mixed",
+  "tools": {
+    "analyze-model": {
+      "kind": "python-module",
+      "inputs": [
+        {
+          "name": "model_path",
+          "type": "string",
+          "optional": false
+        },
+        {
+          "name": "output_dir",
+          "type": "string",
+          "optional": true
+        },
+        {
+          "name": "skip_budget",
+          "type": "boolean",
+          "optional": true
+        },
+        {
+          "name": "roas_applicable",
+          "type": "boolean",
+          "optional": true
+        }
+      ],
+      "runs": "python -m mmm_lib.analyze_model_cli",
+      "declared_outputs": [
+        "analysis_output.txt"
+      ],
+      "module": "mmm_lib.analyze_model_cli",
+      "file": "docker/mmm_lib/analyze_model_cli.py",
+      "argparse": [
+        "model_path",
+        "-o",
+        "--skip-budget",
+        "--no-roas",
+        "--seed"
+      ],
+      "literal_outputs": [],
+      "entry": {
+        "function": "analyze_mmm",
+        "defined_in": "mmm_lib.analyze_model"
+      },
+      "residue": []
+    },
+    "estimate-fit-time-modal": {
+      "kind": "remote-dispatch",
+      "inputs": [
+        {
+          "name": "model_bundle_path",
+          "type": "string",
+          "optional": false
+        }
+      ],
+      "runs": "python -m mmm_lib.fit_model_modal",
+      "declared_outputs": [],
+      "module": "mmm_lib.fit_model_modal",
+      "file": "docker/mmm_lib/fit_model_modal.py",
+      "argparse": [
+        "--model-bundle",
+        "--output",
+        "--estimate-only"
+      ],
+      "literal_outputs": [],
+      "entry": {
+        "function": "fit_mmm",
+        "defined_in": "docker/modal_app/mmm_sampler.py",
+        "reached_through": "dispatch"
+      },
+      "dispatch": {
+        "via": "modal.from_name",
+        "app": "mmm-sampler",
+        "function": "fit_mmm",
+        "defined_in": "docker/modal_app/mmm_sampler.py",
+        "resolved": true
+      },
+      "residue": [],
+      "disclose": "executed remotely; inlined to run locally"
+    },
+    "fit-model-modal": {
+      "kind": "remote-dispatch",
+      "inputs": [
+        {
+          "name": "model_bundle_path",
+          "type": "string",
+          "optional": false
+        },
+        {
+          "name": "output_path",
+          "type": "string",
+          "optional": true
+        }
+      ],
+      "runs": "python -m mmm_lib.fit_model_modal",
+      "declared_outputs": [],
+      "module": "mmm_lib.fit_model_modal",
+      "file": "docker/mmm_lib/fit_model_modal.py",
+      "argparse": [
+        "--model-bundle",
+        "--output",
+        "--estimate-only"
+      ],
+      "literal_outputs": [],
+      "entry": {
+        "function": "fit_mmm",
+        "defined_in": "docker/modal_app/mmm_sampler.py",
+        "reached_through": "dispatch"
+      },
+      "dispatch": {
+        "via": "modal.from_name",
+        "app": "mmm-sampler",
+        "function": "fit_mmm",
+        "defined_in": "docker/modal_app/mmm_sampler.py",
+        "resolved": true
+      },
+      "residue": [],
+      "disclose": "executed remotely; inlined to run locally"
+    },
+    "fit-model": {
+      "kind": "python-module",
+      "inputs": [
+        {
+          "name": "model_path",
+          "type": "string",
+          "optional": false
+        },
+        {
+          "name": "data_path",
+          "type": "string",
+          "optional": false
+        },
+        {
+          "name": "output_path",
+          "type": "string",
+          "optional": true
+        },
+        {
+          "name": "draws",
+          "type": "number",
+          "optional": true
+        },
+        {
+          "name": "tune",
+          "type": "number",
+          "optional": true
+        },
+        {
+          "name": "chains",
+          "type": "number",
+          "optional": true
+        },
+        {
+          "name": "target_accept",
+          "type": "number",
+          "optional": true
+        },
+        {
+          "name": "seed",
+          "type": "number",
+          "optional": true
+        }
+      ],
+      "runs": "python -m mmm_lib.fit_model_cli",
+      "declared_outputs": [],
+      "module": "mmm_lib.fit_model_cli",
+      "file": "docker/mmm_lib/fit_model_cli.py",
+      "argparse": [
+        "--model",
+        "--data",
+        "--output",
+        "--draws",
+        "--tune",
+        "--chains",
+        "--target-accept",
+        "--seed"
+      ],
+      "literal_outputs": [],
+      "entry_candidates": [
+        {
+          "function": "load_csv_or_parquet_from_file",
+          "defined_in": "mmm_lib.data_preparation"
+        },
+        {
+          "function": "prepare_mmm_data",
+          "defined_in": "mmm_lib.model_fitting"
+        }
+      ],
+      "residue": [
+        "2 first-party work-function candidates ['load_csv_or_parquet_from_file', 'prepare_mmm_data'] \u2014 likely runtime-selected by an arg; resolve at join time or with an LLM pass"
+      ]
+    },
+    "inspect-data": {
+      "kind": "python-inline",
+      "inputs": [
+        {
+          "name": "path",
+          "type": "string",
+          "optional": false
+        }
+      ],
+      "runs": "python -c <inline>",
+      "declared_outputs": [],
+      "inline_code": "from mmm_lib import load_csv_or_parquet_from_file_and_inspect\nload_csv_or_parquet_from_file_and_inspect('${path}')",
+      "entry": {
+        "function": "load_csv_or_parquet_from_file_and_inspect",
+        "defined_in": "mmm_lib"
+      }
+    },
+    "optimize-budget": {
+      "kind": "python-module",
+      "inputs": [
+        {
+          "name": "model_path",
+          "type": "string",
+          "optional": false
+        },
+        {
+          "name": "risk_pct",
+          "type": "number",
+          "optional": false
+        },
+        {
+          "name": "output_dir",
+          "type": "string",
+          "optional": true
+        },
+        {
+          "name": "roas_applicable",
+          "type": "boolean",
+          "optional": true
+        }
+      ],
+      "runs": "python -m mmm_lib.optimize_budget_cli",
+      "declared_outputs": [
+        "budget_output.txt"
+      ],
+      "module": "mmm_lib.optimize_budget_cli",
+      "file": "docker/mmm_lib/optimize_budget_cli.py",
+      "argparse": [
+        "model_path",
+        "--risk-pct",
+        "-o",
+        "--no-roas",
+        "--seed"
+      ],
+      "literal_outputs": [],
+      "entry": {
+        "function": "budget_optimization",
+        "defined_in": "mmm_lib.analyze_model"
+      },
+      "residue": []
+    }
+  },
+  "sources": {
+    "docker/mmm_lib/__init__.py": "4b59d7c18c643ecf0b1efdb62845eb0314c538c4bc12f091b49b8dce91244370",
+    "docker/mmm_lib/analyze_model.py": "cc3d6518eca6a828ef9c8d16b44380966eef823fbbd9d4f51c8e31bab7065a25",
+    "docker/mmm_lib/analyze_model_cli.py": "6b6bc51d45a950373e88cc27ac2fd5ee227c670547fc0a46fd95ea9a2a80fc56",
+    "docker/mmm_lib/data_preparation.py": "ced790cc700b30a105f5380a93d8778cfaf6c5c504a6d5dcdce2ce3983cae084",
+    "docker/mmm_lib/fit_model_cli.py": "c85225448e3e1d5e03ec031869c00720c5eeaec1d431423ae5547e2bee1d337e",
+    "docker/mmm_lib/fit_model_modal.py": "215606aacccfdfd1c181501c636ca50be54499320370205a16644c84059119d3",
+    "docker/mmm_lib/model_fitting.py": "f297b738c5834f81adfd626a4128cf63efb4bba19c6a0e7c517f2eaf08c08a5e",
+    "docker/mmm_lib/optimize_budget_cli.py": "8f206815ea1a541fadea19a92b51724578fcc30ed4f5030040813dc2ef0e8289",
+    "docker/modal_app/mmm_sampler.py": "6512756414230c95acb6809c387f0302a4fb7ed5ab37a5a8ea7e086c7470e4e4",
+    "opencode/tools/analyze-model.ts": "54e1705db70ef962394ef6fc7c5c892c3a3a498472559e25ce28f57b65d22a8b",
+    "opencode/tools/estimate-fit-time-modal.ts": "9c653c71763b04f50fb6a006e217570f822562263b2012b2b573eed9ec047d36",
+    "opencode/tools/fit-model-modal.ts": "357774ae1481181c0784d8e5dfd27e32d4887f88ecc9892a8ee55857f599c3ca",
+    "opencode/tools/fit-model.ts": "c42f0dc6fd964c8c427d0eadb4c95cf40a9b19ce09c35e956abaf20feb5fc520",
+    "opencode/tools/inspect-data.ts": "f2b5a1b512aa54932bacf625f74ce60d5684cfb4d75bd5de39baf226eaab352f",
+    "opencode/tools/optimize-budget.ts": "6278f63ccbf66c1c90b4bcb9b3fec770e80843bee5738e3e040c6714abf35128"
+  }
+}
