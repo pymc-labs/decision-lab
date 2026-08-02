@@ -481,14 +481,64 @@ def _function_source(src: str, func: str) -> str | None:
     return None
 
 
-def resolve_entry_code(dpack: str | Path, entry: dict[str, Any]) -> str | None:
-    """Pull the real level-2 code an ``entry`` points at, as verbatim source, so it
-    can be inlined into a notebook.
+def _pack_function_index(dpack: Path) -> dict[str, tuple[str, str]]:
+    """Index every top-level ``def`` across the pack's Python sources → (relpath,
+    source). First definition of a name wins. Used to follow an entry function's
+    calls into the pack's own helpers (the code that actually plots/saves)."""
+    docker = dpack / "docker"
+    idx: dict[str, tuple[str, str]] = {}
+    if not docker.is_dir():
+        return idx
+    for py in sorted(docker.rglob("*.py")):
+        try:
+            src = _read(py)
+            tree = ast.parse(src)
+        except (OSError, SyntaxError):
+            continue
+        for n in tree.body:
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name not in idx:
+                seg = ast.get_source_segment(src, n)
+                if seg:
+                    idx[n.name] = (str(py.relative_to(dpack)), seg)
+    return idx
 
-    For a named work function, returns that function's source (reached *through* a
-    remote dispatch when ``reached_through == "dispatch"``, so a remote fit inlines
-    as if run locally). For an inline module (the work lives in the module body,
-    no delegation) returns the whole module source. ``None`` if unresolvable.
+
+def _called_names(func_src: str) -> set[str]:
+    """Bare + attribute call targets in a function's source (``foo()`` → ``foo``,
+    ``x.bar()`` → ``bar``)."""
+    names: set[str] = set()
+    try:
+        tree = ast.parse(func_src)
+    except SyntaxError:
+        return names
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Call):
+            f = n.func
+            if isinstance(f, ast.Name):
+                names.add(f.id)
+            elif isinstance(f, ast.Attribute):
+                names.add(f.attr)
+    return names
+
+
+# Follow an entry's call graph into first-party helpers up to this many bytes of
+# collected source — enough to carry the real plotting/saving code without pulling
+# the whole library.
+_MAX_HELPER_BYTES = 60_000
+
+
+def resolve_entry_code(dpack: str | Path, entry: dict[str, Any]) -> str | None:
+    """Pull the real code an ``entry`` points at, as verbatim source, so it can be
+    inlined into a notebook.
+
+    Returns the work function's source (reached *through* a remote dispatch when
+    ``reached_through == "dispatch"``, so a remote fit inlines as if run locally),
+    **followed by the source of the pack's own helper functions it transitively
+    calls** — because the figure/result-generating code (``az.plot_*``, ``savefig``,
+    metric computations) usually lives in those helpers, not the entry itself.
+    Third-party calls (``az.*``, ``pd.*``) are left as imports. For an inline module
+    (work lives in the module body) returns the whole module source. ``None`` if
+    unresolvable. Bounded by ``_MAX_HELPER_BYTES``.
     """
     dpack = Path(dpack).resolve()
     ref = entry.get("defined_in")
@@ -501,7 +551,33 @@ def resolve_entry_code(dpack: str | Path, entry: dict[str, Any]) -> str | None:
     func = entry.get("function")
     if entry.get("inline") or func in (None, "<module>"):
         return src
-    return _function_source(src, func) or src
+    root = _function_source(src, func)
+    if root is None:
+        return src
+
+    index = _pack_function_index(dpack)
+    collected: list[tuple[str, str]] = []  # (name, source) in discovery order
+    seen: set[str] = {func}
+    queue: list[str] = sorted(_called_names(root) - seen)
+    total = len(root)
+    while queue and total < _MAX_HELPER_BYTES:
+        name = queue.pop(0)
+        if name in seen or name not in index:
+            continue
+        seen.add(name)
+        _, helper_src = index[name]
+        collected.append((name, helper_src))
+        total += len(helper_src)
+        queue.extend(sorted(_called_names(helper_src) - seen))
+
+    if not collected:
+        return root
+    parts = [root, "",
+             "# ---- pack helper functions called above (the real plotting / "
+             "metric code) ----"]
+    for name, helper_src in collected:
+        parts.append(f"\n# helper: {name}\n{helper_src}")
+    return "\n".join(parts)
 
 
 def write_code_map(dpack: str | Path) -> Path:

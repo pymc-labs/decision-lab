@@ -93,18 +93,25 @@ Keep the notebook runnable in principle. For an expensive step (e.g. a model fit
 <result> = <load>("<path>")
 ```
 
-## Tool-generated outputs — the real code is handed to you; inline it
+## Tool-generated outputs — inline the generating CODE; never display the tool's leftovers
 
-Many outputs — figures, result files — were produced by a **custom tool** (flagged `(custom)` in the digest), not by a script the agent wrote. You do **not** reconstruct or reimplement them, and you do **not** guess: for a custom tool, `digest-get <agent>/tN` returns the tool call **and the real code it ran** — the decision-pack library's actual work function, resolved for you as verbatim source, headed by a comment saying what it is. So:
+Many outputs — figures, tables, result files — were produced by a **custom tool** (flagged `(custom)` in the digest), not by a script the agent wrote. For such a tool, `digest-get <agent>/tN` returns the tool call **and the real code it ran** — the decision-pack library's actual work function *and the helper functions it calls* (the ones that build the figures, compute the metrics, and `savefig`), resolved for you as verbatim source. Your job is to put that generating code into the notebook.
 
-1. Find the tool call that produced the output (`← from tN` in the digest).
-2. `digest-get` that `tN` — read the resolved function source it returns (and the call's recorded input args).
-3. **Inline that function's body** into a cell, adapting only slightly: substitute the tool's recorded input args for the function's parameters, keep the logic verbatim, persist/display the output. One readable cell per output where practical.
-4. Display each figure with a runnable cell, e.g. `from IPython.display import Image; Image("<path>")`.
+**The one rule, stated as a prohibition — this is where the last attempt failed:** for every tool call that has resolved source, you MUST emit a **code cell containing that (adapted) source**, the code that *produces* the figure/table. You must **NOT** represent a tool's output by:
+- ❌ `Image("output/some_plot.png")` — displaying a plot the tool already saved. **Orphaned figure. Forbidden.** Instead inline the plotting/`savefig` code from the resolved helper that made it, so the cell *generates* that figure.
+- ❌ `pd.read_csv("output/results.csv")` / `json.load(open("summary.json"))` — loading a table the tool wrote. **Forbidden.** Inline the code that *computes* it (the resolved helper's body).
+- ❌ `print("Channel X: $3.21 ... uplift +11.8%")` — hardcoding tool numbers as literals. **Forbidden — this is fabrication.**
 
-If the resolved code's header says it **ran remotely** (a dispatched / cloud call), inline it anyway so the notebook shows the real computation as if it ran locally — tag the cell `long-running`, and add an `nb-note` recording that this step actually ran remotely (and what it needs to run). Then follow fit-then-load: downstream cells load the persisted result rather than recomputing.
+If you are typing an artifact path or a number you read from an output, stop: retrieve the resolved code that produced it and inline *that* instead. The figure then appears because the cell's own code drew it.
 
-If a tool did **not** resolve — `digest-get` returns only its thin `.ts` wrapper (an ambiguous or non-library tool) — fall back: reproduce the command it ran and disclose the coarser reconstruction with `nb-note`. Never invent a body.
+How to inline:
+1. Find the tool call that produced the output (`← from tN` in the digest); `digest-get` that `tN`.
+2. Read the resolved entry function **and its helper functions**, and the call's recorded input args.
+3. Inline the relevant code — adapting only slightly: substitute the recorded input args for the parameters, keep the logic (the plotting calls, the `.savefig(...)`, the metric math) verbatim. One readable cell per figure/result where practical; pull the specific helper for *this* output rather than dumping the whole pipeline.
+
+**The model fit is mandatory as code, not prose.** The fit tool's resolved source (its header will say it ran remotely, e.g. on cloud compute) contains the real model-fitting/sampling call. You MUST emit a `long-running`-tagged code cell that inlines that sampling body and **saves the result** to a file, then an `nb-note` disclosing it actually ran remotely and what it needs. Do **not** replace the fit with a sentence like "the model was fitted remotely and loaded from `<file>`" — that is the failure this rule exists to prevent. Everything downstream then loads that saved file (fit-then-load) and recomputes results from it.
+
+If a tool did **not** resolve — `digest-get` returns only its thin `.ts` wrapper — fall back: reproduce the command it ran and disclose the coarser reconstruction with `nb-note`. Never invent a body.
 
 ## Disclosure — the first cell is always the markdown preamble
 

@@ -1,5 +1,6 @@
 import { tool } from "@opencode-ai/plugin"
-import { readFileSync, writeFileSync, existsSync } from "fs"
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs"
+import { dirname } from "path"
 
 // Cell-level notebook composition (issue #86). Finalize: inject the mandatory
 // provenance header (idempotent) and write canonical ipynb JSON. Without the
@@ -31,6 +32,7 @@ function loadNb(path: string): any {
 }
 
 function saveNb(path: string, nb: any): void {
+  mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, JSON.stringify(nb, null, 1) + "\n")
 }
 

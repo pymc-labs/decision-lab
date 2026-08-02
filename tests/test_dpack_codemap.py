@@ -172,6 +172,17 @@ class TestRealPacks:
         fit_code = resolve_entry_code(DPACKS / "mmm", m["tools"]["fit-model-modal"]["entry"])
         assert fit_code is not None and "def fit_mmm" in fit_code
 
+    def test_resolve_entry_code_pulls_helper_functions(self) -> None:
+        # the entry's figure/metric code lives in the helpers it calls, so those
+        # must be resolved too — not just the level-2 entry body.
+        m = build_code_map(DPACKS / "mmm")
+        code = resolve_entry_code(DPACKS / "mmm", m["tools"]["analyze-model"]["entry"])
+        assert "# helper:" in code                 # helpers were followed
+        assert "savefig" in code                   # the real plotting code is present
+        assert len(code) > len(                     # deeper than the entry alone
+            (DPACKS / "mmm" / "docker" / "mmm_lib" / "analyze_model.py").read_text()
+        ) / 4
+
     def test_poem_is_script_only(self) -> None:
         m = build_code_map(DPACKS / "poem")
         assert m["shape"] == "script-only"

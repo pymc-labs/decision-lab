@@ -70,7 +70,9 @@ def _helpers(name: str) -> str:
 
 def _run_node(ts_body: str, args: list[str], tmp_path: Path) -> str:
     driver = tmp_path / "driver.ts"
-    driver.write_text('import { readFileSync, writeFileSync, existsSync } from "node:fs"\n' + ts_body)
+    driver.write_text(
+        'import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs"\n'
+        'import { dirname } from "node:path"\n' + ts_body)
     r = subprocess.run(["node", str(driver), *args],
                        capture_output=True, text=True, timeout=30)
     assert r.returncode == 0, r.stderr

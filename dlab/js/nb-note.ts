@@ -1,5 +1,6 @@
 import { tool } from "@opencode-ai/plugin"
-import { readFileSync, writeFileSync, existsSync } from "fs"
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs"
+import { dirname } from "path"
 
 // Cell-level notebook composition (issue #86). nb-note appends to the notebook's
 // FIRST cell — the markdown "preamble" that must always sit at the top and hold
@@ -32,6 +33,7 @@ function loadNb(path: string): any {
 }
 
 function saveNb(path: string, nb: any): void {
+  mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, JSON.stringify(nb, null, 1) + "\n")
 }
 
