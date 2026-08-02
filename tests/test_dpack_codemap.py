@@ -14,6 +14,7 @@ from dlab.dpack_codemap import (
     extract_py_module,
     extract_ts_tool,
     resolve_dispatch,
+    resolve_entry_code,
     stale_sources,
     write_code_map,
 )
@@ -162,6 +163,15 @@ class TestRealPacks:
         assert rc["entry"]["function"] == "run_compute"
         assert rc["entry"]["defined_in"].endswith("modal_app/example.py")
 
+    def test_resolve_entry_code_returns_real_source(self) -> None:
+        m = build_code_map(DPACKS / "mmm")
+        # a local module tool -> the work function's verbatim source
+        code = resolve_entry_code(DPACKS / "mmm", m["tools"]["analyze-model"]["entry"])
+        assert code is not None and "def analyze_mmm" in code
+        # the modal fit -> the DEPLOYED body, reached through the dispatch
+        fit_code = resolve_entry_code(DPACKS / "mmm", m["tools"]["fit-model-modal"]["entry"])
+        assert fit_code is not None and "def fit_mmm" in fit_code
+
     def test_poem_is_script_only(self) -> None:
         m = build_code_map(DPACKS / "poem")
         assert m["shape"] == "script-only"
@@ -186,7 +196,13 @@ class TestStaleness:
 
     def test_no_map_yet(self, tmp_path: Path) -> None:
         dst = self._copy(tmp_path, "mmm")
+        (dst / "code_map.json").unlink()  # a pack that was never mapped
         assert stale_sources(dst) == ["<no code_map.json>"]
+
+    def test_committed_map_is_current(self, tmp_path: Path) -> None:
+        # the in-repo map must match its sources (guards against a stale commit)
+        dst = self._copy(tmp_path, "mmm")
+        assert stale_sources(dst) == []
 
     def test_fresh_map_is_current(self, tmp_path: Path) -> None:
         dst = self._copy(tmp_path, "mmm")

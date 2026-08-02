@@ -471,6 +471,39 @@ def _classify_shape(tools: dict[str, Any]) -> str:
     return "tool-backed"
 
 
+def _function_source(src: str, func: str) -> str | None:
+    """The verbatim source of a top-level ``def func`` (or ``async def``) in
+    ``src``, or ``None``."""
+    tree = ast.parse(src)
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == func:
+            return ast.get_source_segment(src, n)
+    return None
+
+
+def resolve_entry_code(dpack: str | Path, entry: dict[str, Any]) -> str | None:
+    """Pull the real level-2 code an ``entry`` points at, as verbatim source, so it
+    can be inlined into a notebook.
+
+    For a named work function, returns that function's source (reached *through* a
+    remote dispatch when ``reached_through == "dispatch"``, so a remote fit inlines
+    as if run locally). For an inline module (the work lives in the module body,
+    no delegation) returns the whole module source. ``None`` if unresolvable.
+    """
+    dpack = Path(dpack).resolve()
+    ref = entry.get("defined_in")
+    if not ref:
+        return None
+    path = _resolve_source_path(dpack, ref)
+    if path is None:
+        return None
+    src = _read(path)
+    func = entry.get("function")
+    if entry.get("inline") or func in (None, "<module>"):
+        return src
+    return _function_source(src, func) or src
+
+
 def write_code_map(dpack: str | Path) -> Path:
     """Build and write ``<dpack>/code_map.json``; return its path."""
     dpack = Path(dpack).resolve()
