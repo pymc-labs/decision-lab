@@ -1199,5 +1199,94 @@ def cmd_create_dpack(output_dir: str = ".") -> int:
     return 0
 
 
+@app.command("map-dpack")
+def _cmd_map_dpack(
+    dpack: Annotated[
+        str,
+        typer.Argument(
+            metavar="DPACK",
+            help="Path to the decision-pack directory to map.",
+        ),
+    ],
+    check: Annotated[
+        bool,
+        typer.Option(
+            "--check",
+            help="Don't rebuild; report whether the committed code_map.json is "
+            "stale (exit 1 if it is).",
+        ),
+    ] = False,
+) -> None:
+    """Compile a decision-pack's deterministic code map (code_map.json)."""
+    exit_code = cmd_map_dpack(dpack=dpack, check=check)
+    raise typer.Exit(code=exit_code)
+
+
+def cmd_map_dpack(dpack: str, check: bool = False) -> int:
+    """
+    Build ``<dpack>/code_map.json`` — the static wiring from each custom tool to
+    the real code it runs (the Python library behind ``python -m LIB.MOD``, or the
+    deployed function behind a remote dispatch). Deterministic; no model call.
+
+    ``dlab notebooks`` joins a run's tool calls against this map to inline the
+    actual code into notebooks. Packs with no custom tools produce an empty,
+    ``script-only`` map (all code is already captured as ``write`` tool calls).
+
+    Parameters
+    ----------
+    dpack : str
+        Path to the decision-pack directory.
+
+    Returns
+    -------
+    int
+        Process exit code (0 on success, 1 on error).
+    """
+    from dlab.dpack_codemap import build_code_map, stale_sources, write_code_map
+
+    console: Console = Console(highlight=False)
+    dpack_path: Path = Path(dpack)
+    if not dpack_path.is_dir():
+        console.print(f"[red]Not a directory:[/red] {dpack}")
+        return 1
+    if not (dpack_path / "opencode").is_dir():
+        console.print(
+            f"[red]{dpack} is not a decision-pack[/red] (no opencode/ directory)."
+        )
+        return 1
+
+    if check:
+        stale: list[str] = stale_sources(dpack_path)
+        if not stale:
+            console.print("[green]code_map.json is current.[/green]")
+            return 0
+        console.print("[yellow]code_map.json is stale — rebuild with "
+                      "`dlab map-dpack`:[/yellow]")
+        for s in stale:
+            console.print(f"  {s}")
+        return 1
+
+    code_map: dict[str, Any] = build_code_map(dpack_path)
+    dest: Path = write_code_map(dpack_path)
+
+    tools: dict[str, Any] = code_map["tools"]
+    console.print(
+        f"[green]Mapped[/green] [bold]{code_map['dpack']}[/bold] "
+        f"([cyan]{code_map['shape']}[/cyan]) → {dest}"
+    )
+    if not tools:
+        console.print(
+            "  No custom tools — all code is agent-written scripts "
+            "(nothing to resolve)."
+        )
+    for name, entry in tools.items():
+        target = entry.get("entry") or entry.get("entry_candidates")
+        console.print(f"  [bold]{name}[/bold]  ({entry['kind']})"
+                      + (f" → {target}" if target else ""))
+        for note in entry.get("residue", []):
+            console.print(f"    [yellow]⚠ {note}[/yellow]")
+    return 0
+
+
 if __name__ == "__main__":
     app()
