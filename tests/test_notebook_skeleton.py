@@ -144,7 +144,45 @@ class TestCustomToolResolution:
         ]) + "\n")
 
         cell = build_skeleton(wd, dpack=dpack)[0].cells[0]
-        assert "def do_work" in cell.source            # resolved library code
-        assert "REAL" in cell.source
-        assert "do-thing(x='hello')" in cell.source     # the invocation header
+        # a clean import + call, NOT a verbatim dump of the function body
+        assert "from lib.core import do_work" in cell.source
+        assert "do_work('hello')" in cell.source        # single input → positional
+        assert "def do_work" not in cell.source         # no module dump
         assert "did the thing" in cell.stream
+
+    def test_signature_mismatch_falls_back_to_invocation(self, tmp_path: Path) -> None:
+        # a CLI whose main() loads/transforms: the work fn's params are NOT the
+        # tool inputs, so we import it and document the invocation rather than
+        # emitting a wrong fn(**inputs) call.
+        dpack = tmp_path / "pack"
+        tools = dpack / "opencode" / "tools"
+        tools.mkdir(parents=True)
+        (tools / "do-thing.ts").write_text(
+            'import { tool } from "@opencode-ai/plugin"\n'
+            "export default tool({ args: { a: tool.schema.string(),"
+            " b: tool.schema.string() },\n"
+            "  async execute(x){ await Bun.$`python -m lib.run ${x.a} ${x.b}` } })\n")
+        pkg = dpack / "docker" / "lib"
+        pkg.mkdir(parents=True)
+        (pkg / "__init__.py").write_text("")
+        (pkg / "run.py").write_text(
+            "import argparse\nfrom lib.core import work\n"
+            "def main():\n    obj = load()\n    work(obj, tuning=1)\n"
+            "if __name__=='__main__':\n    main()\n")
+        (pkg / "core.py").write_text("def work(model, tuning):\n    print('W')\n")
+
+        wd = tmp_path / "w"
+        (wd / ".opencode" / "tools").mkdir(parents=True)
+        (wd / ".opencode" / "tools" / "do-thing.ts").write_text("stub")
+        logs = wd / "_opencode_logs"
+        logs.mkdir()
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 500, part={"model": "m"}),
+            _tool("do-thing", 1000, inp={"a": "x.nc", "b": "out"},
+                  start=1000, end=1100, output="ok\n"),
+        ]) + "\n")
+
+        src = build_skeleton(wd, dpack=dpack)[0].cells[0].source
+        assert "from lib.core import work" in src         # imports the real fn
+        assert "work(a=" not in src and "work(b=" not in src  # no wrong call
+        assert "a='x.nc'" in src and "b='out'" in src      # documents the invocation

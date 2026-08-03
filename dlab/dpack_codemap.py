@@ -580,6 +580,39 @@ def resolve_entry_code(dpack: str | Path, entry: dict[str, Any]) -> str | None:
     return "\n".join(parts)
 
 
+def entry_params(dpack: str | Path, entry: dict[str, Any]) -> list[str] | None:
+    """The parameter names of an entry's work function, so a caller can tell
+    whether a tool's inputs map cleanly onto a direct ``fn(**inputs)`` call.
+    Resolves the function's definition even when ``defined_in`` names a package
+    that only re-exports it (via the pack-wide function index). ``None`` if the
+    function can't be located."""
+    dpack = Path(dpack).resolve()
+    func = entry.get("function")
+    if not func:
+        return None
+    src: str | None = None
+    path = _resolve_source_path(dpack, entry.get("defined_in", ""))
+    if path is not None:
+        src = _function_source(_read(path), func)
+    if src is None:
+        idx = _pack_function_index(dpack)
+        if func in idx:
+            src = idx[func][1]
+    if src is None:
+        return None
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return None
+    node = next((n for n in ast.walk(tree)
+                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                 and n.name == func), None)
+    if node is None:
+        return None
+    a = node.args
+    return [p.arg for p in (*a.posonlyargs, *a.args, *a.kwonlyargs)]
+
+
 def write_code_map(dpack: str | Path) -> Path:
     """Build and write ``<dpack>/code_map.json``; return its path."""
     dpack = Path(dpack).resolve()

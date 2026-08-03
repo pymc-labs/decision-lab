@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from dlab.dpack_codemap import load_code_map, resolve_entry_code
+from dlab.dpack_codemap import entry_params, load_code_map
 from dlab.opencode_logparser import (
     get_tool_error,
     get_tool_input,
@@ -45,6 +45,8 @@ _PY_SCRIPT = re.compile(r"\bpython3?\s+(?:-\S+\s+)*([\w./-]+\.py)\b")
 _SKIP_BASH = re.compile(
     r"^\s*(cd|ls|cp|mv|rm|mkdir|cat|echo|git|pwd|export|chmod|touch|find|grep|"
     r"which|test|\[|sleep|wc|sort|head|tail|sed|awk)\b")
+# dlab orchestration plumbing, not analysis the notebook should show.
+_SKIP_TOOLS = {"parallel-agents", "task", "todowrite", "todoread"}
 _OUTPUT_CAP = 200  # lines of captured stdout/stderr kept per cell
 # Not real analysis output — skip when walking a work dir for produced figures.
 _EXCLUDE_DIRS = {"_digest", "notebooks", SKELETON_DIR, "_opencode_logs",
@@ -93,20 +95,44 @@ def _script_source(script: str, written: dict[str, str], search_root: Path) -> s
     return None
 
 
+def _is_dotted_module(ref: str) -> bool:
+    """True if ``ref`` is an importable dotted module (not a file path)."""
+    return bool(ref) and "/" not in ref and not ref.endswith(".py")
+
+
 def _custom_tool_code(
     name: str, inp: dict[str, Any], code_map: dict[str, Any], dpack: Path,
 ) -> str | None:
-    """The resolved library code a custom tool ran, headed by its invocation."""
-    entry = (code_map.get("tools", {}).get(name) or {}).get("entry")
+    """A clean cell for a custom-tool call: import the real function it ran and
+    call it. When the entry function's parameters *are* the tool's inputs, emit a
+    runnable ``from module import fn`` + ``fn(**inputs)``. Otherwise (a CLI whose
+    ``main()`` loads/transforms before calling the work function, so the signatures
+    don't line up) fall back to importing the underlying function and documenting
+    the exact invocation. Never a verbatim module dump."""
+    tool = code_map.get("tools", {}).get(name) or {}
+    entry = tool.get("entry")
+    ran = tool.get("runs") or (f"python -m {tool['module']}" if tool.get("module") else name)
+    kwargs = ", ".join(f"{k}={v!r}" for k, v in inp.items())
     if not entry:
-        return None
-    code = resolve_entry_code(dpack, entry)
-    if not code:
-        return None
-    args = ", ".join(f"{k}={v!r}" for k, v in inp.items())
-    header = (f"# Ran by the `{name}` tool as: {name}({args})\n"
-              f"# Real code it executed (resolved from the decision-pack library):")
-    return f"{header}\n{code}"
+        return f"# The `{name}` tool ran: {ran}\n# inputs: {kwargs}\n"
+
+    func, defined_in = entry.get("function"), entry.get("defined_in", "")
+    dotted = defined_in if _is_dotted_module(defined_in) else None
+    params = entry_params(dpack, entry) or []
+    call: str | None = None
+    if dotted and func and inp:
+        if set(inp) <= set(params):
+            call = f"{func}({kwargs})"                  # names line up → kwargs
+        elif len(inp) == 1 and len(params) >= 1:
+            (val,) = inp.values()                       # single arg → positional
+            call = f"{func}({val!r})"                    # (schema name may differ from param)
+    if call is not None:
+        return f"from {dotted} import {func}\n{call}\n"
+    # fallback: import the underlying function (if importable) + the invocation
+    lines = [f"# The `{name}` tool ran: {ran}", f"# inputs: {kwargs}"]
+    if dotted and func:
+        lines.append(f"from {dotted} import {func}   # the underlying function it ran")
+    return "\n".join(lines) + "\n"
 
 
 def _build_cells(
@@ -131,6 +157,8 @@ def _build_cells(
         if ev.event_type != "tool_use":
             continue
         name = get_tool_name(ev) or ""
+        if name in _SKIP_TOOLS:
+            continue
         inp = get_tool_input(ev) or {}
         # Replay file state by basename so a later `python script.py` run resolves
         # to the code AS OF that run (writes set it; edits patch it in place).
