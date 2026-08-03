@@ -74,6 +74,9 @@ dlab create-dpack [OUTPUT_DIR]
 # Compile a decision-pack's deterministic code map (code_map.json)
 dlab map-dpack <dpack> [--check]
 
+# Build deterministic notebooks (real code + real outputs, no LLM) into skeleton/
+dlab skeleton <work-dir> [--dpack <dpack>]
+
 # Interactive wizard to create a parallel agent config
 dlab create-parallel-agent [DPACK_DIR]
 
@@ -156,6 +159,7 @@ dlab digest [work-dir] [--brief] [--write]
 - `data/models.json` - Bundled models.dev model list (package data)
 - `timeline.py` - Timeline visualization (parsing delegated to `opencode_logparser.py`)
 - `dpack_codemap.py` - Deterministic decision-pack code map (`build_code_map`, `write_code_map`, `stale_sources`); statically maps each custom tool to the real code it runs (the Python library behind `python -m LIB.MOD`, or the deployed function reached *through* a `modal.Function.from_name` dispatch). Compiled once per pack into `<dpack>/code_map.json` (with source-file sha256s for staleness); consumed by the notebook step. Exposed as `dlab map-dpack`.
+- `notebook_skeleton.py` - **Deterministic** notebook builder (`build_skeleton`, `write_skeletons`); no LLM. Pairs the real code that ran (scripts the agent wrote; the code map's resolved library code for custom tools) with the real output it produced (captured stdout + figures attributed by execution time-window), one coarse cell per execution, one notebook per agent, into `<work_dir>/skeleton/`. Correct by construction (no hallucinated code, no orphaned figures, no empty-output cells); a shippable artifact and the substrate for the LLM-narrated notebook. Exposed as `dlab skeleton`.
 - `create_dpack.py` - Programmatic decision-pack generation (used by wizard and skills)
 - `create_dpack_wizard.py` - TUI wizard for `create-dpack` command (8 screens, Textual-based)
 - `create_parallel_agent_wizard.py` - TUI wizard for `create-parallel-agent` command

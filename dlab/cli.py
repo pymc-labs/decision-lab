@@ -1366,6 +1366,54 @@ def cmd_notebooks(
     return result.returncode if result.returncode == 0 else (result.returncode or 1)
 
 
+@app.command("skeleton")
+def _cmd_skeleton(
+    work_dir: Annotated[
+        str,
+        typer.Argument(metavar="WORK_DIR", help="Completed session work directory"),
+    ],
+    dpack: Annotated[
+        str | None,
+        typer.Option("--dpack", help="Decision-pack path — lets custom-tool cells "
+                     "resolve to the real library code they ran (via its code map)."),
+    ] = None,
+) -> None:
+    """Build deterministic notebooks (real code + real outputs, no LLM)."""
+    raise typer.Exit(code=cmd_skeleton(work_dir=work_dir, dpack=dpack))
+
+
+def cmd_skeleton(work_dir: str, dpack: str | None = None) -> int:
+    """
+    Assemble deterministic skeleton notebooks from a finished run: the real code
+    that ran paired with the output it produced (captured stdout + figures), one
+    notebook per agent, written to ``<work_dir>/skeleton/``. No model call — the
+    result is correct by construction. Pass ``--dpack`` so custom-tool cells carry
+    the resolved library code instead of just the invocation.
+
+    Returns the process exit code.
+    """
+    from dlab.notebook_skeleton import write_skeletons
+
+    console = _make_console()
+    work_dir_path: Path = Path(work_dir).resolve()
+    if not (work_dir_path / "_opencode_logs").is_dir():
+        print(f"Error: No _opencode_logs in {work_dir_path} — not a work directory.",
+              file=sys.stderr)
+        return 1
+    if dpack is None:
+        console.print("[yellow]![/yellow] No --dpack: custom-tool cells show the "
+                      "invocation only (no resolved library code).")
+
+    paths = write_skeletons(work_dir_path, dpack=dpack)
+    if not paths:
+        console.print("[yellow]No code-running agents found — nothing to build.[/yellow]")
+        return 0
+    console.print(f"[green]✓[/green] {len(paths)} skeleton notebook(s):")
+    for p in paths:
+        console.print(f"    {p}")
+    return 0
+
+
 @app.command("create-dpack")
 def _cmd_create_dpack(
     output_dir: Annotated[
