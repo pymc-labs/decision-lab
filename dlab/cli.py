@@ -1287,10 +1287,16 @@ def _cmd_notebooks(
         typer.Option("--env-file", help="File of KEY=VALUE provider keys for the "
                      "notebook agent run (auto-detected from the dpack's .env)."),
     ] = None,
+    timeout: Annotated[
+        int,
+        typer.Option("--timeout", help="Seconds before the notebook agent run is "
+                     "aborted (default 3600; raise for slower/thorough models)."),
+    ] = 3600,
 ) -> None:
     """Generate Jupyter notebooks from a finished run (the notebook agent)."""
     raise typer.Exit(code=cmd_notebooks(
         work_dir=work_dir, model=model, dpack=dpack, env_file=env_file,
+        timeout=timeout,
     ))
 
 
@@ -1311,6 +1317,7 @@ def cmd_notebooks(
     model: str | None = None,
     dpack: str | None = None,
     env_file: str | None = None,
+    timeout: int = 3600,
 ) -> int:
     """
     Handle notebooks mode — run the notebook agent over a finished work dir.
@@ -1347,7 +1354,8 @@ def cmd_notebooks(
 
     console.print(f"Composing notebooks for [bold]{work_dir_path.name}[/bold] "
                   f"with [cyan]{model}[/cyan] …")
-    result = generate_notebooks(work_dir_path, model=model, dpack=dpack, env=env)
+    result = generate_notebooks(work_dir_path, model=model, dpack=dpack, env=env,
+                                timeout=timeout)
 
     for w in result.warnings:
         console.print(f"[yellow]![/yellow] {w}")

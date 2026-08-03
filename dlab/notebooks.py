@@ -58,6 +58,14 @@ _PROVIDER_KEY_VARS = frozenset({
 })
 
 
+def _as_text(s: str | bytes | None) -> str:
+    """Coerce a subprocess stream to text (``TimeoutExpired`` carries bytes even
+    under ``text=True``)."""
+    if s is None:
+        return ""
+    return s.decode("utf-8", errors="replace") if isinstance(s, bytes) else s
+
+
 def _notebook_env(provided: dict[str, str]) -> dict[str, str]:
     """A minimal, curated environment for the notebook agent's opencode subprocess:
     base vars + provider API keys only (the caller's --env-file wins over any
@@ -169,7 +177,7 @@ def generate_notebooks(
     model: str,
     dpack: str | Path | None = None,
     env: dict[str, str] | None = None,
-    timeout: int = 1800,
+    timeout: int = 3600,
 ) -> NotebooksResult:
     """
     Assemble notebooks for a finished work directory.
@@ -231,7 +239,11 @@ def generate_notebooks(
                 log = proc.stdout + proc.stderr
             except subprocess.TimeoutExpired as exc:
                 returncode = 124
-                log = (exc.stdout or "") + (exc.stderr or "")
+                # On timeout, exc.stdout/stderr come back as bytes even under
+                # text=True — decode defensively so a slow run degrades to a
+                # warning (keeping any notebooks already written) instead of
+                # crashing the command.
+                log = _as_text(exc.stdout) + _as_text(exc.stderr)
                 warnings.append(f"Notebook agent run timed out after {timeout}s.")
                 break
             # A transient provider error (opencode emits an error event and
