@@ -77,11 +77,14 @@ def _time_window(ev: Any) -> tuple[int | None, int | None]:
 
 
 def _script_source(script: str, written: dict[str, str], search_root: Path) -> str | None:
-    """The content of a script that ran: the exact bytes written in-log if we saw
-    the write, else the file on disk (matched by path or basename)."""
-    if script in written:
-        return written[script]
-    for cand in (search_root / script, *search_root.rglob(Path(script).name)):
+    """The content of a script *as of the run that referenced it*: the replayed
+    write+edit content if we tracked it (keyed by basename, since runs reference
+    the script relatively but writes log an absolute path), else the file on disk.
+    """
+    name = Path(script).name
+    if name in written:
+        return written[name]
+    for cand in (search_root / script, *search_root.rglob(name)):
         if cand.is_file():
             try:
                 return cand.read_text(encoding="utf-8", errors="replace")
@@ -129,10 +132,23 @@ def _build_cells(
             continue
         name = get_tool_name(ev) or ""
         inp = get_tool_input(ev) or {}
-        if name in ("write", "edit"):
+        # Replay file state by basename so a later `python script.py` run resolves
+        # to the code AS OF that run (writes set it; edits patch it in place).
+        if name == "write":
             fp = inp.get("filePath")
             if fp and inp.get("content") is not None:
-                written[fp] = inp["content"]
+                written[Path(fp).name] = inp["content"]
+            continue
+        if name == "edit":
+            fp = inp.get("filePath")
+            old, new = inp.get("oldString"), inp.get("newString")
+            if fp and old is not None and new is not None:
+                key = Path(fp).name
+                base = written.get(key)
+                if base is None:  # first seen via edit — seed from disk, then patch
+                    base = _script_source(key, {}, search_root)
+                if base is not None:
+                    written[key] = base.replace(old, new)
             continue
 
         source: str | None = None

@@ -74,6 +74,31 @@ class TestScriptCell:
         assert kinds == {"stream", "display_data"}
 
 
+class TestEditReplay:
+    def test_edit_then_rerun_shows_both_versions(self, tmp_path: Path) -> None:
+        # write (buggy) -> run (error) -> edit (fix) -> run: two cells, v1 then v2.
+        wd = tmp_path / "w"
+        logs = wd / "_opencode_logs"
+        logs.mkdir(parents=True)
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 500, part={"model": "m"}),
+            _tool("write", 900, inp={"filePath": "/ws/m.py",
+                  "content": "x = wrong_name\nprint(x)\n"}, start=900, end=910),
+            _tool("bash", 1000, inp={"command": "python m.py"},
+                  start=1000, end=1100, error="NameError: wrong_name\n"),
+            _tool("edit", 1200, inp={"filePath": "/ws/m.py",
+                  "oldString": "wrong_name", "newString": "42"}, start=1200, end=1210),
+            _tool("bash", 1300, inp={"command": "python m.py"},
+                  start=1300, end=1400, output="42\n"),
+        ]) + "\n")
+        cells = build_skeleton(wd)[0].cells
+        runs = [c for c in cells if c.source.strip().startswith("x =")]
+        assert len(runs) == 2
+        assert "wrong_name" in runs[0].source and "NameError" in runs[0].stream
+        assert "x = 42" in runs[1].source and "42" in runs[1].stream
+        assert "wrong_name" not in runs[1].source  # the edit was applied
+
+
 class TestPlumbingSkipped:
     def test_cp_and_ls_produce_no_cells(self, tmp_path: Path) -> None:
         wd = tmp_path / "w"
