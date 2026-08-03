@@ -93,25 +93,25 @@ Keep the notebook runnable in principle. For an expensive step (e.g. a model fit
 <result> = <load>("<path>")
 ```
 
-## Tool-generated outputs — inline the generating CODE; never display the tool's leftovers
+## Every code cell = real generating code (source) + the output it produced (attached)
 
-Many outputs — figures, tables, result files — were produced by a **custom tool** (flagged `(custom)` in the digest), not by a script the agent wrote. For such a tool, `digest-get <agent>/tN` returns the tool call **and the real code it ran** — the decision-pack library's actual work function *and the helper functions it calls* (the ones that build the figures, compute the metrics, and `savefig`), resolved for you as verbatim source. Your job is to put that generating code into the notebook.
+This is the single most important shape in the whole notebook, and it has two halves that must **both** be present in every code cell. A cell with code but no output looks unrun; a cell with an output but no generating code is an orphan. Neither is acceptable. Every code cell must be:
 
-**The one rule, stated as a prohibition — this is where the last attempt failed:** for every tool call that has resolved source, you MUST emit a **code cell containing that (adapted) source**, the code that *produces* the figure/table. You must **NOT** represent a tool's output by:
-- ❌ `Image("output/some_plot.png")` — displaying a plot the tool already saved. **Orphaned figure. Forbidden.** Instead inline the plotting/`savefig` code from the resolved helper that made it, so the cell *generates* that figure.
-- ❌ `pd.read_csv("output/results.csv")` / `json.load(open("summary.json"))` — loading a table the tool wrote. **Forbidden.** Inline the code that *computes* it (the resolved helper's body).
-- ❌ `print("Channel X: $3.21 ... uplift +11.8%")` — hardcoding tool numbers as literals. **Forbidden — this is fabrication.**
+- **Source = the real code that produced the result** — for a `write`/`edit` script, its verbatim content; for a `(custom)` tool, the resolved library function `digest-get` hands you (the entry **and its helper functions** — the ones that compute the metrics, print, and `savefig`). Adapt only slightly (substitute the call's recorded input args for the parameters; keep the logic verbatim).
+- **Output = everything that code emitted during the run**, attached via `nb-add-code-cell`'s `outputs` param so the cell renders as executed. This is *all* output, not just figures:
+  - **captured stdout/stderr** — whatever the code printed or logged: a printed table or number, a progress log, a warning, a sampler's iteration output, a traceback from a cell that errored. Pull the matching `rN` stream from the digest and attach it: `outputs: [{ "stream": "<the rN text>" }]`. If a script printed something, that print **must** show up as the cell's output.
+  - **figures** — pass the figure file the run wrote: `outputs: [{ "image": "<path to the .png>" }]`; the tool embeds it as `display_data`.
+  - A cell often has **both** (a fit prints sampler progress *and* saves a file; an analysis prints a table *and* draws a plot) — attach all of it, in order. `outputs` is a list.
 
-If you are typing an artifact path or a number you read from an output, stop: retrieve the resolved code that produced it and inline *that* instead. The figure then appears because the cell's own code drew it.
+Find a cell's output in the digest: the `rN` stream(s) attached to the tool/bash call that ran this code are its stdout/stderr; the `← from tN` artifacts are its files. Attach what's there.
 
-How to inline:
-1. Find the tool call that produced the output (`← from tN` in the digest); `digest-get` that `tN`.
-2. Read the resolved entry function **and its helper functions**, and the call's recorded input args.
-3. Inline the relevant code — adapting only slightly: substitute the recorded input args for the parameters, keep the logic (the plotting calls, the `.savefig(...)`, the metric math) verbatim. One readable cell per figure/result where practical; pull the specific helper for *this* output rather than dumping the whole pipeline.
+**The failure the last attempts kept making, stated as a prohibition:**
+- ❌ a code cell whose *source* is `Image("output/some_plot.png")`, `pd.read_csv("output/results.csv")`, `json.load(open("summary.json"))`, or hardcoded numbers `print("Channel X: $3.21 ...")`. That puts the tool's leftover where the *code* belongs. **Forbidden** — the artifact/number belongs in `outputs`, the generating code in the source.
+- ❌ a code cell with real code but **empty `outputs`** when the run produced output for it (it printed, logged, errored, or drew a figure). That leaves the notebook looking unrun. **Forbidden** — attach the captured stdout/stderr and/or figure.
 
-**The model fit is mandatory as code, not prose.** The fit tool's resolved source (its header will say it ran remotely, e.g. on cloud compute) contains the real model-fitting/sampling call. You MUST emit a `long-running`-tagged code cell that inlines that sampling body and **saves the result** to a file, then an `nb-note` disclosing it actually ran remotely and what it needs. Do **not** replace the fit with a sentence like "the model was fitted remotely and loaded from `<file>`" — that is the failure this rule exists to prevent. Everything downstream then loads that saved file (fit-then-load) and recomputes results from it.
+**The model fit is mandatory as code, not prose.** The fit tool's resolved source (its header says it ran remotely, e.g. on cloud compute) contains the real model-fitting/sampling call. Emit a `long-running`-tagged code cell that inlines that sampling body, **saves the result** to a file, and **attaches the fit's captured output** (the sampler-progress / log `rN`) as a `stream` output; then an `nb-note` disclosing it actually ran remotely. Do **not** replace the fit with a sentence like "the model was fitted remotely and loaded from `<file>`". Everything downstream then loads that saved file (fit-then-load).
 
-If a tool did **not** resolve — `digest-get` returns only its thin `.ts` wrapper — fall back: reproduce the command it ran and disclose the coarser reconstruction with `nb-note`. Never invent a body.
+If a tool did **not** resolve — `digest-get` returns only its thin `.ts` wrapper — fall back: reproduce the command it ran, still attach its produced output, and disclose the coarser reconstruction with `nb-note`. Never invent a body, and never invent an output.
 
 ## Disclosure — the first cell is always the markdown preamble
 
