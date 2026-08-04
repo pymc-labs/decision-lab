@@ -1312,6 +1312,35 @@ def _load_env_file(path: Path) -> dict[str, str]:
     return out
 
 
+# A sensible model to suggest per provider whose key is available, for the
+# map-dpack template pass. Any model of that provider works; these are examples.
+_MODEL_SUGGESTIONS: list[tuple[set[str], str]] = [
+    ({"ANTHROPIC_API_KEY"}, "anthropic/claude-sonnet-4-5"),
+    ({"OPENAI_API_KEY"}, "openai/gpt-5"),
+    ({"GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_API_KEY"},
+     "google/gemini-3-flash-preview"),
+    ({"opencode_zen"}, "opencode/deepseek-v4-pro"),
+]
+
+
+def _available_provider_keys(env_file: str | None, dpack_path: Path) -> set[str]:
+    """Provider key names that are set — in the host env or the effective env file
+    (``--env-file``, else the dpack's ``.env``) — so we can suggest models."""
+    from dlab.dpack_codemap import _LLM_PROVIDER_KEYS
+    candidates = (*_LLM_PROVIDER_KEYS, "opencode_zen")
+    present = {k for k in candidates if os.environ.get(k)}
+    cand = env_file or (str(dpack_path / ".env")
+                        if (dpack_path / ".env").is_file() else None)
+    if cand and Path(cand).is_file():
+        env = _load_env_file(Path(cand))
+        present |= {k for k in candidates if env.get(k)}
+    return present
+
+
+def _suggest_models(keys: set[str]) -> list[str]:
+    return [model for names, model in _MODEL_SUGGESTIONS if keys & names]
+
+
 def cmd_notebooks(
     work_dir: str,
     model: str | None = None,
@@ -1494,7 +1523,9 @@ def cmd_map_dpack(dpack: str, check: bool = False, model: str | None = None,
     int
         Process exit code (0 on success, 1 on error).
     """
-    from dlab.dpack_codemap import load_code_map, stale_sources, write_code_map
+    from dlab.dpack_codemap import (
+        load_code_map, stale_sources, tools_needing_template, write_code_map,
+    )
 
     console: Console = Console(highlight=False)
     dpack_path: Path = Path(dpack)
@@ -1548,6 +1579,24 @@ def cmd_map_dpack(dpack: str, check: bool = False, model: str | None = None,
     if model and not templated:
         console.print("  [yellow]LLM produced no templates "
                       "(check the model / keys).[/yellow]")
+
+    # Nudge toward the LLM pass when it would actually help (tools that still lack
+    # a template — tools_needing_template already excludes ones that have one).
+    needing = tools_needing_template(dpack_path, code_map)
+    if not model and needing:
+        console.print(
+            f"\n[yellow]![/yellow] {len(needing)} tool(s) "
+            f"({', '.join(needing)}) can't render as runnable code without an LLM "
+            "pass — they fall back to import + invocation. Re-run with "
+            "[bold]--model[/bold] to generate call templates.")
+        suggestions = _suggest_models(_available_provider_keys(env_file, dpack_path))
+        if suggestions:
+            console.print("  Keys available — try: " + "  ".join(
+                f"[cyan]--model {m}[/cyan]" for m in suggestions))
+        else:
+            console.print("  No provider keys detected — set one (e.g. "
+                          "ANTHROPIC_API_KEY) or pass --env-file, then re-run "
+                          "with --model.")
     return 0
 
 

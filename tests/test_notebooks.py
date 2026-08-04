@@ -16,7 +16,12 @@ from dlab.notebooks import (
     materialize_notebook_env,
 )
 from dlab.config import resolve_model_roles
-from dlab.cli import _load_env_file, cmd_notebooks
+from dlab.cli import (
+    _available_provider_keys,
+    _load_env_file,
+    _suggest_models,
+    cmd_notebooks,
+)
 
 
 class TestMaterializeEnv:
@@ -65,6 +70,26 @@ class TestToolIsolation:
         after = {p.name for p in tools.glob("*.ts")}
         assert "analyze-model.ts" in after and "fit-model-modal.ts" in after
         assert not (wd / ".opencode" / "_tools_stash").exists()
+
+
+class TestMapDpackModelSuggestions:
+    def test_suggest_one_model_per_available_provider(self) -> None:
+        assert _suggest_models({"ANTHROPIC_API_KEY"}) == ["anthropic/claude-sonnet-4-5"]
+        many = _suggest_models({"OPENAI_API_KEY", "GEMINI_API_KEY", "opencode_zen"})
+        assert "openai/gpt-5" in many and "google/gemini-3-flash-preview" in many
+        assert "opencode/deepseek-v4-pro" in many
+        assert _suggest_models(set()) == []          # no keys → no suggestions
+
+    def test_available_keys_from_host_env_and_file(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "x")   # host env
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        f = tmp_path / ".env"
+        f.write_text("OPENAI_API_KEY=y\nGEMINI_API_KEY=\nJUNK=z\n")  # file (empty ignored)
+        keys = _available_provider_keys(str(f), tmp_path)
+        assert "ANTHROPIC_API_KEY" in keys            # from host env
+        assert "OPENAI_API_KEY" in keys               # from the env file
+        assert "GEMINI_API_KEY" not in keys           # empty value → not "available"
+        assert "JUNK" not in keys
 
 
 class TestNotebooksModelRole:
