@@ -22,6 +22,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from string import Template
 from typing import Any
 
 from dlab.dpack_codemap import entry_params, load_code_map
@@ -110,9 +111,19 @@ def _custom_tool_code(
     don't line up) fall back to importing the underlying function and documenting
     the exact invocation. Never a verbatim module dump."""
     tool = code_map.get("tools", {}).get(name) or {}
-    entry = tool.get("entry")
     ran = tool.get("runs") or (f"python -m {tool['module']}" if tool.get("module") else name)
     kwargs = ", ".join(f"{k}={v!r}" for k, v in inp.items())
+
+    # An LLM-authored call template (from `map-dpack --model`) is a parametrized
+    # load+call with $input placeholders — substitute this run's values (as Python
+    # reprs) deterministically. Handles the CLI tools whose main() loads/transforms
+    # so no direct fn(**inputs) call exists.
+    template = tool.get("call_template")
+    if template and inp:
+        filled = Template(template).safe_substitute({k: repr(v) for k, v in inp.items()})
+        return filled if filled.endswith("\n") else filled + "\n"
+
+    entry = tool.get("entry")
     if not entry:
         return f"# The `{name}` tool ran: {ran}\n# inputs: {kwargs}\n"
 

@@ -1456,13 +1456,25 @@ def _cmd_map_dpack(
             "stale (exit 1 if it is).",
         ),
     ] = False,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="Run the LLM template pass (once per pack) "
+                     "with this model, so CLI tools that load/transform get a "
+                     "runnable call template. Deterministic-only if omitted."),
+    ] = None,
+    env_file: Annotated[
+        str | None,
+        typer.Option("--env-file", help="Provider keys for the --model pass "
+                     "(auto-detected from the dpack's .env)."),
+    ] = None,
 ) -> None:
-    """Compile a decision-pack's deterministic code map (code_map.json)."""
-    exit_code = cmd_map_dpack(dpack=dpack, check=check)
+    """Compile a decision-pack's code map (code_map.json)."""
+    exit_code = cmd_map_dpack(dpack=dpack, check=check, model=model, env_file=env_file)
     raise typer.Exit(code=exit_code)
 
 
-def cmd_map_dpack(dpack: str, check: bool = False) -> int:
+def cmd_map_dpack(dpack: str, check: bool = False, model: str | None = None,
+                  env_file: str | None = None) -> int:
     """
     Build ``<dpack>/code_map.json`` — the static wiring from each custom tool to
     the real code it runs (the Python library behind ``python -m LIB.MOD``, or the
@@ -1482,7 +1494,7 @@ def cmd_map_dpack(dpack: str, check: bool = False) -> int:
     int
         Process exit code (0 on success, 1 on error).
     """
-    from dlab.dpack_codemap import build_code_map, stale_sources, write_code_map
+    from dlab.dpack_codemap import load_code_map, stale_sources, write_code_map
 
     console: Console = Console(highlight=False)
     dpack_path: Path = Path(dpack)
@@ -1506,8 +1518,15 @@ def cmd_map_dpack(dpack: str, check: bool = False) -> int:
             console.print(f"  {s}")
         return 1
 
-    code_map: dict[str, Any] = build_code_map(dpack_path)
-    dest: Path = write_code_map(dpack_path)
+    env: dict[str, str] = {}
+    if model:
+        if env_file is None and (dpack_path / ".env").is_file():
+            env_file = str(dpack_path / ".env")
+        env = _load_env_file(Path(env_file)) if env_file else {}
+        console.print(f"Running the LLM template pass with [cyan]{model}[/cyan] …")
+
+    dest, templated = write_code_map(dpack_path, model=model, env=env or None)
+    code_map: dict[str, Any] = load_code_map(dpack_path)
 
     tools: dict[str, Any] = code_map["tools"]
     console.print(
@@ -1521,10 +1540,14 @@ def cmd_map_dpack(dpack: str, check: bool = False) -> int:
         )
     for name, entry in tools.items():
         target = entry.get("entry") or entry.get("entry_candidates")
-        console.print(f"  [bold]{name}[/bold]  ({entry['kind']})"
+        tag = " [green]+template[/green]" if entry.get("call_template") else ""
+        console.print(f"  [bold]{name}[/bold]  ({entry['kind']}){tag}"
                       + (f" → {target}" if target else ""))
         for note in entry.get("residue", []):
             console.print(f"    [yellow]⚠ {note}[/yellow]")
+    if model and not templated:
+        console.print("  [yellow]LLM produced no templates "
+                      "(check the model / keys).[/yellow]")
     return 0
 
 

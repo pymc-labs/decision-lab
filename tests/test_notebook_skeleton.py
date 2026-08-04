@@ -150,6 +150,31 @@ class TestCustomToolResolution:
         assert "def do_work" not in cell.source         # no module dump
         assert "did the thing" in cell.stream
 
+    def test_call_template_is_substituted(self, tmp_path: Path) -> None:
+        # an LLM-authored template (committed in code_map.json) → the skeleton fills
+        # its $placeholders with the run's input values, deterministically.
+        dpack = tmp_path / "pack"
+        (dpack / "opencode" / "tools").mkdir(parents=True)
+        (dpack / "opencode" / "tools" / "do-thing.ts").write_text("stub")
+        (dpack / "code_map.json").write_text(json.dumps({
+            "dpack": "pack", "shape": "tool-backed", "sources": {},
+            "tools": {"do-thing": {"kind": "python-module",
+                      "call_template": "from lib.core import work\nwork($a, out=$b)"}},
+        }))
+        wd = tmp_path / "w"
+        (wd / ".opencode" / "tools").mkdir(parents=True)
+        (wd / ".opencode" / "tools" / "do-thing.ts").write_text("stub")
+        logs = wd / "_opencode_logs"
+        logs.mkdir()
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 500, part={"model": "m"}),
+            _tool("do-thing", 1000, inp={"a": "x.nc", "b": "out"},
+                  start=1000, end=1100, output="ok\n"),
+        ]) + "\n")
+        src = build_skeleton(wd, dpack=dpack)[0].cells[0].source
+        assert "from lib.core import work" in src
+        assert "work('x.nc', out='out')" in src   # $a, $b → repr of the inputs
+
     def test_signature_mismatch_falls_back_to_invocation(self, tmp_path: Path) -> None:
         # a CLI whose main() loads/transforms: the work fn's params are NOT the
         # tool inputs, so we import it and document the invocation rather than

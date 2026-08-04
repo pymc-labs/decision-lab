@@ -183,6 +183,15 @@ class TestRealPacks:
             (DPACKS / "mmm" / "docker" / "mmm_lib" / "analyze_model.py").read_text()
         ) / 4
 
+    def test_tools_needing_template(self) -> None:
+        from dlab.dpack_codemap import tools_needing_template
+        m = build_code_map(DPACKS / "mmm")
+        need = set(tools_needing_template(DPACKS / "mmm", m))
+        # single-arg inline tool resolves cleanly → no template needed
+        assert "inspect-data" not in need
+        # CLIs whose main() loads/transforms, and the modal dispatch, need one
+        assert {"analyze-model", "optimize-budget", "fit-model-modal"} <= need
+
     def test_poem_is_script_only(self) -> None:
         m = build_code_map(DPACKS / "poem")
         assert m["shape"] == "script-only"
@@ -228,10 +237,21 @@ class TestStaleness:
         stale = stale_sources(dst)
         assert "docker/mmm_lib/analyze_model.py" in stale
 
+    def test_deterministic_rebuild_preserves_templates(self, tmp_path: Path) -> None:
+        # a plain rebuild (no --model) must not drop expensive LLM templates.
+        dst = self._copy(tmp_path, "mmm")
+        path, _ = write_code_map(dst)
+        cm = json.loads(path.read_text())
+        cm["tools"]["optimize-budget"]["call_template"] = "from x import y\ny($model_path)"
+        path.write_text(json.dumps(cm))
+        write_code_map(dst)  # rebuild, no model
+        after = json.loads(path.read_text())
+        assert after["tools"]["optimize-budget"]["call_template"] == "from x import y\ny($model_path)"
+
     def test_write_code_map_roundtrips(self, tmp_path: Path) -> None:
         dst = self._copy(tmp_path, "modal-example")
-        path = write_code_map(dst)
-        assert path.name == "code_map.json"
+        path, templated = write_code_map(dst)   # no --model → deterministic only
+        assert path.name == "code_map.json" and templated == []
         loaded = json.loads(path.read_text())
         assert loaded["shape"] == "modal-inline"
         assert loaded["sources"]  # non-empty checksum set

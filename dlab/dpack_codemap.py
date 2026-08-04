@@ -35,11 +35,23 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
 CODE_MAP_FILENAME = "code_map.json"
+
+# The template-extraction LLM subprocess gets a curated env (base vars + provider
+# API keys only), same lesson as the notebook step's env leak.
+_LLM_BASE_ENV = ("PATH", "HOME", "USER", "SHELL", "LANG", "LC_ALL", "LC_CTYPE",
+                 "TERM", "TMPDIR")
+_LLM_PROVIDER_KEYS = ("ANTHROPIC_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY",
+                      "GOOGLE_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY",
+                      "OPENROUTER_API_KEY", "GROQ_API_KEY", "XAI_API_KEY",
+                      "MISTRAL_API_KEY", "DEEPSEEK_API_KEY")
 
 
 # --------------------------------------------------------------------------- #
@@ -613,13 +625,165 @@ def entry_params(dpack: str | Path, entry: dict[str, Any]) -> list[str] | None:
     return [p.arg for p in (*a.posonlyargs, *a.args, *a.kwonlyargs)]
 
 
-def write_code_map(dpack: str | Path) -> Path:
-    """Build and write ``<dpack>/code_map.json``; return its path."""
+def write_code_map(
+    dpack: str | Path, *, model: str | None = None,
+    env: dict[str, str] | None = None,
+) -> tuple[Path, list[str]]:
+    """Build and write ``<dpack>/code_map.json``. When ``model`` is given, run the
+    LLM template pass for tools that can't render as a clean deterministic call.
+    Returns (path, tool names that got an LLM template)."""
     dpack = Path(dpack).resolve()
     code_map = build_code_map(dpack)
+    templated: list[str] = []
+    if model:
+        templated = extract_call_templates(dpack, code_map, model=model, env=env)
+    else:
+        # a deterministic rebuild must not drop expensive LLM templates — carry
+        # forward any already committed for tools that still exist.
+        _carry_forward_templates(dpack, code_map)
     dest = dpack / CODE_MAP_FILENAME
     dest.write_text(json.dumps(code_map, indent=2) + "\n", encoding="utf-8")
-    return dest
+    return dest, templated
+
+
+def _carry_forward_templates(dpack: Path, code_map: dict[str, Any]) -> None:
+    existing = dpack / CODE_MAP_FILENAME
+    if not existing.is_file():
+        return
+    prev = json.loads(_read(existing)).get("tools", {})
+    for name, tool in code_map.get("tools", {}).items():
+        old = prev.get(name, {}).get("call_template")
+        if old and not tool.get("call_template"):
+            tool["call_template"] = old
+
+
+def _clean_call_possible(dpack: Path, tool: dict[str, Any]) -> bool:
+    """True if the skeleton can already emit a clean deterministic ``fn(**inputs)``
+    (names match) or single-arg positional call — i.e. no LLM template is needed."""
+    entry = tool.get("entry")
+    if not entry:
+        return False
+    defined_in = entry.get("defined_in", "")
+    if "/" in defined_in or defined_in.endswith(".py"):
+        return False  # not a clean dotted import (e.g. a modal-app file)
+    input_names = {i["name"] for i in tool.get("inputs", [])}
+    if len(input_names) == 1:
+        return True
+    params = set(entry_params(dpack, entry) or [])
+    return bool(input_names) and input_names <= params
+
+
+def tools_needing_template(dpack: str | Path, code_map: dict[str, Any]) -> list[str]:
+    """Tools whose real invocation can't be rendered as a clean deterministic call
+    (a CLI whose ``main()`` loads/transforms, a modal dispatch, ambiguous
+    candidates) — these are the ones an LLM template pass resolves."""
+    dpack = Path(dpack).resolve()
+    out: list[str] = []
+    for name, tool in code_map.get("tools", {}).items():
+        if tool.get("kind") == "pure-ts" or tool.get("call_template"):
+            continue
+        if tool.get("entry") or tool.get("entry_candidates"):
+            if not _clean_call_possible(dpack, tool):
+                out.append(name)
+    return out
+
+
+def _template_prompt(dpack: Path, code_map: dict[str, Any], names: list[str]) -> str:
+    """Assemble the extraction prompt: for each tool, its inputs and the real
+    source (the CLI module the tool ran + the work function), so the LLM can write
+    a load+call template."""
+    blocks: list[str] = []
+    for name in names:
+        tool = code_map["tools"][name]
+        inputs = ", ".join(f"{i['name']} ({i['type']})" for i in tool.get("inputs", []))
+        parts = [f"=== tool: {name} ===",
+                 f"inputs: {inputs}",
+                 f"runs: {tool.get('runs') or name}"]
+        cli_file = tool.get("file")
+        if cli_file and (dpack / cli_file).is_file():
+            parts.append(f"--- CLI module ({cli_file}) ---\n{_read(dpack / cli_file)}")
+        entry = tool.get("entry") or {}
+        if entry.get("function"):
+            code = resolve_entry_code(dpack, entry)
+            if code:
+                parts.append(f"--- work function `{entry['function']}` ---\n{code[:6000]}")
+        blocks.append("\n".join(parts))
+    body = "\n\n".join(blocks)
+    return (
+        "You are extracting deterministic notebook cell templates for a set of "
+        "decision-pack tools. Each tool ran a Python CLI; a notebook should show "
+        "the equivalent code, not the CLI call.\n\n"
+        "For EACH tool below, write a Python 'call template': runnable code that "
+        "reproduces what the tool did, based on the CLI module's main() — replicate "
+        "its load / transform / call of the work function, NOT its argparse. Use "
+        "`$inputname` placeholders (Python string.Template) wherever one of the "
+        "tool's input values belongs; they are substituted with the Python repr() "
+        "of the value, so place them where a Python literal goes (e.g. "
+        "`MMM.load($model_path)`, `risk_pct=$risk_pct`). Import what is needed. Keep "
+        "it short and faithful — no invented steps.\n\n"
+        "Respond with ONLY a single JSON object mapping each tool name to its "
+        "template string. No prose, no code fences.\n\n" + body)
+
+
+def _extract_json_object(text: str) -> dict[str, Any] | None:
+    """The first balanced ``{...}`` in ``text`` that parses as a JSON object."""
+    for start in (i for i, ch in enumerate(text) if ch == "{"):
+        depth = 0
+        for end in range(start, len(text)):
+            if text[end] == "{":
+                depth += 1
+            elif text[end] == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        obj = json.loads(text[start:end + 1])
+                    except json.JSONDecodeError:
+                        break
+                    if isinstance(obj, dict):
+                        return obj
+                    break
+    return None
+
+
+def _llm_env(env: dict[str, str] | None) -> dict[str, str]:
+    out = {k: os.environ[k] for k in _LLM_BASE_ENV if k in os.environ}
+    for k in _LLM_PROVIDER_KEYS:
+        if env and k in env:
+            out[k] = env[k]
+        elif k in os.environ:
+            out[k] = os.environ[k]
+    return out
+
+
+def extract_call_templates(
+    dpack: str | Path, code_map: dict[str, Any], *, model: str,
+    env: dict[str, str] | None = None, timeout: int = 600,
+) -> list[str]:
+    """LLM pass of the mapping (opt-in, once per pack): for the tools that can't
+    render as a clean deterministic call, ask ``model`` (via an opencode subprocess)
+    for a parametrized load+call template and store it under each tool's
+    ``call_template``. The per-run skeleton then substitutes values deterministically.
+    Returns the tool names a template was produced for.
+    """
+    dpack = Path(dpack).resolve()
+    names = tools_needing_template(dpack, code_map)
+    if not names:
+        return []
+    prompt = _template_prompt(dpack, code_map, names)
+    run_env = _llm_env(env)
+    with tempfile.TemporaryDirectory() as td:  # run outside the pack: no dpack tools loaded
+        proc = subprocess.run(
+            ["opencode", "run", "--model", model, prompt],
+            cwd=td, capture_output=True, text=True, timeout=timeout, env=run_env,
+        )
+    templates = _extract_json_object(proc.stdout + proc.stderr) or {}
+    applied: list[str] = []
+    for name in names:
+        tmpl = templates.get(name)
+        if isinstance(tmpl, str) and tmpl.strip():
+            code_map["tools"][name]["call_template"] = tmpl
+            applied.append(name)
+    return applied
 
 
 def load_code_map(dpack: str | Path) -> dict[str, Any]:
