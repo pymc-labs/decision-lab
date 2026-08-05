@@ -44,6 +44,7 @@ NB_TOOLS: list[str] = [
     "nb-note", "nb-read", "nb-finalize",
     # editing tools for composing on top of the deterministic skeleton (#68)
     "nb-list", "nb-insert-markdown-cell", "nb-move-cell", "nb-delete-cell", "nb-new",
+    "nb-delete-notebook",
 ]
 
 # Retry the notebook agent run on a transient provider error (an error event with no

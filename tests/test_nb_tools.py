@@ -253,7 +253,7 @@ console.log(JSON.stringify({ read: before }))
 
 
 _EDIT_TOOLS = ["nb-read", "nb-list", "nb-insert-markdown-cell", "nb-move-cell",
-               "nb-delete-cell", "nb-new"]
+               "nb-delete-cell", "nb-new", "nb-delete-notebook"]
 
 
 def _fixture_nb(cells: list[dict]) -> dict:
@@ -383,6 +383,22 @@ class TestNbEditingTools:
         assert "01_modeler.ipynb" in r.stdout and "modeler/adopted" in r.stdout
         assert "attempts/m2.ipynb" in r.stdout.replace(str(d) + "/", "")
 
+    def test_delete_notebook_removes_stub_but_refuses_content(self, tmp_path: Path) -> None:
+        if not _have_node():
+            pytest.skip("node not available")
+        h = _edit_harness(tmp_path)
+        stub, real = h / "00_overview_new.ipynb", h / "02_modeler.ipynb"
+        stub.write_text(json.dumps(_fixture_nb([_md("empty overview")])))   # no code
+        real.write_text(json.dumps(_fixture_nb([_md("h"), _code("REAL")])))  # has code
+        # a markdown-only stub is deleted
+        r = _drive(h, 'import t from "./nb-delete-notebook.ts"\n'
+                   'console.log(await t.execute({ notebook: process.argv[2] }))', [str(stub)])
+        assert r.returncode == 0 and not stub.exists()
+        # a notebook with real code is REFUSED, and stays on disk
+        r2 = _drive(h, 'import t from "./nb-delete-notebook.ts"\n'
+                    'console.log(await t.execute({ notebook: process.argv[2] }))', [str(real)])
+        assert "ERROR" in r2.stdout and "code cell" in r2.stdout and real.exists()
+
     def test_read_surfaces_dlab_hint(self, tmp_path: Path) -> None:
         if not _have_node():
             pytest.skip("node not available")
@@ -445,7 +461,8 @@ class TestNotebookAgentPrompt:
         text = p.read_text()
         # the composer gets inspection + editing tools + digest-get ...
         for t in ["nb-list", "nb-read", "nb-insert-markdown-cell", "nb-move-cell",
-                  "nb-delete-cell", "nb-new", "nb-note", "nb-finalize", "digest-get"]:
+                  "nb-delete-cell", "nb-new", "nb-delete-notebook", "nb-note",
+                  "nb-finalize", "digest-get"]:
             assert f"{t}: true" in text, f"composer must enable {t}"
         # ... but CANNOT write or alter code (immutability), nor bash/edit files
         for t in ["nb-add-code-cell", "nb-edit-cell"]:

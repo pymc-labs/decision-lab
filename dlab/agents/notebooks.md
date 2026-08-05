@@ -18,6 +18,7 @@ tools:
   nb-move-cell: true
   nb-delete-cell: true
   nb-new: true
+  nb-delete-notebook: true
   nb-note: true
   nb-finalize: true
   nb-add-code-cell: false
@@ -66,7 +67,17 @@ The skeleton is **already deduplicated**: progressive bug-fix re-runs of a scrip
 
 ## Author `00_overview.ipynb`
 
-Create it with `nb-new` and make it a **decision memo**: the business / problem context, how the run was structured, what each attempt tried, which failed and *why* (with evidence from `attempts/` and the digest), and — with the metrics — why the adopted path won. This is the one notebook you write from scratch; it is markdown only (you still add no code).
+Create it **once**, with `nb-new`, named **exactly `00_overview.ipynb`** (never a `_new` variant), and make it a **decision memo**: the business / problem context, how the run was structured, what each attempt tried, which failed and *why* (with evidence from `attempts/` and the digest), and — with the metrics — why the adopted path won. This is the one notebook you write from scratch; it is markdown only (you still add no code).
+
+Otherwise, **work within the seeded phase notebooks** — narrate and reorder them in place. Don't create new phase notebooks unless you are moving cells into one, and never leave a notebook you created empty.
+
+## Final cleanup pass
+
+When you have finished composing, do a last pass so the output is tidy:
+
+1. `nb-list` the whole notebooks directory and review it.
+2. **Delete any empty or duplicate notebook you created** with `nb-delete-notebook` (it only removes notebooks that have no code cells, so it is safe — it can never destroy real content). There must be exactly one `00_overview.ipynb` and no stray or empty notebooks.
+3. `nb-finalize` every remaining notebook.
 
 ## Honesty and the preamble
 
