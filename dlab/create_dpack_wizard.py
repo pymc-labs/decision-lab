@@ -1286,6 +1286,9 @@ class SummaryScreen(Screen):
             f"     dlab --dpack {dpack_path} --data ./your-data --prompt \"Your task\"",
             f"  3. Install as a shortcut:",
             f"     dlab install {dpack_path}",
+            f"  4. If your tools call a Python library, map the pack once so",
+            f"     `dlab notebooks` renders clean code (and commit code_map.json):",
+            f"     dlab map-dpack {dpack_path} --model <model> --env-file .env",
         ])
 
         self.query_one("#summary-content", Static).update("\n".join(lines))

@@ -239,6 +239,25 @@ def generate_notebooks(
             "tool-generated outputs reproduce only at the CLI-invocation level. "
             "Pass --dpack for full fidelity."
         )
+    else:
+        # A map is always available (load_code_map builds one on the fly), but
+        # without the LLM `call_template`s the CLI tools render as import+invocation
+        # rather than a filled load+call. Nudge toward mapping the pack once.
+        from dlab.dpack_codemap import (
+            CODE_MAP_FILENAME, load_code_map, tools_needing_template,
+        )
+        committed = (Path(dpack) / CODE_MAP_FILENAME).is_file()
+        need = tools_needing_template(dpack, load_code_map(dpack))
+        if need:
+            warnings.append(
+                (f"The decision-pack has no committed code map — one was built on "
+                 "the fly. " if not committed else "")
+                + f"{len(need)} tool(s) ({', '.join(need)}) have no call template, "
+                "so their notebook cells show an import + invocation rather than "
+                "runnable load+call code. Run "
+                f"`dlab map-dpack {dpack} --model <model> --env-file <keys>` once to "
+                "generate + commit them."
+            )
 
     # Digest first — with the dpack it resolves each custom tool to the REAL
     # library code (via the pack's code map) into _digest/tool_sources/.
