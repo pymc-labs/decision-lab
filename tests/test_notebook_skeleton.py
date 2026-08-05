@@ -99,6 +99,48 @@ class TestEditReplay:
         assert "wrong_name" not in runs[1].source  # the edit was applied
 
 
+class TestPhaseGroupingAndAdoption:
+    def _run(self, tmp_path: Path) -> Path:
+        wd = tmp_path / "w"
+        logs = wd / "_opencode_logs"
+        logs.mkdir(parents=True)
+        # orchestrator adopts instance-1 (compound cp — instance-2 is not adopted)
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 500, part={"model": "m"}),
+            _tool("bash", 1000, inp={"command":
+                  "cp /workspace/parallel/run-111/instance-1/m.nc /workspace/best.nc "
+                  "&& cp -r /workspace/parallel/run-111/instance-1/out /workspace/out"},
+                  start=1000, end=1010),
+        ]) + "\n")
+        rundir = logs / "modeler-parallel-run-111"
+        rundir.mkdir()
+        for inst in ("instance-1", "instance-2"):
+            (rundir / f"{inst}.log").write_text("\n".join([
+                _line("dlab_start", 600, part={"model": "m"}),
+                _tool("write", 610, inp={"filePath": f"/ws/{inst}.py",
+                      "content": f"print('{inst}')\n"}, start=610, end=615),
+                _tool("bash", 620, inp={"command": f"python {inst}.py"},
+                      start=620, end=700, output="ran\n"),
+            ]) + "\n")
+            (wd / "parallel" / "run-111" / inst).mkdir(parents=True)
+        return wd
+
+    def test_adopted_detected_from_cp(self, tmp_path: Path) -> None:
+        from dlab.notebook_skeleton import _adopted_instances
+        adopted = _adopted_instances(self._run(tmp_path))
+        assert ("111", "instance-1") in adopted        # promoted to the root
+        assert ("111", "instance-2") not in adopted     # a compound cp didn't confuse it
+
+    def test_write_routes_adopted_vs_attempts(self, tmp_path: Path) -> None:
+        from dlab.notebook_skeleton import write_skeletons
+        paths = write_skeletons(self._run(tmp_path))
+        rels = {str(p.relative_to((tmp_path / "w" / "skeleton"))) for p in paths}
+        # adopted modeler instance in the main dir; the other under attempts/
+        assert any("modeler" in r and "attempts" not in r for r in rels)
+        assert "attempts/modeler_instance-2.ipynb" in rels
+        assert not any("instance-1" in r and "attempts" in r for r in rels)
+
+
 class TestPlumbingSkipped:
     def test_cp_and_ls_produce_no_cells(self, tmp_path: Path) -> None:
         wd = tmp_path / "w"

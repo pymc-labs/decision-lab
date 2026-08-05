@@ -68,8 +68,11 @@ class SkeletonCell:
 
 @dataclass
 class SkeletonNotebook:
-    agent: str                             # e.g. "modeler.r2.i2"
+    agent: str                             # e.g. "modeler/instance-4"
     cells: list[SkeletonCell] = field(default_factory=list)
+    phase: str = ""                        # agent role (data-preparer, modeler); "" = orchestrator
+    instance: str = ""                     # instance-N ("" = orchestrator)
+    adopted: bool = True                   # False → a non-adopted attempt (goes to attempts/)
 
 
 def _time_window(ev: Any) -> tuple[int | None, int | None]:
@@ -249,21 +252,48 @@ def _attribute_figures(cells: list[SkeletonCell], search_root: Path) -> None:
                 break
 
 
+# A copy FROM an instance dir (group 1=run ts, 2=instance) to a dest token
+# (group 3). Non-greedy up to the source path, not crossing && or | so a compound
+# command's later segments don't bleed in.
+_CP_ADOPT = re.compile(
+    r"\b(?:cp|mv|rsync)\b[^|&]*?parallel/run-(\d+)/(instance-\d+)/\S*\s+(\S+)")
+
+
+def _adopted_instances(work_dir: Path) -> set[tuple[str, str]]:
+    """Which ``(run_ts, instance)`` an agent promoted to the workdir root — the
+    adopted path. Signal: a ``cp``/``mv``/``rsync`` FROM an instance dir to a
+    destination that is NOT itself under ``parallel/`` (i.e. the run root). Fully
+    general — no pack knowledge."""
+    adopted: set[tuple[str, str]] = set()
+    logs_dir = work_dir / "_opencode_logs"
+    for log in logs_dir.rglob("*.log"):
+        for ev in parse_log_file(log):
+            if ev.event_type != "tool_use" or get_tool_name(ev) != "bash":
+                continue
+            cmd = (get_tool_input(ev) or {}).get("command", "")
+            for m in _CP_ADOPT.finditer(cmd):
+                if "parallel/run-" not in m.group(3):   # dest is the run root
+                    adopted.add((m.group(1), m.group(2)))
+    return adopted
+
+
 def build_skeleton(
     work_dir: str | Path, *, dpack: str | Path | None = None,
 ) -> list[SkeletonNotebook]:
-    """Build one deterministic notebook per agent that ran code."""
+    """Build one deterministic notebook per agent that ran code, tagged with its
+    phase (agent role) and whether it is the adopted instance or an attempt."""
     work_dir = Path(work_dir).resolve()
     logs_dir = work_dir / "_opencode_logs"
     code_map: dict[str, Any] = load_code_map(dpack) if dpack else {"tools": {}}
     dpack_path = Path(dpack).resolve() if dpack else None
     custom_tools = {p.stem for p in (work_dir / ".opencode" / "tools").glob("*.ts")}
+    adopted = _adopted_instances(work_dir)
 
-    notebooks: list[SkeletonNotebook] = []
-    logs: list[tuple[str, Path, Path]] = []
+    # (agent label, phase, instance, adopted, log, workdir root)
+    logs: list[tuple[str, str, str, bool, Path, Path]] = []
     main = logs_dir / "main.log"
     if main.exists():
-        logs.append(("orchestrator", main, work_dir))
+        logs.append(("orchestrator", "", "", True, main, work_dir))
     # Parallel instances: log at _opencode_logs/<agent>-parallel-run-<ts>/instance-N.log,
     # its workdir at parallel/run-<ts>/instance-N/.
     for d in sorted(logs_dir.glob("*-parallel-run-*")):
@@ -271,14 +301,18 @@ def build_skeleton(
         for log in sorted(d.glob("instance-*.log")):
             inst_wd = work_dir / "parallel" / f"run-{ts}" / log.stem
             root = inst_wd if inst_wd.is_dir() else work_dir
-            logs.append((f"{agent}/{log.stem}", log, root))
+            is_adopted = (ts, log.stem) in adopted
+            logs.append((f"{agent}/{log.stem}", agent, log.stem, is_adopted, log, root))
 
-    for agent, log_path, root in logs:
+    notebooks: list[SkeletonNotebook] = []
+    for label, phase, instance, is_adopted, log_path, root in logs:
         cells = _build_cells(log_path, root, code_map, dpack_path, custom_tools)
         _attribute_figures(cells, root)
         cells = [c for c in cells if c.figures or c.stream.strip() or c.source.strip()]
         if cells:
-            notebooks.append(SkeletonNotebook(agent=agent, cells=cells))
+            notebooks.append(SkeletonNotebook(
+                agent=label, cells=cells, phase=phase, instance=instance,
+                adopted=is_adopted))
     return notebooks
 
 
@@ -301,9 +335,13 @@ def _image_output(f: Path) -> dict[str, Any] | None:
 
 
 def _render_notebook(nb: SkeletonNotebook) -> dict[str, Any]:
+    status = ("orchestrator" if not nb.phase
+              else f"{nb.phase} · {nb.instance} · "
+                   + ("**adopted**" if nb.adopted else "**not adopted (attempt)**"))
     cells: list[dict[str, Any]] = [{
         "cell_type": "markdown", "metadata": {},
         "source": [f"# {nb.agent} — deterministic skeleton\n\n",
+                   f"*{status}*\n\n",
                    "Assembled from the run's real code and outputs — **not executed**. ",
                    "Every code cell is the exact code that ran, with the output it produced."],
     }]
@@ -341,16 +379,23 @@ def write_skeletons(
     work_dir: str | Path, *, dpack: str | Path | None = None,
 ) -> list[Path]:
     """Build and write the deterministic skeleton notebooks into
-    ``<work_dir>/skeleton/``; return the written paths."""
+    ``<work_dir>/skeleton/``: the adopted path as numbered phase notebooks, and
+    non-adopted instances under ``skeleton/attempts/``. Returns the written paths."""
     work_dir = Path(work_dir).resolve()
     notebooks = build_skeleton(work_dir, dpack=dpack)
     out_dir = work_dir / SKELETON_DIR
     out_dir.mkdir(exist_ok=True)
     written: list[Path] = []
-    for i, nb in enumerate(notebooks):
-        safe = nb.agent.replace("/", "_")
-        dest = out_dir / f"{i:02d}_{safe}.ipynb"
+
+    def _write(nb: SkeletonNotebook, dest: Path) -> None:
+        dest.parent.mkdir(exist_ok=True)
         dest.write_text(json.dumps(_render_notebook(nb), indent=1) + "\n",
                         encoding="utf-8")
         written.append(dest)
+
+    for i, nb in enumerate(n for n in notebooks if n.adopted):
+        name = nb.phase or "orchestrator"
+        _write(nb, out_dir / f"{i:02d}_{name}.ipynb")
+    for nb in (n for n in notebooks if not n.adopted):
+        _write(nb, out_dir / "attempts" / f"{nb.phase}_{nb.instance}.ipynb")
     return written
