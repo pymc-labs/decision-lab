@@ -26,10 +26,17 @@ dlab creates a wrapper Dockerfile that adds opencode and its dependencies:
 ```dockerfile
 FROM {image_name}-base
 
-RUN apt-get update && apt-get install -y git ripgrep curl && \
+RUN apt-get update && apt-get install -y git ripgrep curl unzip && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Inter fonts for the dlab figure style (build warns instead of failing
+# if the download is unavailable; matplotlib falls back to DejaVu Sans).
+# Also removes any matplotlib font cache baked into the base image — a
+# stale cache would hide the new fonts from matplotlib.
+RUN curl ... Inter-3.19.zip ... unzip ... /usr/share/fonts/opentype/inter/ \
+    && rm -rf /root/.cache/matplotlib
 
 RUN npm install -g opencode-ai@{version}
 RUN opencode --version
@@ -43,16 +50,19 @@ The final image is tagged as `{image_name}` (from your config.yaml) and labeled 
 |------|---------|
 | git | Version control (used by coding agents) |
 | ripgrep | Required by opencode for grep/glob/list tools |
-| curl | Needed to install Node.js |
+| curl | Needed to install Node.js and fonts |
+| unzip | Needed to extract the Inter font release |
+| Inter fonts | Used by the decision-lab figure style (see [decision-packs.md](decision-packs.md)) |
 | Node.js 20.x | Required to run opencode |
 | opencode | The AI coding agent |
 
 ## Image Caching
 
-Images are cached based on a hash of the `docker/` directory contents and the `opencode_version`. A rebuild is triggered when:
+Images are cached based on a hash of the `docker/` directory contents, the `opencode_version`, and the wrapper Dockerfile template (so changes to the dlab-managed layer itself trigger rebuilds). A rebuild is triggered when:
 
 - Files in `docker/` change (Dockerfile, requirements, etc.)
 - The `opencode_version` in config.yaml changes
+- The dlab wrapper Dockerfile template changed (e.g. after a dlab upgrade)
 - The `--rebuild` flag is passed
 
 ```bash

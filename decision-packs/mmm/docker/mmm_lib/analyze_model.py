@@ -25,10 +25,6 @@ from pymc_marketing.mmm.multidimensional import (
 )
 
 
-plt.style.use('seaborn-v0_8-whitegrid')
-plt.rcParams["figure.figsize"] = [12, 7]
-plt.rcParams["figure.dpi"] = 100
-
 # Known MMM parameter variable names (filtered against actual posterior at runtime)
 _KNOWN_PARAM_VAR_NAMES = [
     "intercept_contribution",

@@ -219,6 +219,7 @@ def run_opencode_local(
     env: dict[str, str],
     timeout: int | None = None,
     log_prefix: str = "main",
+    prelude: str = "",
 ) -> tuple[int, str, str]:
     """
     Run opencode locally in the work directory.
@@ -237,6 +238,9 @@ def run_opencode_local(
         Timeout in seconds.
     log_prefix : str
         Log file prefix.
+    prelude : str
+        Shell lines inserted before opencode runs (e.g. figure-style env
+        exports from ``dlab.figure_style.figure_style_shell_exports``).
 
     Returns
     -------
@@ -254,7 +258,7 @@ def run_opencode_local(
     log_path: str = str(logs_dir / f"{log_prefix}.log")
     runner_script: str = f'''#!/bin/bash
 set -o pipefail
-prompt=$(cat "{prompt_file}")
+{prelude}prompt=$(cat "{prompt_file}")
 printf '%s\\n' "$prompt" | python3 -c "import json,sys; print(json.dumps({{'type':'dlab_start','timestamp':int(__import__('time').time()*1000),'model':'{model}','agent':'{log_prefix}','prompt':sys.stdin.read().strip()}}))" > "{log_path}"
 opencode run --format json --log-level DEBUG --model "{model}" "$prompt" 2>&1 | tee -a "{log_path}"
 '''

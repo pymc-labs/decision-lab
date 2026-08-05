@@ -20,15 +20,34 @@ from typing import Callable
 # Dependencies:
 #   - git: version control (used by coding agents)
 #   - ripgrep: required by opencode for grep/glob/list tools
-#   - curl: needed to install Node.js
+#   - curl: needed to install Node.js and fonts
+#   - unzip: needed to extract the Inter font release
 #   - nodejs: required to run opencode (installed via npm)
+#   - Inter fonts: used by the dlab figure style (dlab/data/figure_style/);
+#     matplotlib falls back to DejaVu Sans if absent, so a fonts outage must
+#     warn, not fail the build
 OPENCODE_WRAPPER_DOCKERFILE: str = """FROM {base_image}
 
-# Install git, ripgrep, and Node.js (required for opencode)
-RUN apt-get update && apt-get install -y git ripgrep curl && \\
+# Install git, ripgrep, unzip, and Node.js (required for opencode)
+RUN apt-get update && apt-get install -y git ripgrep curl unzip && \\
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \\
     apt-get install -y nodejs && \\
     apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install Inter fonts for the dlab figure style (static per-weight OTFs;
+# variable fonts render bold incorrectly in matplotlib). Any matplotlib font
+# cache baked into the base image predates these fonts and would hide them
+# (matplotlib never rescans a valid cache), so remove it — the first import
+# at runtime rebuilds it with Inter included.
+RUN (curl -fsSL -o /tmp/inter.zip https://github.com/rsms/inter/releases/download/v3.19/Inter-3.19.zip && \\
+    mkdir -p /usr/share/fonts/opentype/inter && \\
+    unzip -j -o /tmp/inter.zip \\
+        "Inter Desktop/Inter-Regular.otf" "Inter Desktop/Inter-Italic.otf" \\
+        "Inter Desktop/Inter-Medium.otf" "Inter Desktop/Inter-SemiBold.otf" \\
+        "Inter Desktop/Inter-Bold.otf" -d /usr/share/fonts/opentype/inter/ && \\
+    rm /tmp/inter.zip && \\
+    rm -rf /root/.cache/matplotlib) || \\
+    echo "WARNING: Inter font install failed; figures fall back to DejaVu Sans"
 
 # Install opencode
 RUN npm install -g {opencode_package}
@@ -65,6 +84,9 @@ def compute_docker_dir_hash(
     """
     hasher = hashlib.sha256()
     hasher.update(f"opencode_version={opencode_version}".encode("utf-8"))
+    # Include the wrapper Dockerfile template so changes to the dlab-managed
+    # layer (fonts, opencode install) trigger a rebuild
+    hasher.update(OPENCODE_WRAPPER_DOCKERFILE.encode("utf-8"))
 
     # Get all files sorted by path for deterministic ordering
     files: list[Path] = sorted(docker_dir.rglob("*"))
@@ -506,6 +528,7 @@ def build_runner_script(
     prompt_file: str,
     model: str,
     log_prefix: str,
+    prelude: str = "",
 ) -> str:
     """
     Build the bash runner script that runs opencode inside a container.
@@ -518,6 +541,10 @@ def build_runner_script(
         The model to use.
     log_prefix : str
         Prefix for log files.
+    prelude : str
+        Shell lines inserted before opencode runs (e.g. figure-style env
+        exports from ``dlab.figure_style.figure_style_shell_exports``). The
+        spawned opencode process inherits any exported variables.
 
     Returns
     -------
@@ -526,7 +553,7 @@ def build_runner_script(
     """
     return f'''#!/bin/bash
 set -o pipefail
-prompt=$(cat {prompt_file})
+{prelude}prompt=$(cat {prompt_file})
 printf '%s\\n' "$prompt" | python3 -c "import json,sys; print(json.dumps({{'type':'dlab_start','timestamp':int(__import__('time').time()*1000),'model':'{model}','agent':'{log_prefix}','prompt':sys.stdin.read().strip()}}))" > /_opencode_logs/{log_prefix}.log
 opencode run --format json --log-level DEBUG --model "{model}" "$prompt" 2>&1 | tee -a /_opencode_logs/{log_prefix}.log
 '''
@@ -538,6 +565,7 @@ def run_opencode(
     model: str,
     timeout: int | None = None,
     log_prefix: str = "main",
+    prelude: str = "",
 ) -> tuple[int, str, str]:
     """
     Run opencode with a prompt inside a container, logging output to _opencode_logs.
@@ -554,6 +582,8 @@ def run_opencode(
         Timeout in seconds. None means no timeout.
     log_prefix : str
         Prefix for log files (default: "main").
+    prelude : str
+        Shell lines inserted into the runner script before opencode runs.
 
     Returns
     -------
@@ -576,7 +606,7 @@ def run_opencode(
 
     # Build the runner script that reads the prompt file and runs opencode
     # This avoids any shell expansion of the prompt content
-    runner_script: str = build_runner_script(prompt_file, model, log_prefix)
+    runner_script: str = build_runner_script(prompt_file, model, log_prefix, prelude)
     runner_file: str = "/.run_opencode.sh"
 
     write_runner: subprocess.CompletedProcess[bytes] = subprocess.run(

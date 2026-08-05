@@ -4,5 +4,14 @@ docker_image_name: dlab-mmm
 default_model: anthropic/claude-opus-4-5
 opencode_version: "1.2.10"
 
+# Role overrides: without this block, role injection would overwrite the
+# summarizer_model hand-set in parallel_agents/*.yaml with default_model
+# (Opus) — the consolidator is intentionally the cheaper Sonnet.
+models:
+  consolidator: anthropic/claude-sonnet-4-5
+
+# decision-lab house figure style (on by default; explicit for clarity)
+use_dlab_plot_style: true
+
 hooks:
   pre-run: deploy_modal.sh

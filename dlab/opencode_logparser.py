@@ -28,6 +28,7 @@ Step finish reasons: stop, tool-calls, error, max-tokens, unknown
 """
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -627,3 +628,54 @@ def _find_parallel_run_dir(
             return 10**18
 
     return min(candidates, key=ts_distance)
+
+
+# Fatal-error signatures in opencode output, mapped to human-readable
+# diagnoses. opencode reports many fatal problems only as "Unexpected server
+# error", so dlab scans the session log tail after a failed run (issue #91).
+_FATAL_SIGNATURES: list[tuple[str, str]] = [
+    (
+        "ProviderModelNotFoundError",
+        "opencode does not know this model — its live catalog may have "
+        "dropped the id. Check `default_model` in config.yaml (and any "
+        "per-instance models); `dlab create-dpack` shows currently valid ids.",
+    ),
+    (
+        "invalid x-api-key",
+        "the provider rejected the API key — check the key in your "
+        "--env-file (or the decision-pack's .env).",
+    ),
+    (
+        "authentication_error",
+        "the provider rejected the credentials — check your --env-file.",
+    ),
+    (
+        "credit balance is too low",
+        "the provider account is out of credits.",
+    ),
+]
+
+
+def diagnose_fatal_error(log_text: str) -> str | None:
+    """
+    Map known fatal-error signatures in an opencode log to a readable hint.
+
+    Parameters
+    ----------
+    log_text : str
+        Raw log content (typically the tail of the session's main log).
+
+    Returns
+    -------
+    str | None
+        A human-readable diagnosis, or None if no known signature matches.
+    """
+    for signature, diagnosis in _FATAL_SIGNATURES:
+        if signature in log_text:
+            model_match: re.Match[str] | None = re.search(
+                r"Model not found: ([^\s\"\\.]+)", log_text,
+            )
+            if signature == "ProviderModelNotFoundError" and model_match:
+                return f"model '{model_match.group(1)}' not found: {diagnosis}"
+            return diagnosis
+    return None

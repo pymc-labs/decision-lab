@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dlab-cli"
-version = "0.3.0"
+version = "0.4.0"
 description = "A harness for agentic data science — run coding agents with domain skills, parallel subagents, and frozen Docker environments"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -38,6 +38,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "matplotlib>=3.8",
 ]
 
 [project.scripts]
@@ -49,5 +50,6 @@ include = ["dlab*"]
 
 [tool.setuptools.package-data]
 "dlab.data" = ["*.json"]
+"dlab.data.figure_style" = ["matplotlibrc", "*.md"]
 "dlab.js" = ["*.ts"]
 "dlab.viewer.html" = ["*.html"]

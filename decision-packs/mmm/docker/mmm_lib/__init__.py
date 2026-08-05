@@ -21,6 +21,15 @@ Example:
     >>> mmm.plot.contributions_over_time(var=["channel_contribution"])
 """
 
+# In dlab sessions the decision-lab figure style module is on PYTHONPATH; it
+# enforces the parts of the house style an rc file cannot (band edges, legend
+# frames, colormaps). Standalone use of mmm_lib works without it.
+import importlib.util
+
+if importlib.util.find_spec("dlab_plotstyle") is not None:
+    import dlab_plotstyle  # noqa: F401
+
+
 __version__ = "0.1.0"
 
 # Data Preparation Functions

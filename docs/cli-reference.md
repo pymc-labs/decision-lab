@@ -125,6 +125,18 @@ Session:    ./analysis-001
 | 1 | CLI error (missing args, invalid config, etc.) |
 | 128+N | Terminated by signal N (e.g., 130 = Ctrl+C) |
 
+`dlab run` returns opencode's exit code, so an agent-level failure (invalid
+API key, unknown model) exits non-zero even when the session lifecycle
+(image build, container, hooks, cleanup) completed — dlab's exit code
+deliberately mirrors the agent's outcome. On failure, dlab scans the session
+log for known fatal signatures (model not in opencode's catalog, rejected
+API key, exhausted credits) and prints a "Likely cause" hint.
+
+Model preflight validates against the bundled catalog merged with a
+user-level cache (`~/.cache/dlab/models.json`); when the cache is older than
+seven days, `dlab run` refreshes it from models.dev in the background — the
+refresh never blocks or fails a run.
+
 ---
 
 ## create-dpack

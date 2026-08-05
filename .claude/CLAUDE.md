@@ -142,12 +142,13 @@ dlab view <work-dir> [--port PORT] [--no-open] [--export FILE]
 - `docker.py` - Docker image building and container lifecycle
 - `local.py` - Local (no-Docker) execution backend for `--no-sandboxing`
 - `model_fallback.py` - Model validation and provider fallback (`preflight_check` before session creation, `process_opencode_dir` during setup) so a single API key suffices
-- `opencode_logparser.py` - Canonical OpenCode NDJSON log parser (`LogEvent`, `SessionNode`, `parse_log_file`, `build_session_graph`); single source of truth used by `timeline.py`, `tui/`, and `viewer/`
+- `figure_style.py` - decision-lab matplotlib house style (`figure_style_enabled`, `install_figure_style`, `figure_style_shell_exports`); vendored assets in `data/figure_style/` (matplotlibrc, dlab_plotstyle.py, SKILL.md)
+- `opencode_logparser.py` - Canonical OpenCode NDJSON log parser (`LogEvent`, `SessionNode`, `parse_log_file`, `build_session_graph`); single source of truth used by `timeline.py`, `tui/`, and `viewer/`; `diagnose_fatal_error` maps opencode's opaque failures to readable hints
 - `parallel_tool.py` - Loads parallel-agents.ts from `js/`
 - `js/parallel-agents.ts` - TypeScript source bundled as package data
 - `data/models.json` - Bundled models.dev model list (package data)
 - `timeline.py` - Timeline visualization (parsing delegated to `opencode_logparser.py`)
-- `create_dpack.py` - Programmatic decision-pack generation (used by wizard and skills)
+- `create_dpack.py` - Programmatic decision-pack generation (used by wizard and skills); model catalog (bundled models.json + TTL-cached background refresh, `refresh_model_cache_if_stale`), pins `opencode_version` at creation (`resolve_latest_opencode_version`)
 - `create_dpack_wizard.py` - TUI wizard for `create-dpack` command (8 screens, Textual-based)
 - `create_parallel_agent_wizard.py` - TUI wizard for `create-parallel-agent` command
 - `tui/` - TUI module for `connect` command:
@@ -187,6 +188,18 @@ models:
 ```
 
 Omitted roles fall back to `default_model`. `resolve_model_roles()` in `config.py` resolves the roles; `apply_model_roles_to_opencode()` injects them as `default_model`/`summarizer_model` into each YAML under `parallel_agents/` during session setup.
+
+## Figure Style (config.yaml)
+
+Sessions enforce the decision-lab matplotlib house style by default; packs opt out with `use_dlab_plot_style: false`. Enforcement is layered by robustness (environment > injected code > prompt):
+
+1. `_style/matplotlibrc` written at session setup, activated via `MATPLOTLIBRC` exported in the opencode runner script — styles every figure with zero agent cooperation. `_style` is *prepended* to `PYTHONPATH` (never clobbered).
+2. `_style/dlab_plotstyle.py` — palette by name (`PALETTE`/`PALETTE_LIGHT`/`PALETTE_DARK`), house colormaps (`dlab_seq` default for imshow, `dlab_div` for signed data), `add_axis_end_tick_caps`. On import it ENFORCES the forbidden things: band edges (`fill_between` edge/linewidth kwargs dropped even when explicit — arviz/pymc-marketing outline their HDI bands), legend frames (`frameon` dropped), text `bbox` boxes (dropped), suptitle ink.
+3. `dlab-figure-style` skill injected into `.opencode/skills/` — judgment rules code cannot enforce (no `sns.set_theme()`/`plt.style.use()`, scatter `color=` trap, grid XOR reference lines, z-order, shared legends). `parallel-agents.ts` always copies this skill to instances.
+
+Inter fonts are installed in the wrapper Docker image (warns instead of failing on download errors; DejaVu fallback), and the wrapper removes any matplotlib font cache baked into the base image — a stale cache silently hides the fonts (conda bases bake one). Both env vars reach parallel instances via the instance env allowlist (`MATPLOTLIBRC` is in `INSTANCE_ENV_EXACT`). The palette cycle order is CVD-validated — do not reorder it. Assets live in `dlab/data/figure_style/`; keep `PALETTE` in `dlab_plotstyle.py` and the rc `axes.prop_cycle` in sync (checked by `tests/test_figure_style.py`). `scripts/figure_style_gallery.py` renders a deterministic proofsheet for style iteration.
+
+Migrating a pack: remove any style rules from its agent prompts (a system prompt beats the injected skill — the pre-migration MMM pack mandated `seaborn-v0_8-whitegrid` and won) and any import-time `plt.style.use`/`rcParams` writes from bundled libraries; libraries should use `"C0"`/`"C1"` cycle references and may activate enforcement at their boundary via a `find_spec`-guarded `import dlab_plotstyle` in `__init__.py` (see `mmm_lib`).
 
 ## Known Hacks / Technical Debt
 

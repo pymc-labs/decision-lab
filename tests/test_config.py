@@ -79,7 +79,7 @@ class TestLoadConfigYaml:
         assert config["name"] == "test-dpack"
         assert config["description"] == "Test decision-pack for unit tests"
         assert config["docker_image_name"] == "test-dpack-img"
-        assert config["default_model"] == "anthropic/claude-sonnet-4-0"
+        assert config["default_model"] == "anthropic/claude-sonnet-4-5"
 
     def test_invalid_yaml(self, tmp_path: Path) -> None:
         """Invalid YAML should raise ValueError."""

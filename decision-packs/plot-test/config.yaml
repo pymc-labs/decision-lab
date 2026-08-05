@@ -1,0 +1,16 @@
+name: plot-test
+description: 'Test decision-pack for the decision-lab figure style: plots a CSV with
+  matplotlib'
+docker_image_name: dlab-plot-test
+default_model: anthropic/claude-sonnet-4-5
+requires_data: true
+requires_prompt: true
+
+# decision-lab figure style (matplotlibrc + dlab_plotstyle + skill).
+# On by default; this pack exists to test it. Set false to opt out.
+use_dlab_plot_style: true
+
+# Scripts listed here run inside the container before/after the agent's run.
+# hooks:
+#   pre-run: setup.sh
+#   post-run: cleanup.sh

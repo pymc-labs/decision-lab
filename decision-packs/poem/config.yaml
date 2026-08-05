@@ -46,6 +46,10 @@ hooks:
   pre-run: say_hi.sh
   post-run: print_result.sh
 
+# decision-lab house figure style (matplotlibrc + plotting skill injected at
+# session setup). Off here: this decision-pack writes poems, not figures.
+use_dlab_plot_style: false
+
 # Other fields you can set here (not used in this decision-pack):
 #
 # requires_prompt: true          # If false, --prompt becomes optional

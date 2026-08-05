@@ -1,0 +1,8 @@
+# Locked plotting environment for the figure-style test pack.
+# seaborn is included DELIBERATELY: it tempts the agent into sns.set_theme(),
+# which the dlab-figure-style skill forbids — part of what this pack tests.
+pandas~=2.2
+numpy~=2.0
+matplotlib~=3.10
+seaborn~=0.13
+pyarrow~=19.0

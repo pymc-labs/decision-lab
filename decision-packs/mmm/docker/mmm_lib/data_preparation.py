@@ -11,6 +11,7 @@ import io
 import pandas as pd
 import polars as po
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 
 from pathlib import Path
@@ -626,7 +627,10 @@ def plot_correlation_heatmap(df: pd.DataFrame,
     fig, ax = plt.subplots(figsize=figsize)
 
     # Create heatmap using matplotlib's imshow
-    im = ax.imshow(corr, cmap="coolwarm", aspect="auto", vmin=-1, vmax=1)
+    # Prefer the decision-lab house diverging colormap when the session has
+    # registered it (import dlab_plotstyle); fall back for standalone use.
+    cmap = "dlab_div" if "dlab_div" in matplotlib.colormaps else "coolwarm"
+    im = ax.imshow(corr, cmap=cmap, aspect="auto", vmin=-1, vmax=1)
 
     # Set ticks and labels
     ax.set_xticks(np.arange(len(corr.columns)))
