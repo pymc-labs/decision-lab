@@ -98,9 +98,9 @@ class TestFindModelStrings:
         assert "google/gemini-2.5-pro" in result
 
     def test_deduplicates(self) -> None:
-        text: str = '"anthropic/claude-sonnet-4-0"\n"anthropic/claude-sonnet-4-0"\n'
+        text: str = '"anthropic/claude-sonnet-4-5"\n"anthropic/claude-sonnet-4-5"\n'
         result: list[str] = find_model_strings(text)
-        assert result == ["anthropic/claude-sonnet-4-0"]
+        assert result == ["anthropic/claude-sonnet-4-5"]
 
     def test_ignores_non_provider_paths(self) -> None:
         text: str = "some/random/path\nfoo/bar\n"
@@ -149,24 +149,24 @@ class TestPreflightCheck:
         return dpack
 
     def test_orchestrator_key_missing_is_error(self, tmp_path: Path) -> None:
-        dpack: Path = self._make_dpack(tmp_path, "Use anthropic/claude-opus-4-0")
+        dpack: Path = self._make_dpack(tmp_path, "Use anthropic/claude-opus-4-5")
         env_file: Path = tmp_path / ".env"
         env_file.write_text("OPENAI_API_KEY=sk-123\n")
 
         errors, warnings = preflight_check(
-            "anthropic/claude-opus-4-0", str(dpack), str(env_file),
+            "anthropic/claude-opus-4-5", str(dpack), str(env_file),
         )
         assert len(errors) == 1
         assert "ANTHROPIC_API_KEY" in errors[0]
-        assert "anthropic/claude-opus-4-0" in errors[0]
+        assert "anthropic/claude-opus-4-5" in errors[0]
 
     def test_orchestrator_key_present_no_error(self, tmp_path: Path) -> None:
-        dpack: Path = self._make_dpack(tmp_path, "Use anthropic/claude-opus-4-0")
+        dpack: Path = self._make_dpack(tmp_path, "Use anthropic/claude-opus-4-5")
         env_file: Path = tmp_path / ".env"
         env_file.write_text("ANTHROPIC_API_KEY=sk-123\n")
 
         errors, warnings = preflight_check(
-            "anthropic/claude-opus-4-0", str(dpack), str(env_file),
+            "anthropic/claude-opus-4-5", str(dpack), str(env_file),
         )
         assert errors == []
 
@@ -176,7 +176,7 @@ class TestPreflightCheck:
         env_file.write_text("ANTHROPIC_API_KEY=sk-123\n")
 
         errors, warnings = preflight_check(
-            "anthropic/claude-opus-4-0", str(dpack), str(env_file),
+            "anthropic/claude-opus-4-5", str(dpack), str(env_file),
         )
         assert any("anthropic/claude-sonet-4" in e for e in errors)
         assert any("did you mean" in e for e in errors)
@@ -204,35 +204,35 @@ class TestPreflightCheck:
         env_file.write_text("ANTHROPIC_API_KEY=sk-123\n")
 
         errors, warnings = preflight_check(
-            "anthropic/claude-opus-4-0", str(dpack), str(env_file),
+            "anthropic/claude-opus-4-5", str(dpack), str(env_file),
         )
         assert errors == []
         assert len(warnings) >= 1
         assert any("google/gemini-2.0-flash" in w for w in warnings)
         assert any("GOOGLE_GENERATIVE_AI_API_KEY" in w for w in warnings)
-        assert any("anthropic/claude-opus-4-0" in w for w in warnings)
+        assert any("anthropic/claude-opus-4-5" in w for w in warnings)
 
     def test_all_keys_present_no_warnings(self, tmp_path: Path) -> None:
         dpack: Path = tmp_path / "dpack"
         pa_dir: Path = dpack / "opencode" / "parallel_agents"
         pa_dir.mkdir(parents=True)
         (pa_dir / "agent.yaml").write_text(
-            'default_model: "anthropic/claude-sonnet-4-0"\n'
+            'default_model: "anthropic/claude-sonnet-4-5"\n'
         )
         env_file: Path = tmp_path / ".env"
         env_file.write_text("ANTHROPIC_API_KEY=sk-123\n")
 
         errors, warnings = preflight_check(
-            "anthropic/claude-opus-4-0", str(dpack), str(env_file),
+            "anthropic/claude-opus-4-5", str(dpack), str(env_file),
         )
         assert errors == []
         assert warnings == []
 
     def test_no_env_file_orchestrator_error(self, tmp_path: Path) -> None:
-        dpack: Path = self._make_dpack(tmp_path, "Use anthropic/claude-opus-4-0")
+        dpack: Path = self._make_dpack(tmp_path, "Use anthropic/claude-opus-4-5")
 
         errors, warnings = preflight_check(
-            "anthropic/claude-opus-4-0", str(dpack), None,
+            "anthropic/claude-opus-4-5", str(dpack), None,
         )
         assert len(errors) == 1
         assert "ANTHROPIC_API_KEY" in errors[0]
@@ -250,7 +250,7 @@ class TestPreflightCheck:
         env_file.write_text("ANTHROPIC_API_KEY=sk-123\n")
 
         errors, warnings = preflight_check(
-            "anthropic/claude-opus-4-0", str(dpack), str(env_file),
+            "anthropic/claude-opus-4-5", str(dpack), str(env_file),
         )
         # Only one warning for google/gemini-2.0-flash, not two
         google_warnings: list[str] = [
@@ -266,7 +266,7 @@ class TestPreflightCheck:
             "name: test\n"
             "description: test\n"
             "docker_image_name: test-img\n"
-            "default_model: anthropic/claude-opus-4-0\n"
+            "default_model: anthropic/claude-opus-4-5\n"
             "models:\n"
             "  forecaster: google/gemini-2.0-flash\n"
         )
@@ -274,7 +274,7 @@ class TestPreflightCheck:
         env_file.write_text("ANTHROPIC_API_KEY=sk-123\n")
 
         errors, warnings = preflight_check(
-            "anthropic/claude-opus-4-0", str(dpack), str(env_file),
+            "anthropic/claude-opus-4-5", str(dpack), str(env_file),
         )
         assert errors == []
         assert any("google/gemini-2.0-flash" in w for w in warnings)
@@ -284,9 +284,9 @@ class TestApplyModelFallback:
     """Tests for apply_model_fallback()."""
 
     def test_no_unavailable_providers(self) -> None:
-        text: str = 'default_model: "anthropic/claude-sonnet-4-0"\n'
+        text: str = 'default_model: "anthropic/claude-sonnet-4-5"\n'
         new_text, replacements = apply_model_fallback(
-            text, "anthropic/claude-opus-4-0", set(),
+            text, "anthropic/claude-opus-4-5", set(),
         )
         assert new_text == text
         assert replacements == []
@@ -294,22 +294,22 @@ class TestApplyModelFallback:
     def test_replaces_unavailable_provider(self) -> None:
         text: str = 'default_model: "google/gemini-2.5-pro"\n'
         new_text, replacements = apply_model_fallback(
-            text, "anthropic/claude-opus-4-0", {"google"},
+            text, "anthropic/claude-opus-4-5", {"google"},
         )
-        assert "anthropic/claude-opus-4-0" in new_text
+        assert "anthropic/claude-opus-4-5" in new_text
         assert "google/gemini-2.5-pro" not in new_text
         assert len(replacements) == 1
 
     def test_preserves_available_provider(self) -> None:
         text: str = textwrap.dedent("""\
-            default_model: "anthropic/claude-sonnet-4-0"
+            default_model: "anthropic/claude-sonnet-4-5"
             summarizer_model: "google/gemini-2.5-pro"
         """)
         new_text, replacements = apply_model_fallback(
-            text, "anthropic/claude-opus-4-0", {"google"},
+            text, "anthropic/claude-opus-4-5", {"google"},
         )
-        assert "anthropic/claude-sonnet-4-0" in new_text
-        assert "anthropic/claude-opus-4-0" in new_text
+        assert "anthropic/claude-sonnet-4-5" in new_text
+        assert "anthropic/claude-opus-4-5" in new_text
         assert len(replacements) == 1
 
     def test_replaces_multiple_occurrences(self) -> None:
@@ -318,7 +318,7 @@ class TestApplyModelFallback:
             summarizer_model: "google/gemini-2.0-flash"
         """)
         new_text, replacements = apply_model_fallback(
-            text, "anthropic/claude-opus-4-0", {"google"},
+            text, "anthropic/claude-opus-4-5", {"google"},
         )
         assert "google/" not in new_text
         assert len(replacements) == 2
@@ -326,9 +326,9 @@ class TestApplyModelFallback:
     def test_replaces_in_markdown_body(self) -> None:
         text: str = 'Use model "google/gemini-2.5-pro" for analysis.\n'
         new_text, replacements = apply_model_fallback(
-            text, "anthropic/claude-opus-4-0", {"google"},
+            text, "anthropic/claude-opus-4-5", {"google"},
         )
-        assert 'Use model "anthropic/claude-opus-4-0" for analysis.\n' == new_text
+        assert 'Use model "anthropic/claude-opus-4-5" for analysis.\n' == new_text
         assert len(replacements) == 1
 
     def test_does_not_replace_file_paths(self) -> None:
@@ -339,12 +339,12 @@ class TestApplyModelFallback:
             Check openai/spec.yaml
         """)
         new_text, replacements = apply_model_fallback(
-            text, "anthropic/claude-opus-4-0", {"google", "anthropic", "openai"},
+            text, "anthropic/claude-opus-4-5", {"google", "anthropic", "openai"},
         )
         assert "anthropic/report.md" in new_text
         assert "openai/spec.yaml" in new_text
         assert "google/gemini-2.5-pro" not in new_text
-        assert "anthropic/claude-opus-4-0" in new_text
+        assert "anthropic/claude-opus-4-5" in new_text
         # Only one replacement (the actual model, not the file paths)
         assert len(replacements) == 1
 
@@ -354,7 +354,7 @@ class TestMarkdownFallbackScope:
     never the prompt body (issue #51: no false replacements in prose, code
     blocks, URLs, or examples)."""
 
-    OPTS = ("anthropic/claude-opus-4-0", {"google", "openai"})
+    OPTS = ("anthropic/claude-opus-4-5", {"google", "openai"})
 
     def test_frontmatter_model_replaced(self) -> None:
         text: str = textwrap.dedent("""\
@@ -365,7 +365,7 @@ class TestMarkdownFallbackScope:
             body
         """)
         new_text, reps = apply_model_fallback(text, *self.OPTS, is_markdown=True)
-        assert "model: anthropic/claude-opus-4-0" in new_text
+        assert "model: anthropic/claude-opus-4-5" in new_text
         assert len(reps) == 1
 
     def test_body_prose_not_replaced(self) -> None:
@@ -423,7 +423,7 @@ class TestProcessOpencodeDir:
 
     def test_nonexistent_dir(self, tmp_path: Path) -> None:
         result: list[str] = process_opencode_dir(
-            str(tmp_path / "nope"), "anthropic/claude-opus-4-0", None,
+            str(tmp_path / "nope"), "anthropic/claude-opus-4-5", None,
         )
         assert result == []
 
@@ -432,16 +432,16 @@ class TestProcessOpencodeDir:
         pa_dir: Path = opencode_dir / "parallel_agents"
         pa_dir.mkdir(parents=True)
         (pa_dir / "agent.yaml").write_text(
-            'default_model: "anthropic/claude-sonnet-4-0"\n'
+            'default_model: "anthropic/claude-sonnet-4-5"\n'
         )
         env_file: Path = tmp_path / ".env"
         env_file.write_text("ANTHROPIC_API_KEY=sk-123\n")
 
         result: list[str] = process_opencode_dir(
-            str(opencode_dir), "anthropic/claude-opus-4-0", str(env_file),
+            str(opencode_dir), "anthropic/claude-opus-4-5", str(env_file),
         )
         content: str = (pa_dir / "agent.yaml").read_text()
-        assert "anthropic/claude-sonnet-4-0" in content
+        assert "anthropic/claude-sonnet-4-5" in content
         assert result == []
 
     def test_fallback_replaces_in_yaml(self, tmp_path: Path) -> None:
@@ -456,11 +456,11 @@ class TestProcessOpencodeDir:
         env_file.write_text("ANTHROPIC_API_KEY=sk-123\n")
 
         result: list[str] = process_opencode_dir(
-            str(opencode_dir), "anthropic/claude-opus-4-0", str(env_file),
+            str(opencode_dir), "anthropic/claude-opus-4-5", str(env_file),
         )
         content: str = (pa_dir / "agent.yaml").read_text()
         assert "google/" not in content
-        assert "anthropic/claude-opus-4-0" in content
+        assert "anthropic/claude-opus-4-5" in content
         assert any("-> " in msg for msg in result)
 
     def test_fallback_replaces_md_frontmatter_only(self, tmp_path: Path) -> None:
@@ -480,11 +480,11 @@ class TestProcessOpencodeDir:
         env_file.write_text("ANTHROPIC_API_KEY=sk-123\n")
 
         result: list[str] = process_opencode_dir(
-            str(opencode_dir), "anthropic/claude-opus-4-0", str(env_file),
+            str(opencode_dir), "anthropic/claude-opus-4-5", str(env_file),
         )
         content: str = (agents_dir / "orchestrator.md").read_text()
         # Frontmatter model was replaced ...
-        assert "model: anthropic/claude-opus-4-0" in content
+        assert "model: anthropic/claude-opus-4-5" in content
         # ... but the body example was not touched.
         assert '"google/gemini-2.5-pro"' in content
 
@@ -495,7 +495,7 @@ class TestProcessOpencodeDir:
         env_file.write_text("OPENAI_API_KEY=sk-123\n")
 
         result: list[str] = process_opencode_dir(
-            str(opencode_dir), "anthropic/claude-opus-4-0", str(env_file),
+            str(opencode_dir), "anthropic/claude-opus-4-5", str(env_file),
         )
         assert result == []
 
@@ -523,13 +523,13 @@ class TestProcessOpencodeDir:
         env_file.write_text("ANTHROPIC_API_KEY=sk-123\n")
 
         result: list[str] = process_opencode_dir(
-            str(opencode_dir), "anthropic/claude-opus-4-0", str(env_file),
+            str(opencode_dir), "anthropic/claude-opus-4-5", str(env_file),
         )
         yaml_content: str = (pa_dir / "modeler.yaml").read_text()
         md_content: str = (agents_dir / "orchestrator.md").read_text()
         # YAML config is fully rewritten ...
         assert "google/" not in yaml_content
-        assert yaml_content.count("anthropic/claude-opus-4-0") == 2
+        assert yaml_content.count("anthropic/claude-opus-4-5") == 2
         # ... but the .md body prose is left intact (issue #51).
         assert "google/gemini-2.5-pro" in md_content
-        assert "anthropic/claude-opus-4-0" not in md_content
+        assert "anthropic/claude-opus-4-5" not in md_content
