@@ -208,6 +208,48 @@ class TestRealPacks:
 # staleness via source checksums
 # --------------------------------------------------------------------------- #
 
+class TestTemplateExtractionHelpers:
+    """The deterministic pieces of the LLM template pass (the model call itself is
+    a manual integration, like the docker tests)."""
+
+    def test_extract_json_object_from_noisy_output(self) -> None:
+        from dlab.dpack_codemap import _extract_json_object
+        assert _extract_json_object('```json\n{"a": "x"}\n```') == {"a": "x"}
+        assert _extract_json_object('prose {"t": {"k": 1}} tail') == {"t": {"k": 1}}
+        assert _extract_json_object("no json here") is None
+        assert _extract_json_object("[1, 2, 3]") is None            # array, not object
+        assert _extract_json_object('{"broken": ') is None          # unbalanced
+
+    def test_template_prompt_includes_source_and_placeholder_rule(self) -> None:
+        from dlab.dpack_codemap import _template_prompt
+        m = build_code_map(DPACKS / "mmm")
+        prompt = _template_prompt(DPACKS / "mmm", m, ["optimize-budget"])
+        assert "optimize-budget" in prompt
+        assert "$inputname" in prompt or "$input" in prompt        # the placeholder rule
+        assert "budget_optimization" in prompt                     # the real work function
+        assert "JSON" in prompt                                    # asks for JSON only
+
+    def test_extract_returns_empty_without_needing_tools(self) -> None:
+        # a script-only pack needs no templates → no model call, empty result
+        from dlab.dpack_codemap import extract_call_templates
+        m = build_code_map(DPACKS / "poem")
+        assert extract_call_templates(DPACKS / "poem", m, model="x/y") == []
+
+
+class TestMapDpackCommand:
+    def test_deterministic_run_writes_map(self, tmp_path: Path) -> None:
+        from dlab.cli import cmd_map_dpack
+        dst = tmp_path / "poem"
+        shutil.copytree(DPACKS / "poem", dst)
+        assert cmd_map_dpack(str(dst)) == 0                # no --model → deterministic
+        assert (dst / "code_map.json").is_file()
+        assert cmd_map_dpack(str(dst), check=True) == 0    # freshly built → current
+
+    def test_rejects_non_dpack(self, tmp_path: Path) -> None:
+        from dlab.cli import cmd_map_dpack
+        assert cmd_map_dpack(str(tmp_path)) == 1           # no opencode/ dir
+
+
 class TestStaleness:
     def _copy(self, tmp_path: Path, pack: str) -> Path:
         dst = tmp_path / pack

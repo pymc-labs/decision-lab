@@ -99,6 +99,28 @@ class TestEditReplay:
         assert "wrong_name" not in runs[1].source  # the edit was applied
 
 
+class TestSkeletonCommand:
+    def test_rejects_non_workdir(self, tmp_path: Path) -> None:
+        from dlab.cli import cmd_skeleton
+        assert cmd_skeleton(str(tmp_path)) == 1          # no _opencode_logs
+
+    def test_builds_and_writes_skeleton(self, tmp_path: Path) -> None:
+        from dlab.cli import cmd_skeleton
+        wd = tmp_path / "w"
+        logs = wd / "_opencode_logs"
+        logs.mkdir(parents=True)
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 500, part={"model": "m"}),
+            _tool("write", 900, inp={"filePath": "/ws/s.py", "content": "print(1)\n"},
+                  start=900, end=910),
+            _tool("bash", 1000, inp={"command": "python s.py"},
+                  start=1000, end=1100, output="1\n"),
+        ]) + "\n")
+        assert cmd_skeleton(str(wd)) == 0
+        nbs = list((wd / "skeleton").glob("*.ipynb"))
+        assert nbs and json.loads(nbs[0].read_text())["nbformat"] == 4
+
+
 class TestContextHints:
     def _workdir(self, tmp_path: Path) -> Path:
         wd = tmp_path / "w"
