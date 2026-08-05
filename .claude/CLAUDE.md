@@ -77,6 +77,9 @@ dlab map-dpack <dpack> [--check]
 # Build deterministic notebooks (real code + real outputs, no LLM) into skeleton/
 dlab skeleton <work-dir> [--dpack <dpack>]
 
+# Compose narrated notebooks from a finished run (skeleton + LLM curation)
+dlab notebooks <work-dir> --model <provider/model> [--dpack <dpack>] [--env-file <file>]
+
 # Interactive wizard to create a parallel agent config
 dlab create-parallel-agent [DPACK_DIR]
 
@@ -159,7 +162,8 @@ dlab digest [work-dir] [--brief] [--write]
 - `data/models.json` - Bundled models.dev model list (package data)
 - `timeline.py` - Timeline visualization (parsing delegated to `opencode_logparser.py`)
 - `dpack_codemap.py` - Decision-pack code map (`build_code_map`, `write_code_map`, `stale_sources`, `entry_params`, `extract_call_templates`); statically maps each custom tool to the real code it runs (the Python library behind `python -m LIB.MOD`, or the deployed function reached *through* a `modal.Function.from_name` dispatch). Compiled once per pack into `<dpack>/code_map.json` (with source-file sha256s for staleness). **Optional LLM pass** (`map-dpack --model`, opencode subprocess, once per pack): for CLI tools whose `main()` loads/transforms so there's no clean `fn(**inputs)` call, the model writes a parametrized `call_template` (load+call with `$input` placeholders) stored in the map; deterministic rebuilds preserve it. Consumed by the deterministic notebook builder. Exposed as `dlab map-dpack`.
-- `notebook_skeleton.py` - **Deterministic** notebook builder (`build_skeleton`, `write_skeletons`); no LLM. Pairs the real code that ran (scripts the agent wrote; the code map's resolved library code for custom tools) with the real output it produced (captured stdout + figures attributed by execution time-window), one coarse cell per execution, one notebook per agent, into `<work_dir>/skeleton/`. Correct by construction (no hallucinated code, no orphaned figures, no empty-output cells); a shippable artifact and the substrate for the LLM-narrated notebook. Exposed as `dlab skeleton`.
+- `notebook_skeleton.py` - **Deterministic** notebook builder (`build_skeleton`, `write_skeletons`); no LLM. Pairs the real code that ran (scripts the agent wrote; the code map's resolved library code for custom tools) with the real output it produced (captured stdout + figures attributed by execution time-window), one coarse cell per execution, one notebook per agent, into `<work_dir>/skeleton/`. Collapses fix-arc re-runs to the final version, keeps parameter sweeps, splits adopted path from `attempts/`, and tags each cell with digest-aligned context hints. Correct by construction (no hallucinated code, no orphaned figures, no empty-output cells); a shippable artifact and the substrate for the LLM-narrated notebook. Exposed as `dlab skeleton`.
+- `notebooks.py` - The **notebook composer** step (`generate_notebooks`): digest → build the skeleton → seed `notebooks/` from it → launch the `notebooks` opencode agent (`dlab/agents/notebooks.md`) to **curate + narrate** that copy in place. The composer's frontmatter denies `nb-add-code-cell`/`nb-edit-cell`, so it structurally cannot write or alter code — it only inserts markdown (grounded via `digest-get` + the run's own report files), regroups, deduplicates noise, and authors `00_overview`; it never fabricates a number. Curated env + retry as before. Exposed as `dlab notebooks`.
 - `create_dpack.py` - Programmatic decision-pack generation (used by wizard and skills)
 - `create_dpack_wizard.py` - TUI wizard for `create-dpack` command (8 screens, Textual-based)
 - `create_parallel_agent_wizard.py` - TUI wizard for `create-parallel-agent` command
@@ -197,9 +201,10 @@ default_model: anthropic/claude-sonnet-4-5    # orchestrator model
 models:
   forecaster: anthropic/claude-haiku-4-5      # parallel agent instances (optional)
   consolidator: anthropic/claude-sonnet-4-5   # consolidator (optional)
+  notebooks: anthropic/claude-sonnet-4-5      # notebook composer (optional)
 ```
 
-Omitted roles fall back to `default_model`. `resolve_model_roles()` in `config.py` resolves the roles; `apply_model_roles_to_opencode()` injects them as `default_model`/`summarizer_model` into each YAML under `parallel_agents/` during session setup.
+Omitted roles fall back to `default_model`. `resolve_model_roles()` in `config.py` resolves the roles; `apply_model_roles_to_opencode()` injects forecaster/consolidator into each YAML under `parallel_agents/` during session setup. The **composer** model (`dlab notebooks`) resolves via `_resolve_notebooks_model()` in `cli.py`: `--model` > the pack's explicit `models.notebooks` > the `DLAB_NOTEBOOKS_MODEL` env var (a user's global default) > `default_model`.
 
 ## Known Hacks / Technical Debt
 

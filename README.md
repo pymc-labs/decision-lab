@@ -195,6 +195,9 @@ dlab run --dpack PATH --data PATH --prompt TEXT   # Run a session
 dlab connect WORK_DIR                         # Live TUI monitor
 dlab timeline [WORK_DIR]                      # Execution Gantt chart
 dlab view WORK_DIR                            # Browser-based DAG viewer
+dlab notebooks WORK_DIR --model M --dpack P   # Compose narrated notebooks from a run
+dlab skeleton WORK_DIR --dpack P              # Deterministic notebooks (no LLM)
+dlab map-dpack DPACK [--model M]              # Compile a pack's code map
 dlab create-dpack [OUTPUT_DIR]                # Interactive wizard
 dlab create-parallel-agent [DPACK_DIR]        # Parallel agent wizard
 dlab install DPACK_PATH                       # Create shortcut command

@@ -1341,6 +1341,19 @@ def _suggest_models(keys: set[str]) -> list[str]:
     return [model for names, model in _MODEL_SUGGESTIONS if keys & names]
 
 
+def _resolve_notebooks_model(model: str | None, dpack: str | None) -> str | None:
+    """Resolve the composer model. Precedence: ``--model`` (explicit) > the dpack's
+    explicit ``models.notebooks`` > ``$DLAB_NOTEBOOKS_MODEL`` (a user's global
+    default) > the dpack's ``default_model``. ``None`` if none of these resolve."""
+    if model:
+        return model
+    config = load_dpack_config(dpack) if dpack is not None else None
+    explicit = (config.get("models") or {}).get("notebooks") if config else None
+    return (explicit
+            or os.environ.get("DLAB_NOTEBOOKS_MODEL")
+            or (resolve_model_roles(config)["notebooks"] if config else None))
+
+
 def cmd_notebooks(
     work_dir: str,
     model: str | None = None,
@@ -1365,14 +1378,11 @@ def cmd_notebooks(
               file=sys.stderr)
         return 1
 
-    # Resolve the notebook agent model: --model, else the dpack's notebook agent role.
+    model = _resolve_notebooks_model(model, dpack)
     if model is None:
-        if dpack is None:
-            print("Error: provide --model or --dpack (to resolve models.notebooks).",
-                  file=sys.stderr)
-            return 1
-        config = load_dpack_config(dpack)
-        model = resolve_model_roles(config)["notebooks"]
+        print("Error: provide --model, --dpack (models.notebooks / default_model), "
+              "or set DLAB_NOTEBOOKS_MODEL.", file=sys.stderr)
+        return 1
 
     # Provider keys for the opencode subprocess: --env-file, else the dpack .env.
     if env_file is None and dpack is not None:

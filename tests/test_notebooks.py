@@ -73,6 +73,40 @@ class TestToolIsolation:
         assert not (wd / ".opencode" / "_tools_stash").exists()
 
 
+class TestComposerModelResolution:
+    def _dpack(self, root: Path, default_model: str, notebooks: str | None = None) -> Path:
+        (root / "docker").mkdir(parents=True)
+        (root / "opencode").mkdir()
+        lines = ["name: x", "description: x", "docker_image_name: x",
+                 f"default_model: {default_model}"]
+        if notebooks:
+            lines += ["models:", f"  notebooks: {notebooks}"]
+        (root / "config.yaml").write_text("\n".join(lines) + "\n")
+        return root
+
+    def test_precedence(self, tmp_path: Path, monkeypatch) -> None:
+        from dlab.cli import _resolve_notebooks_model
+        monkeypatch.delenv("DLAB_NOTEBOOKS_MODEL", raising=False)
+        pinned = self._dpack(tmp_path / "p1", "anthropic/def", notebooks="anthropic/pinned")
+        plain = self._dpack(tmp_path / "p2", "anthropic/def")
+
+        # --model always wins
+        assert _resolve_notebooks_model("x/flag", str(pinned)) == "x/flag"
+        # a pack's explicit models.notebooks beats the global env
+        monkeypatch.setenv("DLAB_NOTEBOOKS_MODEL", "env/global")
+        assert _resolve_notebooks_model(None, str(pinned)) == "anthropic/pinned"
+        # the global env beats a pack's default_model fallback
+        assert _resolve_notebooks_model(None, str(plain)) == "env/global"
+        # with no pin and no env, fall back to default_model
+        monkeypatch.delenv("DLAB_NOTEBOOKS_MODEL", raising=False)
+        assert _resolve_notebooks_model(None, str(plain)) == "anthropic/def"
+        # no model, no dpack, no env → unresolved
+        assert _resolve_notebooks_model(None, None) is None
+        # global env alone resolves it (no dpack)
+        monkeypatch.setenv("DLAB_NOTEBOOKS_MODEL", "env/only")
+        assert _resolve_notebooks_model(None, None) == "env/only"
+
+
 class TestComposerFlow:
     def test_seed_copies_skeleton_into_notebooks(self, tmp_path: Path) -> None:
         from dlab.notebooks import _seed_notebooks_from_skeleton
@@ -151,9 +185,10 @@ class TestEnvAndGuards:
         assert any("_opencode_logs" in w for w in result.warnings)
         assert result.notebooks == []
 
-    def test_cmd_notebooks_needs_model_or_dpack(self, tmp_path: Path) -> None:
+    def test_cmd_notebooks_needs_model_or_dpack(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.delenv("DLAB_NOTEBOOKS_MODEL", raising=False)
         (tmp_path / "_opencode_logs").mkdir()
-        assert cmd_notebooks(str(tmp_path)) == 1  # neither --model nor --dpack
+        assert cmd_notebooks(str(tmp_path)) == 1  # no --model, --dpack, or env default
 
     def test_cmd_notebooks_rejects_non_workdir(self, tmp_path: Path) -> None:
         assert cmd_notebooks(str(tmp_path), model="x/y") == 1  # no _opencode_logs

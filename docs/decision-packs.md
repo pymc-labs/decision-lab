@@ -258,6 +258,29 @@ Or add to your `.env` file:
 DLAB_FIT_MODEL_LOCALLY=1
 ```
 
+## Notebook composition
+
+`dlab notebooks <work-dir>` turns a finished run into narrated Jupyter notebooks. It is **deterministic-first**: the host builds correct notebooks, and an LLM only curates and narrates them (it has no tool to write or edit a code cell, so the code is always exactly what ran).
+
+The pipeline:
+
+1. **Session digest** — an LLM-facing map of the run (see [`dlab digest`](cli-reference.md#digest)).
+2. **Code map** (`<pack>/code_map.json`) — the static wiring from each custom tool to the real library code it ran, so a tool call renders as that code rather than a `python -m …` invocation. Built once with [`dlab map-dpack`](cli-reference.md#map-dpack) and committed with the pack. It is auto-built on the fly if missing, but committing it — and running the one-time `--model` template pass so CLI tools render as clean `load+call` code — is recommended. `dlab notebooks` warns when a pack has tools with no template.
+3. **Skeleton** (`skeleton/`) — real code paired with the real output it produced, one notebook per agent, the adopted path split from `attempts/` (see [`dlab skeleton`](cli-reference.md#skeleton)). No LLM; correct by construction.
+4. **Composer** (`notebooks/`) — the LLM curates + narrates a copy of the skeleton: inserts markdown grounded in the run's own outputs and reports, deduplicates noise, keeps parameter sweeps, and authors `00_overview`. It never fabricates a number.
+
+### Config surface
+
+```yaml
+# config.yaml
+models:
+  notebooks: anthropic/claude-sonnet-4-5   # optional; falls back to default_model
+```
+
+The composer model resolves in this order (highest wins): the `--model` flag → this pack's explicit `models.notebooks` → the `DLAB_NOTEBOOKS_MODEL` environment variable (a user's personal global default) → the pack's `default_model`. So a pack can pin a composer model, and a user can set their own default across packs without editing configs.
+
+For a pack whose custom tools shell out to a Python library, run `dlab map-dpack <pack> --model <model> --env-file <pack>/.env` once (and re-run it, or `--check`, when the tools or library change). Packs with no custom tools are `script-only` — nothing to map.
+
 ## Best Practices
 
 1. **Keep images focused**: Include only what's needed for the use case

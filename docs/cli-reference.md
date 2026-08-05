@@ -329,6 +329,61 @@ Without `--write`, the digest markdown is printed to stdout (pipe-friendly: `dla
 
 ---
 
+## map-dpack
+
+Compile a decision-pack's **code map** — the static wiring from each custom tool to the real code it runs (the Python library behind `python -m LIB.MOD`, or the function deployed behind a `modal.Function.from_name` dispatch). Written to `<dpack>/code_map.json` (with source-file checksums for staleness). This is what lets `dlab notebooks` show a tool call as the real library code rather than a bare CLI invocation. Deterministic by default; the notebook step auto-builds one on the fly if a pack has none, but committing the map (and running the optional LLM pass below) is recommended.
+
+```bash
+dlab map-dpack <DPACK> [--check] [--model <provider/model>] [--env-file <file>]
+```
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--check` | — | Don't rebuild; report whether the committed `code_map.json` is stale vs its sources (exit 1 if it is) |
+| `--model` | — | Run the **one-time LLM template pass**: for CLI tools whose `main()` loads/transforms (so there's no clean `fn(**inputs)` call), the model writes a parametrized `call_template` stored in the map. Deterministic-only if omitted; deterministic rebuilds preserve existing templates |
+| `--env-file` | dpack's `.env` | Provider keys for the `--model` pass |
+
+Run without `--model`, it prints a warning naming the tools that would benefit and suggests models from the provider keys it detects. Re-run after changing a pack's tools or library (or use `--check` in CI).
+
+---
+
+## skeleton
+
+Build **deterministic notebooks** from a finished run — real code paired with the real output it produced (captured stdout/stderr + figures) — with no LLM. One notebook per agent into `<work-dir>/skeleton/`: the adopted path as numbered phase notebooks, non-adopted instances under `skeleton/attempts/`. Correct by construction (no hallucinated code, no orphaned figures, no empty-output cells). This is the substrate the `notebooks` composer curates; it's also useful on its own.
+
+```bash
+dlab skeleton <WORK_DIR> [--dpack <dpack>]
+```
+
+Pass `--dpack` so custom-tool cells resolve to the real library code they ran (via the pack's code map) instead of just the invocation.
+
+---
+
+## notebooks
+
+Turn a finished run into narrated Jupyter notebooks. Two stages: **(1) deterministic** — generate the digest, build the skeleton, seed `notebooks/` from it; **(2) LLM** — launch the `notebooks` composer agent to *curate and narrate* that copy in place. The composer has no tool to add or edit a code cell, so the code stays exactly what ran (it only inserts markdown, regroups, deduplicates noise, and authors `00_overview`). It grounds numbers in the run's own outputs/reports — it never fabricates.
+
+```bash
+dlab notebooks <WORK_DIR> --model <provider/model> [--dpack <dpack>] [--env-file <file>] [--timeout <s>]
+```
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--model` | see below | The composer model (`provider/model`) |
+| `--dpack` | — | Decision-pack; resolves the model and lets custom-tool cells carry real library code (via its code map). Warns if a mapped tool has no template |
+| `--env-file` | dpack's `.env` | Provider keys for the composer run |
+| `--timeout` | 3600 | Seconds before the composer run is aborted (raise for slower/thorough models) |
+
+**Model resolution** (highest wins): `--model` → the dpack's explicit `models.notebooks` → the `DLAB_NOTEBOOKS_MODEL` environment variable (a user's global default) → the dpack's `default_model`.
+
+Output: `notebooks/` (curated) and `skeleton/` (the pristine deterministic artifact). See [Notebook composition](decision-packs.md#notebook-composition) for the full pipeline.
+
+---
+
 ## Help
 
 ```bash
@@ -339,5 +394,8 @@ dlab connect --help
 dlab timeline --help
 dlab view --help
 dlab digest --help
+dlab map-dpack --help
+dlab skeleton --help
+dlab notebooks --help
 dlab install --help
 ```
