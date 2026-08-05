@@ -125,6 +125,11 @@ Session:    ./analysis-001
 | 1 | CLI error (missing args, invalid config, etc.) |
 | 128+N | Terminated by signal N (e.g., 130 = Ctrl+C) |
 
+`dlab run` returns opencode's exit code, so an agent-level failure (invalid
+API key, unknown model) exits non-zero even when the session lifecycle
+(image build, container, hooks, cleanup) completed — dlab's exit code
+deliberately mirrors the agent's outcome.
+
 ---
 
 ## create-dpack
