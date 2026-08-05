@@ -33,6 +33,7 @@ from dlab.opencode_logparser import (
     get_tool_output,
     parse_log_file,
 )
+from dlab.session_digest import _collect_agents
 
 SKELETON_DIR = "skeleton"
 
@@ -64,6 +65,9 @@ class SkeletonCell:
     start: int | None = None               # ms; for figure attribution
     end: int | None = None
     label: str = ""                        # short provenance note
+    kind: str = ""                         # script | custom-tool | shell
+    tid: str = ""                          # digest tool-call id (produced_by)
+    stream_ids: list[str] = field(default_factory=list)  # digest rN ids for this call
 
 
 @dataclass
@@ -73,6 +77,7 @@ class SkeletonNotebook:
     phase: str = ""                        # agent role (data-preparer, modeler); "" = orchestrator
     instance: str = ""                     # instance-N ("" = orchestrator)
     adopted: bool = True                   # False → a non-adopted attempt (goes to attempts/)
+    qual: str = ""                         # digest agent id (e.g. "modeler.r1.i4") for digest-get
 
 
 def _time_window(ev: Any) -> tuple[int | None, int | None]:
@@ -151,12 +156,14 @@ def _custom_tool_code(
 
 def _build_cells(
     log_path: Path, search_root: Path, code_map: dict[str, Any], dpack: Path | None,
-    custom_tools: set[str],
+    custom_tools: set[str], tool_calls: list[dict[str, Any]] | None = None,
 ) -> list[SkeletonCell]:
     events = parse_log_file(log_path)
+    tool_calls = tool_calls or []
     written: dict[str, str] = {}
     cells: list[SkeletonCell] = []
     current: SkeletonCell | None = None
+    tc_idx = 0  # tracks the digest tool-call for the current tool_use (aligned by order)
 
     def close() -> None:
         nonlocal current
@@ -170,6 +177,10 @@ def _build_cells(
             continue
         if ev.event_type != "tool_use":
             continue
+        # advance the digest tool-call cursor for EVERY tool_use (incl. skipped), so
+        # tN ids stay aligned with the digest's per-agent counter.
+        tc = tool_calls[tc_idx] if tc_idx < len(tool_calls) else {}
+        tc_idx += 1
         name = get_tool_name(ev) or ""
         if name in _SKIP_TOOLS:
             continue
@@ -195,21 +206,22 @@ def _build_cells(
 
         source: str | None = None
         label = ""
+        kind = ""
         if name in custom_tools and dpack is not None:
             source = _custom_tool_code(name, inp, code_map, dpack)
-            label = f"custom tool: {name}"
+            label, kind = f"custom tool: {name}", "custom-tool"
         elif name == "bash":
             cmd = (inp.get("command") or "").strip()
             m = _PY_SCRIPT.search(cmd)
             if m:
                 source = _script_source(m.group(1), written, search_root)
-                label = f"ran: {cmd}"
-            elif "python" in cmd and _PY_SCRIPT.search(cmd) is None:
+                label, kind = f"ran: {cmd}", "script"
+            elif "python" in cmd:
                 source = f"# {cmd}\n"        # python -m / -c with no script file
-                label = f"ran: {cmd}"
+                label, kind = f"ran: {cmd}", "shell"
             elif not _SKIP_BASH.match(cmd):
                 source = f"!{cmd}"           # a substantive shell command
-                label = "shell"
+                label, kind = "shell", "shell"
         if source is None:
             continue
 
@@ -219,8 +231,10 @@ def _build_cells(
         if not stream:
             out = get_tool_output(ev) or ""
             stream = out
-        current = SkeletonCell(source=source, stream=stream, start=start,
-                               end=end, label=label)
+        current = SkeletonCell(
+            source=source, stream=stream, start=start, end=end, label=label,
+            kind=kind, tid=tc.get("id", ""),
+            stream_ids=[b["id"] for b in tc.get("raw_ids", [])])
     close()
     return cells
 
@@ -288,6 +302,9 @@ def build_skeleton(
     dpack_path = Path(dpack).resolve() if dpack else None
     custom_tools = {p.stem for p in (work_dir / ".opencode" / "tools").glob("*.ts")}
     adopted = _adopted_instances(work_dir)
+    # digest agents give the qual + per-agent tool-call ids (tN/rN) the hints point
+    # at, so the composer can digest-get the context for each cell.
+    digest_by_log = {a.log_path.resolve(): a for a in _collect_agents(work_dir)}
 
     # (agent label, phase, instance, adopted, log, workdir root)
     logs: list[tuple[str, str, str, bool, Path, Path]] = []
@@ -306,13 +323,15 @@ def build_skeleton(
 
     notebooks: list[SkeletonNotebook] = []
     for label, phase, instance, is_adopted, log_path, root in logs:
-        cells = _build_cells(log_path, root, code_map, dpack_path, custom_tools)
+        ad = digest_by_log.get(log_path.resolve())
+        cells = _build_cells(log_path, root, code_map, dpack_path, custom_tools,
+                             ad.tool_calls if ad else None)
         _attribute_figures(cells, root)
         cells = [c for c in cells if c.figures or c.stream.strip() or c.source.strip()]
         if cells:
             notebooks.append(SkeletonNotebook(
                 agent=label, cells=cells, phase=phase, instance=instance,
-                adopted=is_adopted))
+                adopted=is_adopted, qual=ad.qual if ad else label))
     return notebooks
 
 
@@ -360,9 +379,15 @@ def _render_notebook(nb: SkeletonNotebook) -> dict[str, Any]:
         if c.label:
             cells.append({"cell_type": "markdown", "metadata": {},
                           "source": [f"*{c.label}*"]})
+        # Context hints for the composer: where to digest-get the WHY for this cell.
+        hint: dict[str, Any] = {"kind": c.kind}
+        if nb.qual and c.tid:
+            hint["produced_by"] = f"{nb.qual}/{c.tid}"
+        if nb.qual and c.stream_ids:
+            hint["streams"] = [f"{nb.qual}/{r}" for r in c.stream_ids]
         cells.append({
             "cell_type": "code", "execution_count": exec_count,
-            "metadata": {}, "outputs": outputs,
+            "metadata": {"dlab": hint}, "outputs": outputs,
             "source": c.source.splitlines(keepends=True),
         })
     return {
@@ -370,7 +395,9 @@ def _render_notebook(nb: SkeletonNotebook) -> dict[str, Any]:
             "kernelspec": {"display_name": "Python 3", "language": "python",
                            "name": "python3"},
             "language_info": {"name": "python"},
-            "dlab": {"skeleton": True, "agent": nb.agent},
+            "dlab": {"skeleton": True, "agent": nb.agent, "qual": nb.qual,
+                     "phase": nb.phase, "adopted": nb.adopted,
+                     "task": f"{nb.qual}/p0" if nb.qual else None},
         }, "nbformat": 4, "nbformat_minor": 5,
     }
 

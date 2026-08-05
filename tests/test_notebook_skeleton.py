@@ -99,6 +99,52 @@ class TestEditReplay:
         assert "wrong_name" not in runs[1].source  # the edit was applied
 
 
+class TestContextHints:
+    def _workdir(self, tmp_path: Path) -> Path:
+        wd = tmp_path / "w"
+        logs = wd / "_opencode_logs"
+        logs.mkdir(parents=True)
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 500, part={"model": "m", "prompt": "do the task"}),
+            _tool("write", 900, inp={"filePath": "/ws/m.py", "content": "print('hi')\n"},
+                  start=900, end=910),
+            _tool("bash", 1000, inp={"command": "python m.py"},
+                  start=1000, end=1100, output="hi\n"),
+            "hi from stdout",   # raw_text stream for the bash call
+        ]) + "\n")
+        return wd
+
+    def test_hint_ids_align_with_digest_index(self, tmp_path: Path) -> None:
+        # a cell's produced_by must be a real digest tool-call id the composer can
+        # digest-get — this guards against drift between the two parses.
+        from dlab.session_digest import generate_digest
+        wd = self._workdir(tmp_path)
+        generate_digest(wd)
+        index = json.loads((wd / "_digest" / "index.json").read_text())
+        nbs = build_skeleton(wd)
+        seen = False
+        for nb in nbs:
+            for c in nb.cells:
+                if not c.tid:
+                    continue
+                seen = True
+                entry = index.get(f"{nb.qual}/{c.tid}")
+                assert entry and entry["event_type"] == "tool_use"
+        assert seen
+
+    def test_metadata_dlab_hints_rendered(self, tmp_path: Path) -> None:
+        from dlab.notebook_skeleton import write_skeletons
+        wd = self._workdir(tmp_path)
+        (wd / "_digest").mkdir()  # not required, but mirrors a real run
+        paths = write_skeletons(wd)
+        nb = json.loads(paths[0].read_text())
+        assert nb["metadata"]["dlab"]["adopted"] is True
+        code = [c for c in nb["cells"] if c["cell_type"] == "code"][0]
+        hint = code["metadata"]["dlab"]
+        assert hint["kind"] == "script"
+        assert hint["produced_by"].endswith("/t2")  # the bash run is the 2nd tool call
+
+
 class TestPhaseGroupingAndAdoption:
     def _run(self, tmp_path: Path) -> Path:
         wd = tmp_path / "w"
