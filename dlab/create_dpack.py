@@ -481,10 +481,13 @@ def _build_dockerfile(config: dict[str, Any]) -> str:
             "    curl -fsSL https://pixi.sh/install.sh | bash && \\",
             "    rm -rf /var/lib/apt/lists/*",
             "",
+            "# The installer puts pixi in /root/.pixi/bin and only updates .bashrc,",
+            "# which RUN steps don't source — PATH must be set before `pixi install`",
+            'ENV PATH="/opt/pixi/.pixi/envs/default/bin:/root/.pixi/bin:$PATH"',
+            "",
             "# Install pixi packages to /opt/pixi (not /workspace, which gets volume-mounted)",
             "COPY pixi.toml /opt/pixi/pixi.toml",
             "RUN cd /opt/pixi && pixi install",
-            'ENV PATH="/opt/pixi/.pixi/envs/default/bin:/root/.pixi/bin:$PATH"',
             "",
         ])
     else:  # pip
