@@ -5,11 +5,15 @@ Generates a valid decision-pack directory structure from a configuration dict.
 The TUI wizard (CreateDpackApp) is separate and calls generate_dpack().
 """
 
+import functools
 import io
 import json
+import os
 import re
 import shutil
 import tempfile
+import threading
+import time
 import zipfile
 from collections.abc import Callable
 from importlib.resources import files
@@ -33,6 +37,12 @@ KNOWN_PROVIDER_ENVS: dict[str, list[str]] = _BUNDLED["provider_envs"]
 
 CACHE_DIR: Path = Path.home() / ".cache" / "dlab"
 MODEL_CACHE_FILE: Path = CACHE_DIR / "models.json"
+# The user-level cache tops up the bundled catalog (see get_model_list). It is
+# refreshed in the background when older than the TTL, with at most one
+# attempt per retry window so a broken network is not hammered (issue #91).
+MODEL_CACHE_TTL_SECONDS: int = 7 * 24 * 3600
+MODEL_REFRESH_RETRY_SECONDS: int = 24 * 3600
+MODEL_REFRESH_ATTEMPT_FILE: Path = CACHE_DIR / "models-refresh-attempt"
 
 
 def fetch_models_from_api() -> dict[str, Any]:
@@ -83,9 +93,91 @@ def load_cached_models() -> dict[str, Any]:
 
 
 def save_model_cache(data: dict[str, Any]) -> None:
-    """Save model list and provider envs to disk cache."""
+    """Save model list and provider envs to disk cache (atomic write)."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    MODEL_CACHE_FILE.write_text(json.dumps(data))
+    tmp_path: Path = MODEL_CACHE_FILE.with_suffix(".tmp")
+    tmp_path.write_text(json.dumps(data))
+    os.replace(tmp_path, MODEL_CACHE_FILE)
+
+
+def refresh_model_cache_if_stale(
+    cache_file: Path = MODEL_CACHE_FILE,
+    attempt_file: Path = MODEL_REFRESH_ATTEMPT_FILE,
+) -> threading.Thread | None:
+    """
+    Refresh the model cache in the background when it is stale.
+
+    Never blocks the caller and never raises: if the cache is younger than
+    ``MODEL_CACHE_TTL_SECONDS`` (or a refresh was attempted within
+    ``MODEL_REFRESH_RETRY_SECONDS``), nothing happens. Otherwise a daemon
+    thread fetches models.dev and atomically rewrites the cache; network
+    failures leave the existing cache untouched. The refreshed list benefits
+    *subsequent* runs — the current run always uses what is already on disk.
+
+    Parameters
+    ----------
+    cache_file : Path
+        Cache file to check and refresh (default: the user-level cache).
+    attempt_file : Path
+        Marker file recording the last refresh attempt.
+
+    Returns
+    -------
+    threading.Thread | None
+        The started refresh thread, or None if no refresh was needed.
+    """
+    now: float = time.time()
+    if cache_file.exists() and now - cache_file.stat().st_mtime < MODEL_CACHE_TTL_SECONDS:
+        return None
+    if attempt_file.exists() and now - attempt_file.stat().st_mtime < MODEL_REFRESH_RETRY_SECONDS:
+        return None
+
+    attempt_file.parent.mkdir(parents=True, exist_ok=True)
+    attempt_file.touch()
+
+    def _refresh() -> None:
+        try:
+            data: dict[str, Any] = fetch_models_from_api()
+        except (httpx.HTTPError, ValueError):
+            # Offline or API hiccup: keep the current cache, retry after the
+            # retry window. A refresh failure must never surface to the run.
+            return
+        if data.get("models"):
+            tmp_path: Path = cache_file.with_suffix(".tmp")
+            tmp_path.write_text(json.dumps(data))
+            os.replace(tmp_path, cache_file)
+
+    thread: threading.Thread = threading.Thread(target=_refresh, daemon=True)
+    thread.start()
+    return thread
+
+
+@functools.lru_cache(maxsize=1)
+def resolve_latest_opencode_version() -> str:
+    """
+    Resolve the current opencode-ai release from the npm registry.
+
+    Memoized per process — generate_dpack may be called repeatedly (tests,
+    wizards) and one registry lookup suffices.
+
+    Used at pack-creation time so new decision-packs pin the opencode
+    version they were built against (issue #92) instead of drifting with
+    ``latest``. Falls back to ``"latest"`` when offline.
+
+    Returns
+    -------
+    str
+        A version string like ``"1.18.11"``, or ``"latest"``.
+    """
+    try:
+        resp: httpx.Response = httpx.get(
+            "https://registry.npmjs.org/opencode-ai/latest", timeout=10,
+        )
+        resp.raise_for_status()
+        version: str = str(resp.json().get("version", ""))
+    except (httpx.HTTPError, ValueError):
+        return "latest"
+    return version if version else "latest"
 
 
 def _model_sort_key(model_id: str) -> tuple[int, str]:
@@ -418,6 +510,10 @@ def _build_config_yaml(config: dict[str, Any]) -> str:
         "description": config["description"],
         "docker_image_name": config["docker_image_name"],
         "default_model": config["default_model"],
+        # Pin the opencode release the pack was built against (locked
+        # environments, issue #92); "latest" only when offline or explicit.
+        "opencode_version": config.get("opencode_version")
+        or resolve_latest_opencode_version(),
         "requires_data": config.get("requires_data", True),
         "requires_prompt": config.get("requires_prompt", True),
     }

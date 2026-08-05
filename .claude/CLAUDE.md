@@ -143,12 +143,12 @@ dlab view <work-dir> [--port PORT] [--no-open] [--export FILE]
 - `local.py` - Local (no-Docker) execution backend for `--no-sandboxing`
 - `model_fallback.py` - Model validation and provider fallback (`preflight_check` before session creation, `process_opencode_dir` during setup) so a single API key suffices
 - `figure_style.py` - decision-lab matplotlib house style (`figure_style_enabled`, `install_figure_style`, `figure_style_shell_exports`); vendored assets in `data/figure_style/` (matplotlibrc, dlab_plotstyle.py, SKILL.md)
-- `opencode_logparser.py` - Canonical OpenCode NDJSON log parser (`LogEvent`, `SessionNode`, `parse_log_file`, `build_session_graph`); single source of truth used by `timeline.py`, `tui/`, and `viewer/`
+- `opencode_logparser.py` - Canonical OpenCode NDJSON log parser (`LogEvent`, `SessionNode`, `parse_log_file`, `build_session_graph`); single source of truth used by `timeline.py`, `tui/`, and `viewer/`; `diagnose_fatal_error` maps opencode's opaque failures to readable hints
 - `parallel_tool.py` - Loads parallel-agents.ts from `js/`
 - `js/parallel-agents.ts` - TypeScript source bundled as package data
 - `data/models.json` - Bundled models.dev model list (package data)
 - `timeline.py` - Timeline visualization (parsing delegated to `opencode_logparser.py`)
-- `create_dpack.py` - Programmatic decision-pack generation (used by wizard and skills)
+- `create_dpack.py` - Programmatic decision-pack generation (used by wizard and skills); model catalog (bundled models.json + TTL-cached background refresh, `refresh_model_cache_if_stale`), pins `opencode_version` at creation (`resolve_latest_opencode_version`)
 - `create_dpack_wizard.py` - TUI wizard for `create-dpack` command (8 screens, Textual-based)
 - `create_parallel_agent_wizard.py` - TUI wizard for `create-parallel-agent` command
 - `tui/` - TUI module for `connect` command:

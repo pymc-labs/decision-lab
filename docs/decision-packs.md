@@ -76,7 +76,7 @@ hooks:
 | `requires_data` | No | `true` | Whether `--data` is required |
 | `requires_prompt` | No | `true` | Whether `--prompt` is required |
 | `cli_name` | No | same as `name` | Override command name for `dlab install` |
-| `opencode_version` | No | `latest` | opencode version to install |
+| `opencode_version` | No | `latest` | opencode version to install. `dlab create-dpack` pins the release current at creation time (locked environments); `latest` drifts on every image rebuild |
 | `use_dlab_plot_style` | No | `true` | Enforce the decision-lab matplotlib house style |
 | `models.forecaster` | No | `default_model` | Model for parallel agent instances |
 | `models.consolidator` | No | `default_model` | Model for the consolidator agent |

@@ -34,8 +34,10 @@ from dlab.docker import (
     start_container,
     stop_container,
 )
+from dlab.create_dpack import refresh_model_cache_if_stale
 from dlab.figure_style import figure_style_enabled, figure_style_shell_exports
 from dlab.model_fallback import preflight_check
+from dlab.opencode_logparser import diagnose_fatal_error
 from dlab.session import copy_hook_scripts, create_session, setup_opencode_config
 from dlab.timeline import run_timeline
 
@@ -52,6 +54,22 @@ app = typer.Typer(
     suggest_commands=True,
     rich_markup_mode="rich",
 )
+
+
+def _print_failure_diagnosis(console: Console, indent: str, work_dir: str) -> None:
+    """
+    Scan the session's main log for known fatal signatures and print a hint.
+
+    opencode reports many fatal problems only as "Unexpected server error";
+    this maps the log tail to a readable cause (issue #91).
+    """
+    log_path: Path = Path(work_dir) / "_opencode_logs" / "main.log"
+    if not log_path.exists():
+        return
+    tail: str = log_path.read_text(errors="replace")[-50_000:]
+    diagnosis: str | None = diagnose_fatal_error(tail)
+    if diagnosis:
+        console.print(f"{indent}[bold red]Likely cause:[/bold red] {diagnosis}")
 
 
 def _make_console() -> Console:
@@ -446,6 +464,10 @@ def cmd_run(
         model = config["default_model"]
     fallback_msgs: list[str] = []
 
+    # Top up the model catalog cache in the background when stale (never
+    # blocks; the refreshed list benefits subsequent runs — issue #91)
+    refresh_model_cache_if_stale()
+
     # Pre-flight model validation (before any session/Docker work)
     pf_errors, pf_warnings = preflight_check(
         model,
@@ -659,6 +681,8 @@ def cmd_run(
             )
             if stderr:
                 console.print(f"{I}[red]{stderr}[/red]", highlight=False)
+            if exit_code != 0:
+                _print_failure_diagnosis(console, I, work_dir)
         except KeyboardInterrupt:
             console.print(f"\n{I}[yellow]Interrupted.[/yellow]")
             exit_code = 130
@@ -850,6 +874,8 @@ def cmd_run(
         )
         if stderr:
             console.print(f"{I}[red]{stderr}[/red]", highlight=False)
+        if exit_code != 0:
+            _print_failure_diagnosis(console, I, work_dir)
 
         # --- Post-run hooks (optional step) ---
         if post_run_hooks:
