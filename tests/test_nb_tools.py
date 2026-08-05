@@ -252,6 +252,151 @@ console.log(JSON.stringify({ read: before }))
         assert "iVBOR" not in read_out and "base64" not in read_out.lower()
 
 
+_EDIT_TOOLS = ["nb-read", "nb-list", "nb-insert-markdown-cell", "nb-move-cell",
+               "nb-delete-cell", "nb-new"]
+
+
+def _fixture_nb(cells: list[dict]) -> dict:
+    return {"cells": cells, "metadata": {"kernelspec": {"name": "python3"},
+            "language_info": {"name": "python"}}, "nbformat": 4, "nbformat_minor": 5}
+
+
+def _code(source: str, dlab: dict | None = None) -> dict:
+    return {"cell_type": "code", "execution_count": 1,
+            "metadata": {"dlab": dlab} if dlab else {}, "outputs": [], "source": source}
+
+
+def _md(source: str) -> dict:
+    return {"cell_type": "markdown", "metadata": {}, "source": source}
+
+
+def _edit_harness(tmp_path: Path) -> Path:
+    h = _make_harness(tmp_path)   # plugin stub + the base tools
+    for name in _EDIT_TOOLS:
+        shutil.copy(JS_DIR / f"{name}.ts", h / f"{name}.ts")
+    return h
+
+
+def _drive(h: Path, body: str, args: list[str]) -> subprocess.CompletedProcess:
+    (h / "drv.ts").write_text(body)
+    return subprocess.run(["node", str(h / "drv.ts"), *args],
+                          capture_output=True, text=True, timeout=30, cwd=h)
+
+
+class TestNbEditingTools:
+    """The structural editing/inspection tools, driven on real .ipynb fixtures."""
+
+    def test_delete_cell_removes_only_that_cell(self, tmp_path: Path) -> None:
+        if not _have_node():
+            pytest.skip("node not available")
+        h = _edit_harness(tmp_path)
+        nb = h / "n.ipynb"
+        nb.write_text(json.dumps(_fixture_nb([_md("a"), _code("KEEP_ME"), _md("c")])))
+        r = _drive(h, 'import t from "./nb-delete-cell.ts"\n'
+                   'await t.execute({ notebook: process.argv[2], index: 0 })', [str(nb)])
+        assert r.returncode == 0, r.stderr
+        cells = json.loads(nb.read_text())["cells"]
+        assert len(cells) == 2 and cells[0]["source"] == "KEEP_ME"
+
+    def test_delete_out_of_range_errors_and_no_change(self, tmp_path: Path) -> None:
+        if not _have_node():
+            pytest.skip("node not available")
+        h = _edit_harness(tmp_path)
+        nb = h / "n.ipynb"
+        nb.write_text(json.dumps(_fixture_nb([_code("x")])))
+        r = _drive(h, 'import t from "./nb-delete-cell.ts"\n'
+                   'console.log(await t.execute({ notebook: process.argv[2], index: 9 }))', [str(nb)])
+        assert "ERROR" in r.stdout and "out of range" in r.stdout
+        assert len(json.loads(nb.read_text())["cells"]) == 1  # unchanged
+
+    def test_insert_markdown_at_index_escapes_dollar(self, tmp_path: Path) -> None:
+        if not _have_node():
+            pytest.skip("node not available")
+        h = _edit_harness(tmp_path)
+        nb = h / "n.ipynb"
+        nb.write_text(json.dumps(_fixture_nb([_code("a"), _code("b")])))
+        r = _drive(h, 'import t from "./nb-insert-markdown-cell.ts"\n'
+                   'await t.execute({ notebook: process.argv[2], index: 1, text: "spend $5" })',
+                   [str(nb)])
+        assert r.returncode == 0, r.stderr
+        cells = json.loads(nb.read_text())["cells"]
+        assert len(cells) == 3 and cells[1]["cell_type"] == "markdown"
+        assert "spend \\$5" in "".join(cells[1]["source"])   # currency escaped
+
+    def test_move_cell_across_notebooks_preserves_content(self, tmp_path: Path) -> None:
+        if not _have_node():
+            pytest.skip("node not available")
+        h = _edit_harness(tmp_path)
+        a, b = h / "a.ipynb", h / "attempts" / "b.ipynb"
+        a.write_text(json.dumps(_fixture_nb([_md("hdr"), _code("REAL", {"produced_by": "x/t7"})])))
+        r = _drive(h, 'import t from "./nb-move-cell.ts"\n'
+                   'await t.execute({ from_notebook: process.argv[2], from_index: 1, '
+                   'to_notebook: process.argv[3] })', [str(a), str(b)])
+        assert r.returncode == 0, r.stderr
+        acells = json.loads(a.read_text())["cells"]
+        bcells = json.loads(b.read_text())["cells"]
+        assert len(acells) == 1 and acells[0]["source"] == "hdr"     # source lost the cell
+        assert bcells[-1]["source"] == "REAL"                        # dest gained it, verbatim
+        assert bcells[-1]["metadata"]["dlab"]["produced_by"] == "x/t7"  # hint preserved
+
+    def test_move_cell_within_notebook_reorders(self, tmp_path: Path) -> None:
+        if not _have_node():
+            pytest.skip("node not available")
+        h = _edit_harness(tmp_path)
+        nb = h / "n.ipynb"
+        nb.write_text(json.dumps(_fixture_nb([_code("0"), _code("1"), _code("2")])))
+        r = _drive(h, 'import t from "./nb-move-cell.ts"\n'
+                   'await t.execute({ from_notebook: process.argv[2], from_index: 2, '
+                   'to_notebook: process.argv[2], to_index: 0 })', [str(nb)])
+        assert r.returncode == 0, r.stderr
+        srcs = [c["source"] for c in json.loads(nb.read_text())["cells"]]
+        assert srcs == ["2", "0", "1"]
+
+    def test_new_creates_titled_notebook_and_refuses_overwrite(self, tmp_path: Path) -> None:
+        if not _have_node():
+            pytest.skip("node not available")
+        h = _edit_harness(tmp_path)
+        nb = h / "notebooks" / "00_overview.ipynb"
+        r = _drive(h, 'import t from "./nb-new.ts"\n'
+                   'console.log(await t.execute({ notebook: process.argv[2], title: "Overview" }))',
+                   [str(nb)])
+        assert r.returncode == 0, r.stderr
+        doc = json.loads(nb.read_text())
+        assert doc["nbformat"] == 4 and "# Overview" in "".join(doc["cells"][0]["source"])
+        r2 = _drive(h, 'import t from "./nb-new.ts"\n'
+                    'console.log(await t.execute({ notebook: process.argv[2], title: "X" }))', [str(nb)])
+        assert "ERROR" in r2.stdout and "already exists" in r2.stdout
+
+    def test_list_summarizes_notebooks(self, tmp_path: Path) -> None:
+        if not _have_node():
+            pytest.skip("node not available")
+        h = _edit_harness(tmp_path)
+        d = h / "skel"
+        (d / "attempts").mkdir(parents=True)
+        one = _fixture_nb([_md("t"), _code("x")])
+        one["metadata"]["dlab"] = {"phase": "modeler", "adopted": True}
+        (d / "01_modeler.ipynb").write_text(json.dumps(one))
+        (d / "attempts" / "m2.ipynb").write_text(json.dumps(_fixture_nb([_code("y")])))
+        r = _drive(h, 'import t from "./nb-list.ts"\n'
+                   'console.log(await t.execute({ dir: process.argv[2] }))', [str(d)])
+        assert r.returncode == 0, r.stderr
+        assert "01_modeler.ipynb" in r.stdout and "modeler/adopted" in r.stdout
+        assert "attempts/m2.ipynb" in r.stdout.replace(str(d) + "/", "")
+
+    def test_read_surfaces_dlab_hint(self, tmp_path: Path) -> None:
+        if not _have_node():
+            pytest.skip("node not available")
+        h = _edit_harness(tmp_path)
+        nb = h / "n.ipynb"
+        nb.write_text(json.dumps(_fixture_nb(
+            [_code("budget_optimization(...)", {"kind": "custom-tool",
+             "produced_by": "main/t9", "streams": ["main/r10"]})])))
+        r = _drive(h, 'import t from "./nb-read.ts"\n'
+                   'console.log(await t.execute({ notebook: process.argv[2] }))', [str(nb)])
+        assert r.returncode == 0, r.stderr
+        assert "custom-tool" in r.stdout and "← main/t9" in r.stdout
+
+
 class TestNbNoteAndPreamble:
     def test_note_source_targets_first_markdown_cell(self) -> None:
         src = _src("nb-note")

@@ -50,7 +50,15 @@ export default tool({
         }
         const tags = c.metadata?.tags?.length ? ` tags=[${c.metadata.tags.join(",")}]` : ""
         const outSum = outs.length ? `, ${outs.join(", ")}` : ", no output"
-        lines.push(`cell ${i} [code, exec ${c.execution_count ?? "·"}${tags}${outSum}]: ${preview}`)
+        // Surface the skeleton's context hint so the composer knows where to
+        // digest-get the WHY for this cell (produced_by / stream ids / kind).
+        const d = c.metadata?.dlab
+        const hintParts: string[] = []
+        if (d?.kind) hintParts.push(d.kind)
+        if (d?.produced_by) hintParts.push(`← ${d.produced_by}`)
+        if (d?.streams?.length) hintParts.push(`streams ${d.streams.join(",")}`)
+        const hint = hintParts.length ? ` {${hintParts.join(" · ")}}` : ""
+        lines.push(`cell ${i} [code, exec ${c.execution_count ?? "·"}${tags}${outSum}]${hint}: ${preview}`)
       } else {
         lines.push(`cell ${i} [${c.cell_type}]: ${preview}`)
       }

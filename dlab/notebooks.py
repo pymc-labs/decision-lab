@@ -36,6 +36,8 @@ from dlab.session_digest import DIGEST_GET_SOURCE, generate_digest
 NB_TOOLS: list[str] = [
     "nb-add-markdown-cell", "nb-add-code-cell", "nb-edit-cell",
     "nb-note", "nb-read", "nb-finalize",
+    # editing tools for composing on top of the deterministic skeleton (#68)
+    "nb-list", "nb-insert-markdown-cell", "nb-move-cell", "nb-delete-cell", "nb-new",
 ]
 
 # Retry the notebook agent run on a transient provider error (an error event with no
