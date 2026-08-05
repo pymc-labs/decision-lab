@@ -93,10 +93,23 @@ From a finished workdir + `--dpack`, build one notebook per agent into
 `generate_notebooks` now: digest → `write_skeletons` → seed `notebooks/` from
 `skeleton/` (`_seed_notebooks_from_skeleton`) → launch the `notebooks` agent to
 **curate that copy in place**. The prompt is "you are handed correct notebooks;
-curate + narrate": inspect via nb-list/nb-read, `digest-get` each cell's hints for
-the *why*, insert markdown, keep every distinct run (sweeps!), author `00_overview`,
-finalize. **Frontmatter DENIES `nb-add-code-cell` + `nb-edit-cell`** → immutable
-code. `skeleton/` stays as the pristine deterministic artifact.
+curate + narrate". **Frontmatter DENIES `nb-add-code-cell` + `nb-edit-cell`** →
+immutable code. `skeleton/` stays as the pristine deterministic artifact. The
+prompt also enforces (added after validation runs surfaced each):
+- **Keep every distinct run** — don't dedup a parameter sweep (the budget runs at
+  N amounts are the comparison); the skeleton already collapsed bug-fix re-runs.
+- **Never fabricate** — as strict as the code rule. Every number copied verbatim
+  from a cell output / the digest / a report the run wrote; never compute,
+  estimate, convert, or invent one (the classic failure was inventing budget $
+  figures). If not found, omit it.
+- **Start from the run's own conclusion** — read the digest's FINAL `main` entries
+  and `glob`/`read` any `*report*`/`*summary*`/`*decision*` markdown the run wrote;
+  the overview restructures THAT, quoting its numbers. (Report-writing is
+  dpack-specific — mmm's orchestrator writes one and is held to "every statistic
+  traces to model output"; not universal, so it's "if present".)
+- **Final cleanup pass** — `nb-list`, delete empty/duplicate notebooks with
+  `nb-delete-notebook` (refuses any notebook with a code cell, so it can only
+  remove stubs), exactly one `00_overview.ipynb`, finalize the rest.
 
 ## 3. Key decisions Ben made this session (don't re-litigate)
 
@@ -147,9 +160,13 @@ code. `skeleton/` stays as the pristine deterministic artifact.
 
 ## 6. Remaining work on #68 (rough order)
 
-1. **Verify the sweep fix** — one more `dlab notebooks` run to confirm the composer
-   now KEEPS all budget-sweep runs (prompt fix `93307a8` is untested by a run).
-2. **Host-side nbformat validation** (spec §5) — `dlab/notebook_validation.py`, add
+Validated across ~5 real composer runs (mmm-style-run-002, mmm-sunrise-run-001):
+immutability byte-exact (0 altered cells every time), fix-arc collapsed, sweeps
+kept, cleanup pass clean, and — after the anti-fabrication fix — the overview's
+numbers now match the run's `technical_report.md` (the invented budget $ figures
+are gone; Email ROAS etc. quoted correctly). So the pipeline is solid; what's left:
+
+1. **Host-side nbformat validation** (spec §5) — `dlab/notebook_validation.py`, add
    `nbformat` dep; validate the curated notebooks.
 3. **Wire the config flag** `generate_jupyter_notebooks_from_run` — auto-run
    `generate_notebooks` after the orchestrator in `cmd_run` (Docker + `--no-sandboxing`),
