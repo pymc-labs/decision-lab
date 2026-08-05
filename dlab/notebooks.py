@@ -1,12 +1,17 @@
 """
-Notebook notebook agent step (issue #68).
+Notebook composer step (issue #68).
 
-Turns a finished work directory into Jupyter notebooks: generate the session
-digest (host-side, deterministic), materialize the notebook agent environment (the
-`notebook agent.md` agent + the `nb-*` tools + `digest-get`) into the work dir's
-`.opencode/`, launch a notebook agent `opencode run`, then collect and lightly
-validate the notebooks. The notebook agent reads the run ONLY through the digest and
-`digest-get`, and writes exclusively through the `nb-*` tools.
+Turns a finished work directory into Jupyter notebooks in two stages:
+
+1. **Deterministic (host-side):** generate the session digest, build the
+   deterministic skeleton (`notebook_skeleton`: real code + real outputs, the
+   adopted path as phase notebooks + ``attempts/``, context hints), and seed
+   ``notebooks/`` from it.
+2. **LLM (the composer):** launch the ``notebooks`` opencode agent to CURATE and
+   NARRATE that copy in place — it inspects with ``nb-list``/``nb-read``, weaves
+   markdown (grounded via ``digest-get`` on each cell's hints), deduplicates /
+   reorders, and authors ``00_overview``. It has no tool to add or edit a code
+   cell, so the code stays exactly what ran (hallucination-impossible).
 
 Exposed standalone as ``dlab generate_notebooks <work-dir>`` so it can be driven from the
 CLI for testing; wiring it into the run lifecycle (a config flag, running inside
@@ -30,6 +35,7 @@ from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path
 
+from dlab.notebook_skeleton import SKELETON_DIR, write_skeletons
 from dlab.session_digest import DIGEST_GET_SOURCE, generate_digest
 
 # The notebook agent's authoring tools, shipped as package data (dlab/js/*.ts).
@@ -81,10 +87,26 @@ def _notebook_env(provided: dict[str, str]) -> dict[str, str]:
     return env
 
 _LAUNCH_PROMPT = (
-    "Assemble the Jupyter notebooks for this finished run into the ./notebooks/ "
-    "directory, following your instructions. Start by reading _digest/digest.md. "
-    "When done, finalize every notebook and state which attempt you adopted and why."
+    "The deterministic skeleton notebooks for this finished run are already built "
+    "in ./notebooks/ (the adopted path as numbered phase notebooks, plus "
+    "./notebooks/attempts/). Every code cell is REAL code the run executed, with "
+    "its REAL output attached — do not write or alter code. Your job is to CURATE "
+    "and NARRATE them following your instructions: survey with nb-list/nb-read, "
+    "weave in markdown that explains the why (grounded via digest-get on each "
+    "cell's hints), deduplicate and reorder, and author ./notebooks/00_overview.ipynb "
+    "arguing the alternatives. When done, finalize every notebook and state which "
+    "attempt was adopted and why."
 )
+
+
+def _seed_notebooks_from_skeleton(work_dir: Path) -> None:
+    """Copy the deterministic skeleton into ``notebooks/`` — the curated output the
+    composer edits in place, leaving ``skeleton/`` as the pristine artifact."""
+    src = work_dir / SKELETON_DIR
+    dst = work_dir / "notebooks"
+    dst.mkdir(exist_ok=True)
+    if src.is_dir():
+        shutil.copytree(src, dst, dirs_exist_ok=True)
 
 
 @dataclass
@@ -217,12 +239,14 @@ def generate_notebooks(
             "Pass --dpack for full fidelity."
         )
 
-    # Digest first — with the dpack, it resolves each custom tool to the REAL
-    # library code (via the pack's code map) into _digest/tool_sources/; then
-    # materialize the notebook agent's tools and isolate them from the dpack's so a
-    # strict provider doesn't choke on unrelated tool schemas.
+    # Digest first — with the dpack it resolves each custom tool to the REAL
+    # library code (via the pack's code map) into _digest/tool_sources/.
     generate_digest(work_dir, dpack=dpack)
-    (work_dir / "notebooks").mkdir(exist_ok=True)
+    # Then build the DETERMINISTIC skeleton (real code + real outputs, adopted path
+    # + attempts, context hints) and seed notebooks/ from it — the composer curates
+    # this copy in place; skeleton/ stays as the pristine deterministic artifact.
+    write_skeletons(work_dir, dpack=dpack)
+    _seed_notebooks_from_skeleton(work_dir)
     added = materialize_notebook_env(work_dir)
     moved = _isolate_notebook_tools(work_dir)
 

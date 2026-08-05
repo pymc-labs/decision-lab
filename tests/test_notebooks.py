@@ -34,7 +34,8 @@ class TestMaterializeEnv:
         for name in NB_TOOLS:
             assert (wd / ".opencode" / "tools" / f"{name}.ts").is_file()
         # the notebooks.md agent prompt carried through is the real one
-        assert "NEVER invent code" in (wd / ".opencode" / "agents" / "notebooks.md").read_text()
+        assert "never write or alter code" in (
+            wd / ".opencode" / "agents" / "notebooks.md").read_text()
 
     def test_cleanup_removes_only_what_was_added(self, tmp_path: Path) -> None:
         wd = tmp_path / "w"
@@ -70,6 +71,24 @@ class TestToolIsolation:
         after = {p.name for p in tools.glob("*.ts")}
         assert "analyze-model.ts" in after and "fit-model-modal.ts" in after
         assert not (wd / ".opencode" / "_tools_stash").exists()
+
+
+class TestComposerFlow:
+    def test_seed_copies_skeleton_into_notebooks(self, tmp_path: Path) -> None:
+        from dlab.notebooks import _seed_notebooks_from_skeleton
+        wd = tmp_path / "w"
+        (wd / "skeleton" / "attempts").mkdir(parents=True)
+        (wd / "skeleton" / "00_orchestrator.ipynb").write_text("{}")
+        (wd / "skeleton" / "attempts" / "a.ipynb").write_text("{}")
+        _seed_notebooks_from_skeleton(wd)
+        assert (wd / "notebooks" / "00_orchestrator.ipynb").is_file()
+        assert (wd / "notebooks" / "attempts" / "a.ipynb").is_file()   # subdir preserved
+
+    def test_launch_prompt_is_curate_not_assemble(self) -> None:
+        from dlab.notebooks import _LAUNCH_PROMPT
+        low = _LAUNCH_PROMPT.lower()
+        assert "already built" in low and "curate" in low
+        assert "do not write or alter code" in low   # immutability, up front
 
 
 class TestMapDpackModelSuggestions:

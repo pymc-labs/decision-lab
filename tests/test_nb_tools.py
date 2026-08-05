@@ -443,19 +443,22 @@ class TestNotebookAgentPrompt:
         p = AGENTS_DIR / "notebooks.md"
         assert p.exists(), "dlab/agents/notebooks.md must exist"
         text = p.read_text()
-        # frontmatter wires the nb-* tools + digest-get and denies edit/bash
-        for t in NB_TOOLS + ["digest-get"]:
-            assert f"{t}: true" in text, f"notebook prompt must enable {t}"
+        # the composer gets inspection + editing tools + digest-get ...
+        for t in ["nb-list", "nb-read", "nb-insert-markdown-cell", "nb-move-cell",
+                  "nb-delete-cell", "nb-new", "nb-note", "nb-finalize", "digest-get"]:
+            assert f"{t}: true" in text, f"composer must enable {t}"
+        # ... but CANNOT write or alter code (immutability), nor bash/edit files
+        for t in ["nb-add-code-cell", "nb-edit-cell"]:
+            assert f"{t}: false" in text, f"composer must NOT be able to use {t}"
         assert "bash: false" in text and "edit: false" in text
 
     def test_prompt_encodes_the_agreed_rules(self) -> None:
         text = (AGENTS_DIR / "notebooks.md").read_text()
-        # never-invent-code, not-executed, digest-only, fit-then-load,
-        # tool-output reproduction, disclosure, preamble
-        for needle in ["NEVER invent code", "not executed", "digest-get",
-                       "long-running", "custom tool", "nb-note", "preamble",
-                       "attempts/"]:
-            assert needle in text, f"notebook prompt missing: {needle}"
+        # never-touch-code, not-executed, digest-grounded, curate, disclose, overview
+        for needle in ["never write or alter code", "never invent code",
+                       "not executed", "digest-get", "nb-move-cell", "nb-note",
+                       "preamble", "attempts/", "00_overview"]:
+            assert needle in text, f"composer prompt missing: {needle}"
 
     def test_prompt_is_dpack_agnostic(self) -> None:
         # generality is load-bearing: no hardcoded library/pack specifics
