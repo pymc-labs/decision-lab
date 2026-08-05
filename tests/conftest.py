@@ -63,7 +63,7 @@ def dpack_config_dir(tmp_path: Path) -> Path:
         "name": "test-dpack",
         "description": "Test decision-pack for unit tests",
         "docker_image_name": "test-dpack-img",
-        "default_model": "anthropic/claude-sonnet-4-0",
+        "default_model": "anthropic/claude-sonnet-4-5",
     }
     with open(dpack / "config.yaml", "w") as f:
         yaml.dump(config, f)

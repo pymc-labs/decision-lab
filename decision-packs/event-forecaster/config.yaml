@@ -10,6 +10,9 @@ default_model: anthropic/claude-sonnet-4-5
 requires_data: false
 requires_prompt: true
 
+# decision-lab house figure style (on by default; explicit for clarity)
+use_dlab_plot_style: true
+
 # Model roles — orchestrator and data-explorer use default_model (or dlab --model).
 # Uncomment models below to override parallel forecaster instances and/or consolidator;
 # omitted keys inherit default_model at session setup.

@@ -34,6 +34,7 @@ from dlab.docker import (
     start_container,
     stop_container,
 )
+from dlab.figure_style import figure_style_enabled, figure_style_shell_exports
 from dlab.model_fallback import preflight_check
 from dlab.session import copy_hook_scripts, create_session, setup_opencode_config
 from dlab.timeline import run_timeline
@@ -638,13 +639,23 @@ def cmd_run(
         )
         console.print(Padding(panel, (0, 0, 0, 6)))
 
+        # Figure-style env exports (host paths in local mode)
+        local_prelude: str = (
+            figure_style_shell_exports(str(Path(work_dir).resolve()))
+            if figure_style_enabled(config)
+            else ""
+        )
+
         try:
             logs_dir_local: Path = Path(work_dir) / "_opencode_logs"
             exit_code, stdout, stderr = _run_with_log_spinner(
                 console,
                 I,
                 logs_dir_local,
-                lambda: run_opencode_local(work_dir, local_prompt, model, local_env),
+                lambda: run_opencode_local(
+                    work_dir, local_prompt, model, local_env,
+                    prelude=local_prelude,
+                ),
             )
             if stderr:
                 console.print(f"{I}[red]{stderr}[/red]", highlight=False)
@@ -821,12 +832,21 @@ def cmd_run(
         )
         console.print(Padding(panel, (0, 0, 0, 6)))
 
+        # Figure-style env exports (container paths: work dir is /workspace)
+        style_prelude: str = (
+            figure_style_shell_exports("/workspace")
+            if figure_style_enabled(config)
+            else ""
+        )
+
         logs_dir_path: Path = Path(work_dir) / "_opencode_logs"
         exit_code, stdout, stderr = _run_with_log_spinner(
             console,
             I,
             logs_dir_path,
-            lambda: run_opencode(container_name, resolved_prompt, model),
+            lambda: run_opencode(
+                container_name, resolved_prompt, model, prelude=style_prelude,
+            ),
         )
         if stderr:
             console.print(f"{I}[red]{stderr}[/red]", highlight=False)

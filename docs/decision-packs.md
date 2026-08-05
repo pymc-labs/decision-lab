@@ -52,6 +52,7 @@ default_model: opencode/big-pickle
 requires_data: true           # If false, --data becomes optional (default: true)
 requires_prompt: true         # If false, --prompt becomes optional (default: true)
 opencode_version: "1.2.10"    # Pin opencode version (default: latest)
+use_dlab_plot_style: true            # decision-lab house matplotlib style (default: true)
 
 # Optional per-role model overrides (omitted roles inherit default_model)
 models:
@@ -76,6 +77,7 @@ hooks:
 | `requires_prompt` | No | `true` | Whether `--prompt` is required |
 | `cli_name` | No | same as `name` | Override command name for `dlab install` |
 | `opencode_version` | No | `latest` | opencode version to install |
+| `use_dlab_plot_style` | No | `true` | Enforce the decision-lab matplotlib house style |
 | `models.forecaster` | No | `default_model` | Model for parallel agent instances |
 | `models.consolidator` | No | `default_model` | Model for the consolidator agent |
 | `hooks.pre-run` | No | — | Scripts to run before opencode |
@@ -84,6 +86,62 @@ hooks:
 ### Model Roles
 
 `default_model` is the orchestrator model (overridable at run time with `dlab run --model`). The optional `models:` block overrides models for the other roles: at session setup, `forecaster` is injected as `default_model` and `consolidator` as `summarizer_model` into each YAML file under `opencode/parallel_agents/`. Omitted roles fall back to `default_model`.
+
+### Figure Style
+
+By default, every session enforces the decision-lab matplotlib house style
+(palette, Inter font, clean spines, marker edges, legend and figure defaults).
+Opt out with `use_dlab_plot_style: false`. Enforcement is layered so the style holds
+even when the agent never thinks about it:
+
+1. **`_style/matplotlibrc`** — written into the work dir at session setup and
+   activated via the `MATPLOTLIBRC` environment variable (exported by the
+   opencode runner script), so it styles every matplotlib figure regardless of
+   agent behavior. Parallel instances inherit it through the instance env
+   allowlist.
+2. **`_style/dlab_plotstyle.py`** — importable from anywhere because `_style`
+   is prepended to `PYTHONPATH`. Exposes the palette by name (`PALETTE`,
+   `PALETTE_LIGHT`, `PALETTE_DARK`), registers the house colormaps
+   (`dlab_seq` for magnitudes — also the imshow default — and `dlab_div` for
+   signed data), and provides `add_axis_end_tick_caps`. On import it
+   *enforces* the rules that are forbidden rather than defaulted: band edges
+   (`fill_between` edge/linewidth kwargs are dropped even when passed
+   explicitly, e.g. by arviz or pymc-marketing HDI plots), legend frames
+   (`frameon=True` is dropped), and text boxes (`bbox` is dropped).
+3. **`dlab-figure-style` skill** — injected into `.opencode/skills/`; carries
+   the judgment rules code cannot enforce (never call `sns.set_theme()` or
+   `plt.style.use()`, the scatter `color=` edge trap, grid XOR reference
+   lines, z-order layering, shared legends, which colormap for which data).
+   Parallel instances always receive this skill.
+
+The Inter fonts are installed in the Docker wrapper image (see
+[docker.md](docker.md)); if unavailable, matplotlib falls back to DejaVu Sans.
+The vendored assets live in `dlab/data/figure_style/`, and
+`scripts/figure_style_gallery.py` renders a deterministic proofsheet of every
+chart archetype for iterating on the style.
+
+#### Migrating an existing decision-pack
+
+Turning the style on is not enough if the pack predates it — remove the
+competing style sources, or they win:
+
+- **Agent prompts must not carry their own plotting/style rules** (e.g.
+  `plt.style.use(...)` mandates). A system prompt outranks the injected
+  skill; replace such rules with the house-style ones (see the MMM pack's
+  agents for the pattern).
+- **Bundled Python libraries must not restyle matplotlib at import time**
+  (no `plt.style.use`, `rcParams` writes, or hardcoded colormaps at module
+  level). Prefer `"C0"`/`"C1"` cycle references, which resolve to the house
+  palette automatically.
+- Optionally, a bundled library can activate the enforcement for the
+  processes that import it (custom tool subprocesses included) with a
+  guarded import in its `__init__.py`:
+
+  ```python
+  import importlib.util
+  if importlib.util.find_spec("dlab_plotstyle") is not None:
+      import dlab_plotstyle  # noqa: F401
+  ```
 
 ## opencode/opencode.json
 

@@ -109,6 +109,10 @@ Skills and agent prompts should encode generic best practices:
 
 Too many skills or poorly written skills DEGRADE performance. Skills are guardrails, not scripts.
 
+### No style rules in agent prompts
+
+Agent prompts must never contain their own plotting or styling rules (fonts, `plt.style.use(...)`, color palettes). dlab enforces the decision-lab figure style at the environment level (`use_dlab_plot_style`, on by default) and injects the `dlab-figure-style` skill with the judgment rules; a system prompt that mandates a different style outranks that skill and silently wins. If a plotting-heavy agent needs a nudge, the right line is "load the available figure-style skill before writing plotting code" — not style rules. The same applies to bundled Python libraries: no `plt.style.use`/`rcParams` writes at import time, and prefer `"C0"`/`"C1"` cycle references over hard-coded colors.
+
 ## Reporting Uncertainty and Making Recommendations
 
 ### Two types of uncertainty

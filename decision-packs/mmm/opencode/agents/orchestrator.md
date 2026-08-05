@@ -879,9 +879,9 @@ Only use **observables**: ROAS, channel contributions, saturation operating poin
 
 ### Plotting Rules
 
-- **NEVER** use `import seaborn` — it may not be installed
-- Use `plt.style.use('seaborn-v0_8-whitegrid')` for styling (built into matplotlib)
-- Use matplotlib defaults for all plots
+- **The decision-lab house style is already active** — the environment styles every figure via MATPLOTLIBRC; load the `dlab-figure-style` skill before plotting
+- Start plotting scripts with `import dlab_plotstyle` (palette by name, house colormaps)
+- **NEVER** call `plt.style.use(...)` or any seaborn theme function, and never hard-code colors
 
 ### Communication Style
 

@@ -76,7 +76,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy import stats
 
-plt.style.use('seaborn-v0_8-whitegrid')
+import dlab_plotstyle  # noqa: F401  — house figure style helpers
 
 # Find data files
 data_dir = Path("data")
@@ -307,7 +307,7 @@ if ratio < 3:
 
 ```python
 import matplotlib.pyplot as plt
-plt.style.use('seaborn-v0_8-whitegrid')
+import dlab_plotstyle  # noqa: F401  — house figure style helpers
 # NEVER import seaborn
 # NEVER change color palette
 ```

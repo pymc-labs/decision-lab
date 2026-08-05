@@ -11,6 +11,7 @@ from typing import Any
 
 from dlab.config import apply_model_roles_to_opencode, resolve_model_roles
 from dlab.create_dpack import KNOWN_PROVIDER_ENVS
+from dlab.figure_style import figure_style_enabled, install_figure_style
 from dlab.model_fallback import process_opencode_dir
 from dlab.parallel_tool import PARALLEL_AGENTS_SOURCE
 
@@ -28,6 +29,7 @@ INSTANCE_ENV_EXACT: list[str] = [
     "PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE",
     "TERM", "TMPDIR", "TMP", "TEMP", "PWD", "SHELL",
     "PYTHONPATH", "PYTHONUNBUFFERED", "NODE_PATH",
+    "MATPLOTLIBRC",
     "SSL_CERT_FILE", "SSL_CERT_DIR", "CURL_CA_BUNDLE", "REQUESTS_CA_BUNDLE",
 ]
 # Prefixes whose variables are always forwarded: dlab config (dpacks rely on
@@ -260,6 +262,11 @@ def setup_opencode_config(
         apply_model_roles_to_opencode(
             str(opencode_dest), resolve_model_roles(dpack_config),
         )
+
+    # Install the decision-lab figure style (matplotlibrc + dlab_plotstyle
+    # module + skill) unless the decision-pack opts out
+    if dpack_config is not None and figure_style_enabled(dpack_config):
+        install_figure_style(work_dir)
 
     # Validate model names and apply provider fallback
     messages: list[str] = []

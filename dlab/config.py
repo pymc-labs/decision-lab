@@ -177,6 +177,10 @@ def load_dpack_config(config_dir: str) -> dict[str, Any]:
     if "opencode_version" not in config:
         config["opencode_version"] = "latest"
 
+    # Normalize use_dlab_plot_style: decision-lab house figure style, on by default,
+    # opt out with `use_dlab_plot_style: false`
+    config["use_dlab_plot_style"] = bool(config.get("use_dlab_plot_style", True))
+
     # Normalize hooks: string -> list, missing -> empty list
     hooks: dict[str, Any] = config.get("hooks", {})
     if not isinstance(hooks, dict):

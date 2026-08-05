@@ -4,6 +4,9 @@ docker_image_name: dlab-modal-example
 default_model: google/gemini-2.0-flash
 requires_data: false
 
+# decision-lab house figure style (on by default; explicit for clarity)
+use_dlab_plot_style: true
+
 # Scripts listed here run inside the container before/after the agent's run.
 hooks:
   pre-run: deploy_modal.sh

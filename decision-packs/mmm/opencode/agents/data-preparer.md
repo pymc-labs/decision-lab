@@ -163,15 +163,15 @@ This applies to ANY trend or growth calculation - always use the full time serie
 
 **CRITICAL: Follow these plotting rules exactly:**
 
-1. **NEVER import or use seaborn** - Do NOT use `import seaborn as sns` or any seaborn functions
-2. **Always use 'seaborn-v0_8-whitegrid' style** - Start your script with `plt.style.use('seaborn-v0_8-whitegrid')`
-3. **NEVER change the color palette** - Use matplotlib's default colors only
-4. **Use only matplotlib.pyplot** - All plots must be created with matplotlib
+1. **The decision-lab house style is already active** — the environment styles every figure (palette, fonts, spines, legends) via MATPLOTLIBRC. Load the `dlab-figure-style` skill before writing plotting code.
+2. **Start every plotting script with `import dlab_plotstyle`** — it exposes the palette by name (`PALETTE`, `PALETTE_LIGHT`, `PALETTE_DARK`), the house colormaps (`dlab_seq`, `dlab_div`), and finishes the styling the rc cannot.
+3. **NEVER call `plt.style.use(...)`, `sns.set_theme()`, or any other style/theme function** — a single call destroys the house style.
+4. **NEVER hard-code colors** — use the default color cycle, or `dlab_plotstyle.PALETTE` by name when a series has fixed meaning across figures.
 
 **Correct plotting setup:**
 ```python
 import matplotlib.pyplot as plt
-plt.style.use('seaborn-v0_8-whitegrid')  # Always use seaborn-v0_8-whitegrid style
+import dlab_plotstyle  # noqa: F401  — decision-lab house figure style helpers
 ```
 
 ---
@@ -379,7 +379,7 @@ from mmm_lib import (
 )
 
 # Set plotting style (REQUIRED)
-plt.style.use('seaborn-v0_8-whitegrid')
+import dlab_plotstyle  # noqa: F401  — house figure style helpers
 
 # Load data
 df = load_csv_or_parquet_from_file("user_provided_file.csv")
@@ -807,7 +807,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mmm_lib import (...)
 
-plt.style.use('seaborn-v0_8-whitegrid')
+import dlab_plotstyle  # noqa: F401  — house figure style helpers
 
 # 2. Data Loading and Initial Inspection
 df = pd.read_csv('data/your_file.csv')

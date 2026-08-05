@@ -1,0 +1,28 @@
+name: plotter
+description: "Run plotter instances with different visualization briefs in parallel"
+timeout_minutes: 30
+failure_behavior: continue
+
+max_instances: 3
+default_model: "anthropic/claude-sonnet-4-5"
+
+subagent_suffix_prompt: |
+  When you complete your task, write summary.md with:
+  ## Approach
+  The brief you followed and the figures you chose to make.
+  ## Figures
+  One entry per figure: filename, what it shows, one-line takeaway.
+  ## Observations
+  What the figures reveal about the data.
+
+summarizer_prompt: |
+  Read all summary.md files from the parallel instances.
+  Create a consolidated comparison of the visualization approaches:
+  - Which figures were produced by each instance (filenames and what they show)
+  - Where the instances' observations about the data agree or disagree
+  - Whether the figures look like one coherent set (same palette and styling)
+    or visibly inconsistent — note any instance that styled its figures
+    differently from the others
+  Present facts only — the orchestrator will make the final decision.
+
+summarizer_model: "anthropic/claude-sonnet-4-5"

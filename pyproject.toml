@@ -38,6 +38,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "matplotlib>=3.8",
 ]
 
 [project.scripts]
@@ -49,5 +50,6 @@ include = ["dlab*"]
 
 [tool.setuptools.package-data]
 "dlab.data" = ["*.json"]
+"dlab.data.figure_style" = ["matplotlibrc", "*.md"]
 "dlab.js" = ["*.ts"]
 "dlab.viewer.html" = ["*.html"]

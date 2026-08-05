@@ -179,6 +179,10 @@ dhub install pymc-labs/dhub-cli --agent opencode
 
 The hub has 2,200+ skills from 38 organizations with automated evals that verify skills actually improve agent performance.
 
+### House figure style
+
+Every session enforces a consistent, colorblind-validated matplotlib style — palette, Inter font, clean spines, legible markers — so figures look the same across agents, runs, and reports. Enforcement is environmental (an injected `matplotlibrc` plus a `dlab_plotstyle` palette module and a small skill), so it holds even when the agent never thinks about styling. Opt out per decision-pack with `use_dlab_plot_style: false` in `config.yaml`. See [decision-packs](docs/decision-packs.md).
+
 ### Environment variable forwarding
 
 All environment variables starting with `DLAB_` are automatically forwarded from the host to the Docker container. decision-packs use these for runtime configuration:

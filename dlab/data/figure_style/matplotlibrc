@@ -1,0 +1,82 @@
+# dlab matplotlibrc — decision-lab house figure style.
+# Written to <work-dir>/_style/matplotlibrc at session setup and activated via
+# the MATPLOTLIBRC environment variable, so it styles every matplotlib figure
+# in the session without any cooperation from the agent. The structure follows
+# the PyMC Labs report template rc; the palette is decision-lab's own.
+#
+# Categorical cycle (fixed order — adjacency is CVD-validated, do not
+# reorder). Tonal design: slots 1/3-5 are a cool green-blue lightness ladder,
+# slot 2 (coral) is the single warm accent, slots 6-8 are rare:
+#   pine #007D5F  coral #E87A69  sky #50B1DC  petrol #136A94
+#   leaf #4E9A5B  sand #CCAE59  plum #7D4778  olive #808F3B
+# Light/dark variants for fills and emphasis are exposed by name in
+# dlab_plotstyle (PALETTE, PALETTE_LIGHT, PALETTE_DARK).
+#
+# fill_between's default edge cannot be set here; `import dlab_plotstyle`
+# defaults its edgecolor to 'none'.
+
+#### FONT
+font.family:       sans-serif
+font.sans-serif:   Inter, Fira Sans, DejaVu Sans
+font.size:         8.0
+mathtext.fontset:  dejavusans
+
+#### COLOR CYCLE
+axes.prop_cycle: cycler('color', ['007D5F', 'E87A69', '50B1DC', '136A94', '4E9A5B', 'CCAE59', '7D4778', '808F3B'])
+
+#### FOREGROUND — near-black furniture (#333333), deep-blue title
+text.color:         333333
+axes.edgecolor:     333333
+axes.labelcolor:    333333
+xtick.color:        333333
+ytick.color:        333333
+axes.linewidth:     0.8
+#### TITLE — same near-black ink as the axis furniture, bold, left-aligned
+axes.titlecolor:    333333
+axes.titleweight:   bold
+axes.titlesize:     medium
+axes.titlelocation: left
+#### SUPTITLE — bold, slightly larger; color comes from the dlab_plotstyle patch
+figure.titlesize:   10
+figure.titleweight: bold
+
+#### SPINES — clean report look
+axes.spines.top:    False
+axes.spines.right:  False
+
+#### MARKERS — always a thin white edge
+lines.markeredgecolor:  white
+lines.markeredgewidth:  0.6
+lines.markersize:       5.0
+scatter.edgecolors:     white
+
+#### LINES
+lines.linewidth:  1.5
+
+#### BOXPLOTS — lean lines, ink medians (not matplotlib's default orange)
+boxplot.boxprops.linewidth:     0.8
+boxplot.whiskerprops.linewidth: 0.8
+boxplot.capprops.linewidth:     0.8
+boxplot.medianprops.linewidth:  1.0
+boxplot.medianprops.color:      333333
+boxplot.flierprops.linewidth:   0.8
+boxplot.flierprops.markeredgecolor: 333333
+
+#### LEGEND / GRID
+legend.frameon:   False
+legend.fontsize:  7
+grid.color:       333333
+grid.alpha:       0.12
+grid.linewidth:   0.6
+
+#### FIGURE
+figure.figsize:    4.8, 3.0
+figure.facecolor:  white
+figure.dpi:        110
+axes.facecolor:    white
+savefig.facecolor: white
+savefig.dpi:       300
+
+#### OUTPUT — TrueType embedding for PDF (selectable text), path output for SVG
+pdf.fonttype:      42
+svg.fonttype:      path

@@ -200,8 +200,12 @@ function copyAllowedTools(srcOpencode: string, destOpencode: string, agentName: 
     }
   }
 
-  // Copy skills declared in frontmatter
+  // Copy skills declared in frontmatter, plus the dlab figure-style skill
+  // (injected at session setup, not frontmatter-declared) so instances that
+  // produce figures inherit it. The existsSync check below makes this a no-op
+  // when the decision-pack opted out of the figure style.
   const skills = frontmatter.skills || []
+  if (!skills.includes("dlab-figure-style")) skills.push("dlab-figure-style")
   if (skills.length > 0) {
     const srcSkills = join(srcOpencode, "skills")
     if (existsSync(srcSkills)) {
