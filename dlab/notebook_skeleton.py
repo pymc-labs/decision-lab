@@ -49,6 +49,22 @@ _SKIP_BASH = re.compile(
     r"which|test|\[|sleep|wc|sort|head|tail|sed|awk)\b")
 # dlab orchestration plumbing, not analysis the notebook should show.
 _SKIP_TOOLS = {"parallel-agents", "task", "todowrite", "todoread"}
+# shell decorations that don't change what the script did (redirects, pipes,
+# timeouts, chaining) — stripped when keying a run for dedup.
+_SHELL_OPS = ("2>&1", "2>", "1>", "&>", "|", ">", "<", ";", "&&", " & ")
+
+
+def _script_run_args(cmd: str, script: str) -> str:
+    """The script's real args (tokens after the ``.py`` path, up to the first shell
+    redirect/pipe/operator), so ``foo.py`` re-run with different capture decorations
+    keys the same, but ``foo.py --pct 5`` vs ``--pct 50`` keys differently."""
+    after = cmd.split(script, 1)[1] if script in cmd else ""
+    cut = len(after)
+    for op in _SHELL_OPS:
+        i = after.find(op)
+        if i != -1:
+            cut = min(cut, i)
+    return after[:cut].strip()
 _OUTPUT_CAP = 200  # lines of captured stdout/stderr kept per cell
 # Not real analysis output — skip when walking a work dir for produced figures.
 _EXCLUDE_DIRS = {"_digest", "notebooks", SKELETON_DIR, "_opencode_logs",
@@ -68,6 +84,7 @@ class SkeletonCell:
     kind: str = ""                         # script | custom-tool | shell
     tid: str = ""                          # digest tool-call id (produced_by)
     stream_ids: list[str] = field(default_factory=list)  # digest rN ids for this call
+    dedup_key: str = ""                    # collapse repeated runs (same script / same tool call)
 
 
 @dataclass
@@ -207,15 +224,23 @@ def _build_cells(
         source: str | None = None
         label = ""
         kind = ""
+        dedup = ""
         if name in custom_tools and dpack is not None:
             source = _custom_tool_code(name, inp, code_map, dpack)
             label, kind = f"custom tool: {name}", "custom-tool"
+            # exact-arg dedup only: a retried identical call collapses; a sweep
+            # (same tool, different args → distinct outputs) stays distinct.
+            dedup = f"tool:{name}:" + json.dumps(inp, sort_keys=True, default=str)
         elif name == "bash":
             cmd = (inp.get("command") or "").strip()
             m = _PY_SCRIPT.search(cmd)
             if m:
                 source = _script_source(m.group(1), written, search_root)
                 label, kind = f"ran: {cmd}", "script"
+                # Key on the script + its real args (shell decorations stripped):
+                # progressive edits re-run the same invocation → collapse to the
+                # final version; a script sweep (different args) stays distinct.
+                dedup = f"script:{Path(m.group(1)).name}:{_script_run_args(cmd, m.group(1))}"
             elif "python" in cmd:
                 source = f"# {cmd}\n"        # python -m / -c with no script file
                 label, kind = f"ran: {cmd}", "shell"
@@ -233,10 +258,23 @@ def _build_cells(
             stream = out
         current = SkeletonCell(
             source=source, stream=stream, start=start, end=end, label=label,
-            kind=kind, tid=tc.get("id", ""),
+            kind=kind, tid=tc.get("id", ""), dedup_key=dedup,
             stream_ids=[b["id"] for b in tc.get("raw_ids", [])])
     close()
     return cells
+
+
+def _dedup_reruns(cells: list[SkeletonCell]) -> list[SkeletonCell]:
+    """Collapse repeated runs of the same script (progressively edited to fix bugs)
+    and identical tool retries to the FINAL run — the version that produced the
+    output. A parameter sweep (same tool, different args) has distinct dedup keys,
+    so it is left intact for the composer to summarize."""
+    last: dict[str, int] = {}
+    for i, c in enumerate(cells):
+        if c.dedup_key:
+            last[c.dedup_key] = i
+    return [c for i, c in enumerate(cells)
+            if not c.dedup_key or last[c.dedup_key] == i]
 
 
 def _figure_files(search_root: Path) -> list[tuple[float, Path]]:
@@ -326,6 +364,7 @@ def build_skeleton(
         ad = digest_by_log.get(log_path.resolve())
         cells = _build_cells(log_path, root, code_map, dpack_path, custom_tools,
                              ad.tool_calls if ad else None)
+        cells = _dedup_reruns(cells)   # keep only the final run of each script
         _attribute_figures(cells, root)
         cells = [c for c in cells if c.figures or c.stream.strip() or c.source.strip()]
         if cells:

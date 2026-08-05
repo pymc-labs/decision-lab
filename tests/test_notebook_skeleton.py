@@ -75,8 +75,9 @@ class TestScriptCell:
 
 
 class TestEditReplay:
-    def test_edit_then_rerun_shows_both_versions(self, tmp_path: Path) -> None:
-        # write (buggy) -> run (error) -> edit (fix) -> run: two cells, v1 then v2.
+    def test_edit_then_rerun_keeps_only_final(self, tmp_path: Path) -> None:
+        # write (buggy) -> run (error) -> edit (fix) -> run: the buggy run collapses
+        # into the FINAL version — the one that produced the output.
         wd = tmp_path / "w"
         logs = wd / "_opencode_logs"
         logs.mkdir(parents=True)
@@ -93,10 +94,49 @@ class TestEditReplay:
         ]) + "\n")
         cells = build_skeleton(wd)[0].cells
         runs = [c for c in cells if c.source.strip().startswith("x =")]
-        assert len(runs) == 2
-        assert "wrong_name" in runs[0].source and "NameError" in runs[0].stream
-        assert "x = 42" in runs[1].source and "42" in runs[1].stream
-        assert "wrong_name" not in runs[1].source  # the edit was applied
+        assert len(runs) == 1                              # collapsed to the final run
+        assert "x = 42" in runs[0].source and "42" in runs[0].stream
+        assert "wrong_name" not in runs[0].source          # the buggy version is gone
+        assert "NameError" not in runs[0].stream
+
+    def test_shell_decorations_dont_prevent_collapse(self, tmp_path: Path) -> None:
+        # same script + args; only redirects/pipes/timeout differ across re-runs —
+        # still one fix-arc, must collapse to the final run.
+        wd = tmp_path / "w"
+        logs = wd / "_opencode_logs"
+        logs.mkdir(parents=True)
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 500, part={"model": "m"}),
+            _tool("write", 900, inp={"filePath": "/ws/p.py", "content": "print('v1')\n"},
+                  start=900, end=910),
+            _tool("bash", 1000, inp={"command": "python p.py"},
+                  start=1000, end=1100, error="boom\n"),
+            _tool("edit", 1150, inp={"filePath": "/ws/p.py",
+                  "oldString": "v1", "newString": "v2"}, start=1150, end=1160),
+            _tool("bash", 1200, inp={"command": "timeout 180 python p.py 2>&1 | head -100"},
+                  start=1200, end=1300, output="v2\n"),
+        ]) + "\n")
+        runs = [c for c in build_skeleton(wd)[0].cells if "print(" in c.source]
+        assert len(runs) == 1 and "v2" in runs[0].source   # decorations stripped
+
+    def test_sweep_with_different_args_is_kept(self, tmp_path: Path) -> None:
+        # same script, DIFFERENT args (a sweep) → distinct commands → both kept.
+        wd = tmp_path / "w"
+        logs = wd / "_opencode_logs"
+        logs.mkdir(parents=True)
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 500, part={"model": "m"}),
+            _tool("write", 900, inp={"filePath": "/ws/opt.py", "content": "run()\n"},
+                  start=900, end=910),
+            _tool("bash", 1000, inp={"command": "python opt.py --pct 5"},
+                  start=1000, end=1100, output="5%\n"),
+            _tool("bash", 1200, inp={"command": "python opt.py --pct 50"},
+                  start=1200, end=1300, output="50%\n"),
+        ]) + "\n")
+        cells = build_skeleton(wd)[0].cells
+        runs = [c for c in cells if "run()" in c.source]
+        assert len(runs) == 2                              # a sweep is distinct, not a fix-arc
+        assert {"5%\n", "50%\n"} == {r.stream for r in runs}
 
 
 class TestSkeletonCommand:
