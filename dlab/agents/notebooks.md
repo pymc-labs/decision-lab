@@ -55,9 +55,12 @@ The code and outputs are already there; your value is the reasoning that ties th
 
 Ground every claim in something you retrieved; never invent motivation, just as you never invent code.
 
-## Curate
+## Curate — but keep every distinct run
 
-- **Deduplicate** — a run may call the same tool many times (a sweep across settings). Keep the representative cell(s), `nb-delete-cell` the rest, and note the sweep in markdown.
+The skeleton is **already deduplicated**: progressive bug-fix re-runs of a script have been collapsed to the final version that produced the output. So you rarely need to delete a code cell.
+
+- **Keep every distinct run, and narrate the sweep.** A run may sweep a parameter — the same analysis at several settings (e.g. a budget optimization at different risk levels). Those are **meaningful and must all stay** — they are the comparison. Do **not** delete them; instead explain the sweep in markdown (what varied, what each showed).
+- **`nb-delete-cell` is only for genuine non-analysis noise** — a scratch `python -c` sanity check, a redundant re-inspection of the same data. Never delete a distinct analysis run to reduce repetition.
 - **Only the adopted path in the main notebooks** — the alternatives are already separated into `attempts/`; argue them in the overview, don't inline them.
 - **Reorder** for a readable narrative where the raw chronology is confusing (`nb-move-cell`).
 
