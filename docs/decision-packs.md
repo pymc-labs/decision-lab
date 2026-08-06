@@ -76,8 +76,10 @@ hooks:
 | `requires_prompt` | No | `true` | Whether `--prompt` is required |
 | `cli_name` | No | same as `name` | Override command name for `dlab install` |
 | `opencode_version` | No | `latest` | opencode version to install |
+| `generate_jupyter_notebooks_from_run` | No | `false` | Compose notebooks automatically after a successful run |
 | `models.forecaster` | No | `default_model` | Model for parallel agent instances |
 | `models.consolidator` | No | `default_model` | Model for the consolidator agent |
+| `models.notebooks` | No | `default_model` | Model for the notebook composer |
 | `hooks.pre-run` | No | — | Scripts to run before opencode |
 | `hooks.post-run` | No | — | Scripts to run after opencode |
 
@@ -273,11 +275,22 @@ The pipeline:
 
 ```yaml
 # config.yaml
+generate_jupyter_notebooks_from_run: true    # optional; compose after every run (default: false)
 models:
-  notebooks: anthropic/claude-sonnet-4-5   # optional; falls back to default_model
+  notebooks: anthropic/claude-sonnet-4-5     # optional; falls back to default_model
 ```
 
-The composer model resolves in this order (highest wins): the `--model` flag → this pack's explicit `models.notebooks` → the `DLAB_NOTEBOOKS_MODEL` environment variable (a user's personal global default) → the pack's `default_model`. So a pack can pin a composer model, and a user can set their own default across packs without editing configs.
+The composer model resolves in this order (highest wins): the `--notebooks-model` flag → this pack's explicit `models.notebooks` → the `DLAB_NOTEBOOKS_MODEL` environment variable (a user's personal global default) → the pack's `default_model`. So a pack can pin a composer model, and a user can set their own default across packs without editing configs. (`--notebooks-model` is distinct from `dlab run --model`, which sets the *orchestrator* model.)
+
+### Composing automatically after a run
+
+By default `dlab run` does not compose notebooks — you run `dlab notebooks <work-dir>` afterwards. To have a successful run compose them itself, opt in via any of (highest precedence first):
+
+1. **`dlab run --notebooks`** (per-run; `--no-notebooks` force-disables even when a pack or env opts in).
+2. **`DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER=1`** — a user's global "always compose" switch across all packs.
+3. **`generate_jupyter_notebooks_from_run: true`** in the pack's `config.yaml` — a pack that always wants notebooks.
+
+Composition only runs when the agent finished successfully (exit code 0); it is skipped for interrupted or failed runs, and a composition failure is surfaced as a warning without changing the run's exit code.
 
 For a pack whose custom tools shell out to a Python library, run `dlab map-dpack <pack> --model <model> --env-file <pack>/.env` once (and re-run it, or `--check`, when the tools or library change). Packs with no custom tools are `script-only` — nothing to map.
 

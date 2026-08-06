@@ -211,6 +211,14 @@ def _main(
         bool,
         typer.Option("--yes", hidden=True),
     ] = False,
+    notebooks: Annotated[
+        bool | None,
+        typer.Option("--notebooks/--no-notebooks", hidden=True),
+    ] = None,
+    notebooks_model: Annotated[
+        str | None,
+        typer.Option("--notebooks-model", metavar="MODEL", hidden=True),
+    ] = None,
 ) -> None:
     """Run opencode in automated mode, sandboxed with Docker.
 
@@ -237,6 +245,8 @@ def _main(
             env_file=env_file,
             no_sandboxing=no_sandboxing,
             yes=yes,
+            notebooks=notebooks,
+            notebooks_model=notebooks_model,
         )
         raise typer.Exit(code=exit_code)
 
@@ -317,6 +327,25 @@ def _cmd_run_command(
             help="Auto-confirm interactive prompts (e.g. --continue-dir without --work-dir)",
         ),
     ] = False,
+    notebooks: Annotated[
+        bool | None,
+        typer.Option(
+            "--notebooks/--no-notebooks",
+            help="Compose Jupyter notebooks from the run once it finishes "
+            "successfully. Overrides the pack's generate_jupyter_notebooks_from_run "
+            "and the DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER env var.",
+        ),
+    ] = None,
+    notebooks_model: Annotated[
+        str | None,
+        typer.Option(
+            "--notebooks-model",
+            metavar="MODEL",
+            help="Model for the notebook composer (else models.notebooks / "
+            "DLAB_NOTEBOOKS_MODEL / default_model). Distinct from --model, which "
+            "is the orchestrator.",
+        ),
+    ] = None,
 ) -> None:
     """Run opencode in automated mode, sandboxed with Docker (default command)."""
     exit_code = cmd_run(
@@ -331,6 +360,8 @@ def _cmd_run_command(
         env_file=env_file,
         no_sandboxing=no_sandboxing,
         yes=yes,
+        notebooks=notebooks,
+        notebooks_model=notebooks_model,
     )
     raise typer.Exit(code=exit_code)
 
@@ -347,6 +378,8 @@ def cmd_run(
     env_file: str | None = None,
     no_sandboxing: bool = False,
     yes: bool = False,
+    notebooks: bool | None = None,
+    notebooks_model: str | None = None,
 ) -> int:
     """
     Handle run mode - create session and start agent.
@@ -658,6 +691,8 @@ def cmd_run(
         else:
             console.print(f"{I}[bold red]Done (exit code {exit_code}).[/bold red]")
 
+        _maybe_compose_notebooks(exit_code, work_dir, dpack, env_file,
+                                 notebooks, notebooks_model, config, console, I)
         return exit_code
 
     # =====================================================================
@@ -882,6 +917,9 @@ def cmd_run(
         else:
             console.print(f"{I}[bold red]Done (exit code {exit_code}).[/bold red]")
 
+    if not interrupted:
+        _maybe_compose_notebooks(exit_code, work_dir, dpack, env_file,
+                                 notebooks, notebooks_model, config, console, I)
     return exit_code
 
 
@@ -1339,6 +1377,47 @@ def _available_provider_keys(env_file: str | None, dpack_path: Path) -> set[str]
 
 def _suggest_models(keys: set[str]) -> list[str]:
     return [model for names, model in _MODEL_SUGGESTIONS if keys & names]
+
+
+def _env_truthy(val: str | None) -> bool:
+    """A DLAB_* env flag counts as on for 1/true/yes/on (case-insensitive)."""
+    return (val or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _should_compose_notebooks(cli_flag: bool | None, config: dict[str, Any]) -> bool:
+    """Decide whether to auto-compose notebooks after a run. Precedence: the
+    explicit ``--notebooks``/``--no-notebooks`` flag (tri-state) > the
+    ``DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER`` env (a user's global "always") > the
+    pack's ``generate_jupyter_notebooks_from_run`` config key > off."""
+    if cli_flag is not None:
+        return cli_flag
+    if _env_truthy(os.environ.get("DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER")):
+        return True
+    return bool(config.get("generate_jupyter_notebooks_from_run", False))
+
+
+def _maybe_compose_notebooks(
+    exit_code: int, work_dir: str, dpack: str | None, env_file: str | None,
+    notebooks_flag: bool | None, notebooks_model: str | None,
+    config: dict[str, Any], console: Console, indent: str,
+) -> None:
+    """Compose notebooks after a successful run when the flag/env/config asks for
+    it. Never raises and never changes the run's exit code: only runs on success
+    (``exit_code == 0``), and a composition failure is surfaced as a warning."""
+    if exit_code != 0 or not _should_compose_notebooks(notebooks_flag, config):
+        return
+    model = _resolve_notebooks_model(notebooks_model, dpack)
+    if model is None:
+        console.print(f"{indent}[yellow]! Skipping notebooks: no composer model "
+                      "resolved (set --notebooks-model, models.notebooks, "
+                      "DLAB_NOTEBOOKS_MODEL, or default_model).[/yellow]")
+        return
+    console.print(f"\n{indent}[bold]Composing notebooks[/bold]")
+    try:
+        cmd_notebooks(work_dir, model=model, dpack=dpack, env_file=env_file)
+    except Exception as e:  # noqa: BLE001 — a compose failure must not fail the run
+        console.print(f"{indent}[yellow]! Notebook composition failed: {e} "
+                      "(the run itself succeeded).[/yellow]")
 
 
 def _resolve_notebooks_model(model: str | None, dpack: str | None) -> str | None:

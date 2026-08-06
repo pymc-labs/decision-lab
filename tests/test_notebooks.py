@@ -5,8 +5,12 @@ integration, like the docker tests). Here we cover the deterministic pieces:
 environment materialization/cleanup, the notebook agent model role, env parsing, and
 the generate_notebooks guard.
 """
+import io
 from pathlib import Path
 
+from rich.console import Console
+
+import dlab.cli as cli
 from dlab.notebooks import (
     NB_TOOLS,
     _isolate_notebook_tools,
@@ -15,10 +19,12 @@ from dlab.notebooks import (
     generate_notebooks,
     materialize_notebook_env,
 )
-from dlab.config import resolve_model_roles
+from dlab.config import load_dpack_config, resolve_model_roles
 from dlab.cli import (
     _available_provider_keys,
     _load_env_file,
+    _maybe_compose_notebooks,
+    _should_compose_notebooks,
     _suggest_models,
     cmd_notebooks,
 )
@@ -192,3 +198,87 @@ class TestEnvAndGuards:
 
     def test_cmd_notebooks_rejects_non_workdir(self, tmp_path: Path) -> None:
         assert cmd_notebooks(str(tmp_path), model="x/y") == 1  # no _opencode_logs
+
+
+class TestAutoComposeTrigger:
+    """`dlab run` composes notebooks automatically when asked via the
+    --notebooks flag, the DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER env, or the pack's
+    generate_jupyter_notebooks_from_run config key."""
+
+    def test_precedence(self, monkeypatch) -> None:
+        monkeypatch.delenv("DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER", raising=False)
+        on = {"generate_jupyter_notebooks_from_run": True}
+        off = {"generate_jupyter_notebooks_from_run": False}
+        # explicit CLI flag wins over everything
+        assert _should_compose_notebooks(True, off) is True
+        assert _should_compose_notebooks(False, on) is False
+        # no flag → config key decides
+        assert _should_compose_notebooks(None, on) is True
+        assert _should_compose_notebooks(None, off) is False
+        # a truthy env forces on over an off config, but --no-notebooks still wins
+        monkeypatch.setenv("DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER", "1")
+        assert _should_compose_notebooks(None, off) is True
+        assert _should_compose_notebooks(False, off) is False
+        # a falsey env is ignored → falls back to the config key
+        monkeypatch.setenv("DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER", "0")
+        assert _should_compose_notebooks(None, off) is False
+        assert _should_compose_notebooks(None, on) is True
+
+    def test_config_key_normalized(self, tmp_path: Path) -> None:
+        def dpack(name: str, value: str | None) -> Path:
+            root = tmp_path / name
+            (root / "docker").mkdir(parents=True)
+            (root / "opencode").mkdir()
+            lines = ["name: x", "description: x", "docker_image_name: x",
+                     "default_model: anthropic/x"]
+            if value is not None:
+                lines.append(f"generate_jupyter_notebooks_from_run: {value}")
+            (root / "config.yaml").write_text("\n".join(lines) + "\n")
+            return root
+        # default is False when the key is absent
+        assert load_dpack_config(str(dpack("a", None)))[
+            "generate_jupyter_notebooks_from_run"] is False
+        # explicit true is coerced to a real bool
+        assert load_dpack_config(str(dpack("b", "true")))[
+            "generate_jupyter_notebooks_from_run"] is True
+
+    def test_no_compose_on_failed_run(self, monkeypatch) -> None:
+        calls: list = []
+        monkeypatch.setattr(cli, "cmd_notebooks", lambda *a, **k: calls.append((a, k)))
+        console = Console(file=io.StringIO())
+        # a non-zero exit code must never trigger composition, even with --notebooks
+        _maybe_compose_notebooks(1, "/wd", "/dp", None, True, None, {}, console, "  ")
+        assert calls == []
+
+    def test_compose_invoked_on_success(self, monkeypatch) -> None:
+        calls: list = []
+        monkeypatch.setattr(cli, "_resolve_notebooks_model", lambda m, d: "anthropic/x")
+        monkeypatch.setattr(cli, "cmd_notebooks",
+                            lambda wd, **k: calls.append((wd, k)))
+        console = Console(file=io.StringIO())
+        _maybe_compose_notebooks(0, "/wd", "/dp", "/env", True, "m/x", {}, console, "  ")
+        assert calls and calls[0][0] == "/wd"
+        assert calls[0][1] == {"model": "anthropic/x", "dpack": "/dp",
+                               "env_file": "/env"}
+
+    def test_compose_failure_does_not_fail_the_run(self, monkeypatch) -> None:
+        monkeypatch.setattr(cli, "_resolve_notebooks_model", lambda m, d: "anthropic/x")
+
+        def boom(*a, **k):
+            raise RuntimeError("kaboom")
+
+        monkeypatch.setattr(cli, "cmd_notebooks", boom)
+        buf = io.StringIO()
+        # must swallow the error and warn, not propagate
+        _maybe_compose_notebooks(0, "/wd", "/dp", None, True, None, {},
+                                 Console(file=buf), "  ")
+        assert "failed" in buf.getvalue().lower()
+
+    def test_no_model_skips_with_warning(self, monkeypatch) -> None:
+        calls: list = []
+        monkeypatch.setattr(cli, "_resolve_notebooks_model", lambda m, d: None)
+        monkeypatch.setattr(cli, "cmd_notebooks", lambda *a, **k: calls.append(1))
+        buf = io.StringIO()
+        _maybe_compose_notebooks(0, "/wd", None, None, True, None, {},
+                                 Console(file=buf), "  ")
+        assert calls == [] and "no composer model" in buf.getvalue()

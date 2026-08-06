@@ -39,6 +39,12 @@ dlab run --dpack PATH --data PATH [--data PATH ...] --prompt TEXT [options]
 | `--rebuild` | Force rebuild Docker image even if cached |
 | `--env-file PATH` | Path to environment file (auto-detected from decision-pack `.env` if not specified) |
 | `--no-sandboxing` | Run opencode locally without Docker (see below) |
+| `--notebooks` / `--no-notebooks` | Compose Jupyter notebooks when the run finishes successfully. Tri-state: overrides the pack's `generate_jupyter_notebooks_from_run` and `DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER`; `--no-notebooks` force-disables (see below) |
+| `--notebooks-model MODEL` | Model for the notebook composer (distinct from `--model`, the orchestrator; else `models.notebooks` / `DLAB_NOTEBOOKS_MODEL` / `default_model`) |
+
+### Composing notebooks after a run
+
+By default `dlab run` stops at the finished work dir and you compose notebooks separately with [`dlab notebooks`](#notebooks). To have a **successful** run compose them itself, opt in via any of (highest precedence first): `--notebooks` → `DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER=1` (a user-global switch) → `generate_jupyter_notebooks_from_run: true` in the pack's `config.yaml`. `--no-notebooks` disables it for a single run even when the env or config opts in. Composition runs only on exit code 0 (skipped for failed or interrupted runs), and a composer failure is surfaced as a warning without changing the run's exit code. The composer model resolves via `--notebooks-model` → `models.notebooks` → `DLAB_NOTEBOOKS_MODEL` → `default_model`.
 
 ### Local Mode (`--no-sandboxing`)
 

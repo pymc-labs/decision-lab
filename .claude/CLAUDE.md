@@ -62,8 +62,12 @@ Optional flags:
 - `--continue-dir` - Resume from a previous session's work directory
 - `--rebuild` - Force rebuild Docker image
 - `--no-sandboxing` - Run opencode locally without Docker (via `local.py`); copies `docker/` into the work dir as `_docker/` and instructs the agent to provision its own environment
+- `--notebooks` / `--no-notebooks` - Compose Jupyter notebooks from the run when it finishes successfully (tri-state; overrides the pack's `generate_jupyter_notebooks_from_run` and `DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER`)
+- `--notebooks-model` - Model for the notebook composer (distinct from `--model`, the orchestrator; else `models.notebooks` / `DLAB_NOTEBOOKS_MODEL` / `default_model`)
 
-Environment variables starting with `DLAB_` are automatically forwarded from the host to the Docker container. decision-packs can use these for configuration (e.g., `DLAB_FIT_MODEL_LOCALLY=1` in the MMM decision-pack).
+Environment variables starting with `DLAB_` are automatically forwarded from the host to the Docker container. decision-packs can use these for configuration (e.g., `DLAB_FIT_MODEL_LOCALLY=1` in the MMM decision-pack). Two host-side `DLAB_` vars affect the notebook composer: `DLAB_NOTEBOOKS_MODEL` (global default composer model) and `DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER=1` (compose after every successful run).
+
+**Auto-composing notebooks after a run:** `dlab run` composes notebooks itself when the `--notebooks` flag, the `DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER` env var, or the pack's `generate_jupyter_notebooks_from_run: true` config key asks for it (that precedence order; `--no-notebooks` force-disables). Only on exit code 0; a composer failure warns but never changes the run's exit code. Wired in `cli.py` via `_should_compose_notebooks()` + `_maybe_compose_notebooks()`, reusing `cmd_notebooks`.
 
 ### Subcommands
 

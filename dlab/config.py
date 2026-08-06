@@ -177,6 +177,11 @@ def load_dpack_config(config_dir: str) -> dict[str, Any]:
     if "opencode_version" not in config:
         config["opencode_version"] = "latest"
 
+    # Normalize generate_jupyter_notebooks_from_run: compose Jupyter notebooks
+    # automatically after a successful run. Off by default; opt in per pack.
+    config["generate_jupyter_notebooks_from_run"] = bool(
+        config.get("generate_jupyter_notebooks_from_run", False))
+
     # Normalize hooks: string -> list, missing -> empty list
     hooks: dict[str, Any] = config.get("hooks", {})
     if not isinstance(hooks, dict):
