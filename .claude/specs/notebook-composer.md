@@ -36,13 +36,22 @@ generate_jupyter_notebooks_from_run: true   # default: false. Descriptive name c
                                             # deliberately over a terse `notebooks:` key.
 
 models:
-  composer: anthropic/claude-haiku-4-5      # optional role; falls back to default_model.
+  notebooks: anthropic/claude-sonnet-4-5    # optional role; falls back to default_model.
                                             # Rides the existing models: role mechanism
                                             # introduced for forecaster/consolidator (#34).
 ```
 
-v1 surface is deliberately minimal: on/off + model role. Per-dpack composer
-hints ("always show the adstock curves"), output-directory config, etc. are
+> **As-built note (2026-08-01):** the model role is `models.notebooks` (not
+> `models.composer` — the whole feature was renamed away from the ambiguous
+> "compose"/"composer" verb; see §8.5). `resolve_model_roles()` returns a
+> `notebooks` key. The config *flag* `generate_jupyter_notebooks_from_run` is
+> **not yet wired** — the step currently exists only as the standalone
+> `dlab notebooks` command (§8.5). Empirically, Sonnet is a good grounded default
+> (~$2.6/run); Opus is more thorough (~$8.8/run); a cheap flash model works but
+> narrates less. So the example default is Sonnet, not Haiku.
+
+v1 surface is deliberately minimal: on/off + model role. Per-dpack hints
+("always show the adstock curves"), output-directory config, etc. are
 explicitly deferred.
 
 ## 3. Placement in the run lifecycle (decided, with reasoning)
@@ -143,6 +152,16 @@ tackle level C at a later stage."*
   order, imports present, paths relative to the workdir, code taken **verbatim
   from scripts that actually ran**, with a provenance comment per code cell:
   `# from parallel/run-1784.../instance-2/fit_model.py`.
+  - **Tool-generated outputs (correction, 2026-07-31):** "verbatim from scripts
+    that ran" silently assumed *agent-written* scripts. Many outputs (figures,
+    result files) are produced by a **custom tool** whose code lives in its
+    `.opencode/tools/<name>.ts` (which shells out to a library CLI), not in any
+    logged script. A figure embedded under a bare comment is not runnable. The
+    runnable representation is the **tool's own invocation**, reproduced from the
+    tool source the digest now surfaces (§7.2), at the deepest affordable level
+    (granular library call → top-level function → shell-out; §8). One tool call
+    = one regeneration cell (which produces all its outputs) + runnable
+    `Image(...)` display cells. Any such reconstruction is disclosed via `nb-note`.
 - **Level C — verified re-executable (deferred)**: `dlab notebooks --execute`,
   opt-in, runs in the container, skips cells tagged `long-running`.
 
@@ -208,8 +227,14 @@ lines of Bun). Tool surface (~5 tools, deliberately small):
 | `nb-add-markdown-cell` | `notebook, text, math?` | Appends markdown cell. Escapes `$` → `\$` by default (auto-mined text is almost always currency); `math: true` per cell opts into MathJax. |
 | `nb-add-code-cell` | `notebook, code, outputs?, tags?` | Appends code cell. `outputs` is a list of `{image: <path>}` \| `{stream: <text>}`; the TOOL reads the figure file and base64-encodes it into a proper `display_data`/`stream` output — the model only ever passes paths. Assigns sequential `execution_count`. `tags` for `long-running`. |
 | `nb-edit-cell` | `notebook, index, …` | Replace source/outputs of an existing cell (for fixes). |
+| `nb-note` | `notebook, text, math?` | Appends to the notebook's **first cell — the markdown "preamble"** (index-independent; creates it if the top isn't markdown). The composer's **disclosure** surface: whatever it reconstructed rather than took verbatim (regenerated figures, code reproduced at a coarser level, results trusted from a summary, inherited data). |
 | `nb-read` | `notebook` | **Compact rendering, base64 stripped**: `cell 7 [code, exec 7, 1 image output: figures/adstock.png]` + truncated sources. Agents must never read raw ipynb (base64 in context = the same poison we keep out of writing). |
-| `nb-finalize` | `notebook` | Injects the provenance header cell (idempotent), final consistency pass, writes canonical JSON. |
+| `nb-finalize` | `notebook` | Pins the provenance header to the top of the preamble cell (idempotent; provenance + notes stay ONE markdown cell), final consistency pass, writes canonical JSON. |
+
+**Invariant — the first cell is always the markdown preamble** (provenance line
++ any `nb-note` disclosures). Implemented (#86, PR #89): the six `.ts` tools are
+flat in `dlab/js/` (`nb-add-markdown-cell`, `nb-add-code-cell`, `nb-edit-cell`,
+`nb-note`, `nb-read`, `nb-finalize`).
 
 **Research record (2026-07-29)** — checked before deciding to build:
 
@@ -247,22 +272,61 @@ Outputs written into the workdir:
 
 - `_digest/digest.md` — the LLM-facing map (format below).
 - `_digest/index.json` — machine index: every ID → `{log_file, line_no,
-  event_type}`. **Thin index** (pointers, not payloads): a fat index storing
-  extracted payloads would duplicate log content on disk.
+  line_end?, event_type}`. **Thin index** (pointers, not payloads): a fat index
+  storing extracted payloads would duplicate log content on disk. `line_end` is
+  present for multi-line payloads — a `raw_text` block, or a `tool_use` whose
+  mapped raw_text stream extends past its own line. For a small text artifact
+  (`event_type: "artifact"`), `log_file` points at the artifact file itself and
+  `digest-get` returns its contents — still a pointer, not a stored payload.
 
 ### 7.1 Digest format
+
+> **Revised 2026-07-30** after reviewing the digest against a real completed mmm
+> run (`dlab-mmm-agent-oc-workdir-008`). Changes, all validated on that run:
+> artifacts are **provenance-first** (every file links to the tool call that
+> produced/copied it; inherited untouched copies dropped by sha256; the parent's
+> `cp`'d files stay, linked to the copy); **all producing tool calls are
+> labeled** (not just bash), so every referenced ID is a visible row; and
+> **`raw_text` (the majority of a real log — the tracebacks and sampler output)
+> is a first-class `r`-id**, mapped to its tool call and retrievable, because it
+> is what the composer embeds as a cell's `stream` output. The `dlab digest`
+> command (spec §11.5) and the produced/inherited attribution already shipped in
+> PR #87; the tool-call-labeling + `raw_text` mapping are the remaining build.
 
 Header: dpack name, models, total duration, total cost. Workflow tree. Then
 **one `###` section per agent (orchestrator AND every instance AND
 consolidators), identical structure** (Ben's requirement).
 
 **ID scheme — one shared event counter per agent; the numbering IS the
-timeline** (this resolved Ben's chronology concern; it is load-bearing):
-`t07` (tool call), `x08` (text/reasoning), `t09` — kind-prefix says *what*,
-the shared number says *when*. Artifact IDs (`a1`, `a2`, …) are per-agent and
-not on the event counter (artifacts are files, not events); their provenance
-is expressed through event IDs. Fully-qualified form for retrieval:
-`<agent-path>/<id>`, e.g. `main/t17`, `poet.r2.i2/t4`.
+timeline** (load-bearing, resolved Ben's chronology concern): `t07` (tool
+call), `x08` (text/reasoning), `r09` (raw_text stream) — the kind-prefix says
+*what*, the shared number says *when*. Every event is addressable.
+
+`raw_text` is the plain stdout/stderr the opencode process emits **outside** the
+structured tool events. On a real mmm instance it is the *majority* of the log
+(e.g. 166 of 266 lines) and holds the material that matters most — the
+Modal/PyMC tracebacks, sampler diagnostics, "saved to fitted_model.nc" lines.
+It carries **no timestamp**, so it is ordered by line position and a run of
+consecutive raw_text is associated with the **most recent `tool_use` before it**
+(positional; the parser already groups the run into one block). Each block gets
+one `r`-id on the shared counter and is **mapped to its tool call**. This is the
+material the composer embeds as a cell's `stream` output (§5). Remote Modal-side
+fit logs are **not** fetched (out of scope) — only what the local session log
+captured.
+
+Artifact IDs (`a1`, `a2`, …) and the Task ID (`p0`) are per-agent and off the
+event counter (files/prompts are not events); their provenance is expressed
+through event IDs. **Small text artifacts (`.json/.csv/.md/.txt/.yaml` under
+32KB) are retrievable** — `digest-get <agent>/a5` returns the file's contents,
+sliced — and the digest shows a deterministic **shape hint** next to each so the
+composer decides *whether* and *which slice* to pull before spending context:
+JSON → top-level keys, CSV → header columns + row count, text → line count +
+first heading. Big/binary artifacts (`.nc`, `.png`, `.pkl`) stay pure pointers
+(size only, not retrievable). This closes a gap found in the composer experiment
+(§7.4): the per-instance result files — each non-adopted modeler's
+`analysis_summary.json`/`roas.csv` — were otherwise unreadable, forcing the
+composer to trust the orchestrator's transcription. Fully-qualified retrieval
+form: `<agent-path>/<id>`, e.g. `main/t17`, `poet.r2.i2/r4`, `poet.r2.i2/a5`.
 
 **Task field** (per agent section, required): the *differentiating* portion of
 the agent's prompt — for parallel instances, the orchestrator-supplied prompt
@@ -272,13 +336,28 @@ full prompt retrievable via `digest-get <agent>/p0`. Rationale: the composer
 cannot narrate alternatives ("instance 2 tried geometric adstock, instance 3
 Weibull") without knowing what each instance was asked to do.
 
-**Artifact write chains**: every artifact lists its full write history in
-order — `[a5] summary.md (written t12, overwritten t31)` — content attributed
-to the **last** writer, earlier writers kept visible so the composer knows a
-retry replaced it. Derived deterministically from write/edit tool inputs.
-Cross-agent overwrites (e.g. orchestrator regenerating `report.md`) appear the
-same way in the main-agent section; instance workdirs are isolated and cannot
-clobber each other.
+**Artifact provenance (produced vs. inherited)** — every artifact links to the
+tool call in *this agent* that produced or copied it:
+
+- `write`/`edit` → chain by `filePath`: `written t6, edited t9` (full write
+  history in order; content attributed to the last writer, earlier writers kept
+  visible so the composer sees a retry replaced it).
+- `bash` / custom tool (`fit-model-modal`, `analyze-model`) / `cp` → matched by
+  **mtime ∈ [call.start, call.end]** — the file was written during that call's
+  window: `← from t10 (bash: python fit_model.py)`, `← from t16
+  (fit-model-modal)`. mtime is safe here because it is used **only on files
+  already proven produced**, never to detect copies (Ben's tier-3, applied
+  where it cannot misfire).
+
+The **parent's `cp`'d artifacts stay visible**, linked to the copy call —
+`best_model.nc ← from t52 (cp)` — because the copy IS a producing call.
+
+A file is **dropped** only when it has **no producing call in this agent** *and*
+is byte-identical (sha256) to the workspace-root seed — i.e. it arrived via the
+invisible `copyWorkDir` fan-out and was never touched. Chronology +
+sibling-isolation gate this so a creator never loses its own file to a later
+`cp`, and isolated siblings never shadow each other. A seeded file the agent
+then *edited* is kept — it has an edit call.
 
 **Header + workflow-tree format** (schematic):
 
@@ -310,36 +389,44 @@ model: anthropic/claude-sonnet-4-5 | 214s | $0.31 | 19 tool calls
 workdir: parallel/run-1784571692537/instance-2/
 
 **Task** [p0]: "Fit a geometric-adstock MMM with saturating priors on /workspace/data;
-run seeds [0,1,2] and report median F1…" (differentiating portion of the instance
-prompt; full prompt via digest-get poet.r2.i2/p0)
+run seeds [0,1,2] and report median F1…" (differentiating portion; full prompt
+via digest-get poet.r2.i2/p0)
 
-**Artifacts** (7)
-- [a1] fit_model.py            (4.1KB, written t6, edited t9)
-- [a2] idata.nc                (2.3MB, from t10)
-- [a3] figures/adstock_curves.png   (142KB)
-- [a4] figures/posterior_roas.png   (98KB)
-- [a5] summary.md              (1.8KB)   ← instance conclusion
-- [a6] analysis_output/analysis_summary.json (0.9KB)
+**Artifacts** (6 produced)
+- [a1] fit_model.py            (4.1KB)  ← written t6, edited t9
+- [a2] idata.nc               (2.3MB)  ← from t10 (bash: python fit_model.py)
+- [a3] figures/adstock_curves.png (142KB) ← from t14 (bash: python make_figures.py)
+- [a4] figures/posterior_roas.png (98KB)  ← from t14
+- [a5] summary.md             (1.8KB)  ← written t16   (instance conclusion)
+- [a6] analysis_output/analysis_summary.json (0.9KB) ← from t12 (analyze-model)
+(cleaned_data.parquet, data_summary.md — inherited, untouched → hidden)
 
-**Script runs**
-- [t7]  bash `python fit_model.py`         ✗ error   (stderr 41 lines — KeyError: 'is_valid')
-- [t10] bash `python fit_model.py`         ✓ 312s    (stdout 6,204 lines — sampler progress + diagnostics)
-- [t14] bash `python make_figures.py`      ✓ 8s      (stdout 12 lines)
-
-**Other tool calls**: read×4, edit×2, write×3
+**Tool calls**  (producing calls, each addressable; raw_text stream mapped in)
+- [t6]  write fit_model.py
+- [t7]  bash  `python fit_model.py`     ✗ error  0s   → r8  (stderr 41 ln — KeyError: 'is_valid')
+- [t9]  edit  fit_model.py              (fix)
+- [t10] bash  `python fit_model.py`     ✓ 312s        → r11 (stdout 6,204 ln — sampler + diagnostics)
+- [t12] analyze-model                   ✓             → analysis_output/
+- [t14] bash  `python make_figures.py`  ✓ 8s          → r15 (stdout 12 ln)
+- [t16] write summary.md
+**Navigational**: read×4, todowrite×3, glob×1
 **Reasoning excerpts**
-- [x8] "The first fit failed on the validation key; fixing and rerunning…"
-- [x16] "r̂ ≤ 1.01 on all parameters, 0 divergences — this configuration converged. Writing summary…"
+- [x8]  "The first fit failed on the validation key; fixing and rerunning…"
+- [x18] "r̂ ≤ 1.01 on all parameters, 0 divergences — converged. Writing summary…"
 ```
 
-(Note the shared counter: `t7 → x8 → t9(edit) → t10` reads as the story arc
-"failed → reasoned → fixed → succeeded" directly off the numbers.)
+(The shared counter runs `t6 → t7 → r8 → x… → t9 → t10 → r11 …`: "wrote → ran →
+it errored (r8) → reasoned → fixed → ran → it worked (r11)" reads straight off
+the numbering — raw_text now included as a first-class element. Every `← from
+tN` and every `→ rN` points at a labeled row, so no ID is referenced without
+being shown.)
 
 **`--brief` variant** (agreed): keeps per-agent header stats, Artifacts with
-write chains, Script runs with ✓/✗, Reasoning excerpts; collapses the tool
-tables to the one-line counts. The index is unaffected — brief trims the map,
-not addressability. Expected size: full digest for a big mmm run ≈ 500–1500
-dense lines (acceptable: it is the map, ~100× smaller than the logs).
+their provenance links, and the ✓/✗ + raw_text-tail for producing calls;
+collapses the full Tool-calls table and Reasoning to one-line counts/first
+lines. The index is unaffected — brief trims the *map*, not addressability.
+Expected size: full digest for a big mmm run ≈ 500–1500 dense lines (acceptable:
+it is the map, ~100× smaller than the logs).
 
 ### 7.2 Retrieval: the `digest-get` tool
 
@@ -356,15 +443,33 @@ output embedded as an escaped string; reading it hands the composer a wall of
 lines of stdlib TS, no parser port, no drift; intelligence stays in the
 host-side Python indexer):
 
-- Args: `id` (fully qualified, e.g. `poet.r2.i2/t7`), optional `head`, `tail`,
+- Args: `id` (fully qualified, e.g. `poet.r2.i2/r8`), optional `head`, `tail`,
   `range` (line-based slicing of the payload).
-- Behavior: look up ID in `_digest/index.json` → read that single NDJSON line →
-  `JSON.parse` → extract the payload field for the event type (tool input +
-  output for `t`-ids, verbatim text for `x`-ids) → render **decoded** (clean
+- Behavior: look up ID in `_digest/index.json` → read the referenced NDJSON
+  line(s), `line_no..line_end` → render the payload for the event type:
+  `t`-ids → tool input + structured output **plus the mapped raw_text block**,
+  and **for a custom tool the code the tool ran** (its `.opencode/tools/<name>.ts`
+  source, appended under `# the code this tool ran`) — so one retrieval gives
+  "the call was XXX and the code it ran was YYY";
+  `r`-ids → the raw_text block verbatim; `x`-ids → the verbatim text;
+  `a`-ids → the small text artifact's contents — all **decoded** (clean
   stdout/stderr, not escaped JSON) → slice.
-- Why slicing is required: a PyMC fit log can be thousands of lines; the
-  composer grabs `digest-get poet.r2.i2/t7 --tail 15` for a traceback without
-  paying for sampler progress.
+
+**Custom-tool provenance (general, no per-dpack knowledge)**: a tool call is
+*custom* iff a `.opencode/tools/<name>.ts` exists in the workdir (built-in
+`bash`/`read`/`write`/`edit` have none — their "code" is already the command or
+file content). Custom calls are flagged `(custom)` in the Tool-calls row, their
+`tN` index entry carries a `tool_source` pointer, and `digest-get` bundles that
+source into the retrieval. This is what lets the composer make tool-generated
+outputs runnable: it reads the source (e.g. that `analyze-model` runs
+`python -m mmm_lib.analyze_model_cli …`) and reproduces the invocation at the
+deepest affordable level (§5), instead of embedding an orphaned figure. Works
+for any pack's tools — the digest surfaces whatever `.ts` is there; the model
+interprets it.
+- Why slicing is required: a PyMC fit's raw_text can be thousands of lines; the
+  composer grabs `digest-get poet.r2.i2/r11 --tail 15` for a traceback without
+  paying for sampler progress. (It is also how the composer pulls a cell's
+  `stream` output — full or tail — to embed in the notebook, §5.)
 
 **Text/reasoning events are first-class retrievable elements** (`x`-ids) — the
 digest excerpts them truncated; the composer pulls full verbatim text by ID.
@@ -384,15 +489,53 @@ timeline.py and session_data.py and now needed a third time. Plan: digest ships
 first computing its own stats; lifting shared helpers into the parser layer is
 an **incremental, non-blocking** follow-up (§11.4).
 
+### 7.4 Validation: the composer experiment (2026-07-31)
+
+Before building the composer step, an LLM agent was given the digest of a real
+completed run (`dlab-mmm-agent-oc-workdir-008`, 8 agents) plus `digest-get`, and
+asked to compose the overview + adopted-path notebooks **from the digest alone —
+forbidden from reading raw logs**. It succeeded: it identified the adopted model
+(via the `cp`-provenance on `best_model.nc` + a size match), narrated the failed
+instance and the retry/fix arcs, and inlined the adopted path in fit-then-load
+order. So the format is LLM-legible. Its critique drove concrete digest fixes,
+all now shipped:
+
+- **Custom-tool input signatures** — `fit-model-modal`/`analyze-model`/
+  `optimize-budget` rows show `{key=value, …}` (the reproducible call args),
+  paths keeping their filename end. Previously invisible until retrieved.
+- **Error-preview tails keep the line's END** (the exception / offending key),
+  not the head.
+- **A consolidator that wrote no `consolidated_summary.md` is flagged failed**,
+  like a summary-less modeler.
+- **LSP/type-checker diagnostics are stripped** from tool output in both the
+  digest and `digest-get`.
+- **Small text artifacts became retrievable with shape hints** (this §7.1 point)
+  — the single highest-value gap it named.
+
+One finding was *not* a digest bug and was filed against the mmm dpack (issue
+#88): the orchestrator proposed a degenerate modeling plan ("channel-specific
+adstock" is PyMC-Marketing's default, so it duplicated the baseline). The digest
+surfaced the raw material correctly; recognizing the equivalence is the
+composer's analytical job, and in the experiment it did.
+
 ## 8. Composer agent environment
 
-- The composer is **dlab-internal**: its agent prompt is a template shipped as
-  dlab package data (like `js/parallel-agents.ts`), NOT part of any dpack.
-  Placeholder rules from CLAUDE.md apply (no hard-coded values; `<VALUE>`
-  placeholders).
+- The composer is **dlab-internal**: its system prompt is a versioned file,
+  **`dlab/agents/composer.md`** (implemented, PR #89; registered as `dlab.agents`
+  package data), NOT part of any dpack. It is **fully dpack-agnostic** — a test
+  asserts no library/pack specifics leak in (`mmm_lib`/`pymc`/…). Its frontmatter
+  wires the tools (`digest-get` + the six `nb-*`) and denies `edit`/`bash`/`task`.
+- **The composer's core rules (all in `composer.md`)**: composed-not-executed +
+  provenance; digest + `digest-get` as the *only* log interface; fit-then-load
+  runnability; the **general 3→2→1 reproduction of custom-tool-generated
+  outputs** (read the tool's source from its `tN` retrieval, then reproduce at
+  the deepest affordable level — granular library call per figure → top-level
+  function → reproduce the invocation; never inline library internals, never a
+  figure under a bare comment); and the **`nb-note` disclosure rule** — every
+  reconstruction is disclosed in the first-cell preamble.
 - dlab materializes the composer environment into the workdir at composer-launch
-  time (analogous to `setupConsolidator`): composer agent `.md`, the five `nb-*`
-  tools, `digest-get`, and permission config.
+  time (analogous to `setupConsolidator`): `composer.md`, the six `nb-*` tools,
+  `digest-get`, and permission config.
 - **Permissions** (lesson from PR #38 encoded here): the composer does NOT need
   the `edit` permission — all its file writes go through the custom `nb-*`
   tools, which are not gated by the `edit` permission key. So: `read`/`glob`/
@@ -405,6 +548,118 @@ an **incremental, non-blocking** follow-up (§11.4).
 - The composer reads freely (digest, summaries, reports, scripts) but composes
   exclusively through tools.
 
+## 8.5 As-built: the `dlab notebooks` step (2026-08-01)
+
+Built and validated end-to-end on `dlab-mmm-agent-oc-workdir-008`, on the
+`feat/composer-step` branch (dev branch stacked on #87 + #89). Deltas from the
+spec above:
+
+- **Everything renamed away from "compose"/"composer"** (Ben: too ambiguous).
+  Command **`dlab notebooks WORK_DIR [--model] [--dpack] [--env-file]`**; module
+  `dlab/notebooks.py`; `generate_notebooks()`; agent `dlab/agents/notebooks.md`
+  run via `--agent notebooks`; config role `models.notebooks`. "notebook agent",
+  not "composer".
+- **Standalone command first** (Ben's call), so it can be driven from the CLI for
+  testing before the run-lifecycle wiring. Resolves the model from `--model` else
+  the dpack's `models.notebooks`; warns when no `--dpack` is given (the pack's
+  library isn't importable → figures reproduce only coarsely, imports can't be
+  validated). Persists the opencode run to `_notebooks.log` for diagnosis.
+- **Robustness fixes found by running on Anthropic (Gemini masked them all):**
+  1. *Tool isolation* — opencode loads every `.opencode/tools/*.ts` and sends all
+     schemas to the model; Anthropic rejects the dpack's unrelated tool schemas
+     and 500s. `notebooks.py` moves the dpack tools aside for the run (only the
+     `nb-*` + `digest-get` load) and `generate_digest` copies the custom-tool
+     sources into `_digest/tool_sources/` so `digest-get` still reads them.
+  2. *Curated subprocess env* — forwarding the full host env (and whole
+     `--env-file`) broke opencode's provider request opaquely; only base vars +
+     provider API keys are forwarded now (same lesson as the #56 env leak).
+  3. *Retry with backoff* — transient provider 500s left no notebooks; retries up
+     to 3× with backoff.
+- **The `notebooks.md` prompt now hard-forbids inventing code** (this replaced the
+  softer "verbatim from scripts" guidance). Motivation: a real run had retrieved
+  only 8 elements but written 41 code cells — most model code was reconstructed
+  from the model's own library knowledge (right params, invented code). The rule:
+  **every code cell must come from a retrieval** (a `write`/`edit` `tN` script, a
+  bash command, or a custom-tool invocation from its source); the only allowed
+  edit is a *slight* adaptation to run in a cell; if the real code isn't in the
+  digest, reproduce the tool invocation and disclose via `nb-note` — never
+  fabricate a body. After this, both Sonnet and Opus inline the **verbatim**
+  scripts (confirmed: the real `#!/usr/bin/env python3` header + the run's own
+  helper functions appear in the cells).
+
+### 8.5.1 RESOLVED — reproduction depth via a deterministic dpack code map (2026-08-02)
+
+**The gap:** reproduction of tool-generated outputs only reached level 1 (the CLI
+invocation, e.g. `!python -m mmm_lib.analyze_model_cli …`) because the agent could
+not reach the dpack library's source — the workdir has only the tool *wrapper*,
+and the library is not installed in a local run.
+
+**Superseded first idea (`_dpack_source/`):** copy the pack's library into the
+workdir for the agent to read. Built, then reverted — it made the agent *hunt*
+for code the host can resolve deterministically, and (fatally) a plain package
+copy can't reach a function deployed *through* a remote dispatch (the Modal
+`fit_mmm` body lives outside any importable package).
+
+**Shipped instead — the code map (Ben's design):** an agent can only run code it
+writes itself (already in the log as `write` tNs) or code a dpack tool invokes.
+That second wiring is **static and per-pack**, so it is compiled once,
+deterministically, by parsing the TS wrappers and the Python they call —
+`dlab/dpack_codemap.py` / `dlab map-dpack` → `<dpack>/code_map.json` (with
+source sha256s for a `--check` staleness gate). It maps each tool → the real
+level-2 entry function, **reaching through a `modal.Function.from_name` dispatch**
+to the deployed body so a remote fit inlines as if local. Pack shapes:
+`script-only` (no tools → nothing to resolve), `tool-backed`, `modal-inline`,
+`mixed`. Across all six in-repo dpacks there was **no irreducible LLM step** in
+the mapping (the one ambiguous case — a CLI that dispatches to several trainers
+by an arg — resolves from the run's recorded call args at join time).
+
+**The join happens in the digest.** `generate_digest(work_dir, dpack=…)` resolves
+each custom tool to its real code (`resolve_entry_code`) and writes it into
+`_digest/tool_sources/<tool>.py`; `digest-get tN` then hands the agent the genuine
+library code instead of the thin `.ts` wrapper. Crucially, resolution is
+**recursive** — the entry function *plus the pack helpers it transitively calls*
+(bounded ~60KB) — because the figure/metric-generating code (`az.plot_*`,
+`savefig`, ROAS/contribution math) lives in those helpers, not the entry. Tools
+that don't resolve fall back to the wrapper.
+
+**Modal decision (Ben, overruling the earlier "keep it an invocation"):** always
+inline the real code at the deepest level available, **including remote code** —
+inlining the deployed body faithfully *shows* the remote dispatch rather than
+hiding it behind a CLI string, and removes a local-vs-remote judgment the agent
+would get wrong. The remote-ness is disclosed with `nb-note`, and fit-then-load
+still applies (save the `.nc`, downstream loads it).
+
+**The remaining hard part is agent adherence, not resolution.** Round 1 (Sonnet,
+map wired) still *displayed the tool's premade PNGs / loaded its CSVs / hardcoded
+its numbers* instead of inlining the handed-over code — and, root cause, level-2
+resolution hadn't yet included the helper bodies. Round 2 fixed both: recursive
+resolution + a prompt that hard-forbids `Image()`-ing premade figures,
+`read_csv`-ing tool outputs, and hardcoding results, and makes the fit cell
+mandatory.
+
+**Round-2 judge verdict (Sonnet, 2 independent passes):** large improvement,
+does not yet fully land. Three criteria flipped FAIL→PASS — the **fit is inlined**
+(`mmm.fit(... nuts_sampler="numpyro" ...)`, `long-running`, saves `.nc`, Modal
+disclosure), **fit-then-load** works, and **`attempts/` structure** exists.
+Inline-generating-code rose from 36%→67% of cells; hardcoded literals 1→0;
+result-file loads 5→2. The **residual failure is precise and localized to
+`03_results`**: the composer inlines a helper when its product is a
+dataframe/scalar it can `print`, but still falls back to `IPImage()` for the ~5
+cells whose product is a *matplotlib figure* — even though those helpers
+(`roas_analysis` → `az.plot_forest`, `channel_contributions`, `saturation_curves`,
+`budget_optimization`) are now present in `tool_sources`. Plus one runnability bug
+(a dropped compute cell left `corr_matrix` undefined in `01_data`) and a
+provenance overstatement.
+
+**Highest-value next fix (deferred — the overnight budget was one round):**
+extend the "inline the source, never display the output" rule **explicitly to
+figure-producing cells**, with one worked figure example in the prompt (inline a
+helper's `az.plot_*` + `savefig` on the loaded model so the cell *produces* the
+figure), **and enforce it** with a host-side linter that fails a run when an
+`Image(`/`IPImage(` path matches a file a resolved tool wrote. That single rule
+converts all remaining orphaned figures and both result-loads — the whole of the
+remaining gap. Secondary: a runnability check for dangling references.
+
 ## 9. Implementation map — where what changes
 
 New files:
@@ -412,7 +667,7 @@ New files:
 | Path | Contents |
 |---|---|
 | `dlab/session_digest.py` | Digest + index generation on top of `opencode_logparser` (`build_session_graph`, `parse_log_file`, tool/text/cost getters). Groups runs by agent name; shared per-agent event counter; artifact write chains from write/edit inputs; `--brief` flag as function arg. |
-| `dlab/composer.py` | Orchestrates the composer step: generate digest, materialize composer env into workdir, launch `opencode run` (container via `exec_command`/`run_opencode`, or host in `--no-sandboxing` mode), collect/validate results, emit warnings. |
+| `dlab/notebooks.py` (renamed from `composer.py`) | Orchestrates the notebook step: generate digest, materialize the notebook agent env into the workdir, **isolate the dpack tools** (§8.5), launch `opencode run --agent notebooks` with a **curated env** and **retry** (host/local today; container is the deferred full-fidelity path), collect/validate, emit warnings. Exposed as `dlab notebooks`. |
 | `dlab/notebook_validation.py` | Host-side validation (§5): nbformat schema, ast.parse, path existence, import check via container exec. |
 | `dlab/agents/composer.md` | Composer system-prompt template (package data; new `dlab/agents/` package-data dir, registered in pyproject like `js/`). |
 | `dlab/js/nb_tools/*.ts` (or flat in `js/`) | `nb-add-markdown-cell`, `nb-add-code-cell`, `nb-edit-cell`, `nb-read`, `nb-finalize`, `digest-get` (package data). |
@@ -450,12 +705,22 @@ Changed files:
 
 ## 11. Explicitly deferred (do not build in v1)
 
-1. `dlab notebooks <work-dir>` retrofit subcommand for completed sessions
-   (design keeps it possible; not in v1).
+1. ~~`dlab notebooks <work-dir>` retrofit subcommand for completed sessions.~~
+   **Built** (2026-08-01, §8.5) — Ben asked for it first, as the standalone way
+   to drive and test the step from the CLI. What is still deferred is the
+   *automatic* post-orchestrator hook gated by
+   `generate_jupyter_notebooks_from_run` (the config flag is unwired), and
+   running the step **inside the dpack container** for full-fidelity reproduction
+   (§8.5.1) — the current command runs opencode locally.
 2. Level C: `dlab notebooks --execute` with `long-running` skipping.
 3. Per-dpack composer hints / output-dir config.
 4. Derived-stats layer refactor (timeline + viewer + digest sharing rollups).
-5. Promoting `dlab digest` to a documented subcommand.
+5. ~~Promoting `dlab digest` to a documented subcommand.~~ **Done** (Ben pulled
+   this forward and shipped it with #85): `dlab digest [WORK_DIR] [--brief]
+   [--write]` prints the digest to stdout, or with `--write` materializes the
+   `_digest/` pair. The digest remains internal plumbing for the composer step;
+   this is only a read/inspect surface over the same `build_digest`/
+   `generate_digest` functions.
 
 ## 12. Open implementation checks (the only genuinely open points)
 

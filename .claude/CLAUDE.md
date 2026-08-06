@@ -62,14 +62,27 @@ Optional flags:
 - `--continue-dir` - Resume from a previous session's work directory
 - `--rebuild` - Force rebuild Docker image
 - `--no-sandboxing` - Run opencode locally without Docker (via `local.py`); copies `docker/` into the work dir as `_docker/` and instructs the agent to provision its own environment
+- `--notebooks` / `--no-notebooks` - Compose Jupyter notebooks from the run when it finishes successfully (tri-state; overrides the pack's `generate_jupyter_notebooks_from_run` and `DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER`)
+- `--notebooks-model` - Model for the notebook composer (distinct from `--model`, the orchestrator; else `models.notebooks` / `DLAB_NOTEBOOKS_MODEL` / `default_model`)
 
-Environment variables starting with `DLAB_` are automatically forwarded from the host to the Docker container. decision-packs can use these for configuration (e.g., `DLAB_FIT_MODEL_LOCALLY=1` in the MMM decision-pack).
+Environment variables starting with `DLAB_` are automatically forwarded from the host to the Docker container. decision-packs can use these for configuration (e.g., `DLAB_FIT_MODEL_LOCALLY=1` in the MMM decision-pack). Two host-side `DLAB_` vars affect the notebook composer: `DLAB_NOTEBOOKS_MODEL` (global default composer model) and `DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER=1` (compose after every successful run).
+
+**Auto-composing notebooks after a run:** `dlab run` composes notebooks itself when the `--notebooks` flag, the `DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER` env var, or the pack's `generate_jupyter_notebooks_from_run: true` config key asks for it (that precedence order; `--no-notebooks` force-disables). Only on exit code 0; a composer failure warns but never changes the run's exit code. Wired in `cli.py` via `_should_compose_notebooks()` + `_maybe_compose_notebooks()`, reusing `cmd_notebooks`.
 
 ### Subcommands
 
 ```bash
 # Interactive wizard to create a new decision-pack
 dlab create-dpack [OUTPUT_DIR]
+
+# Compile a decision-pack's deterministic code map (code_map.json)
+dlab map-dpack <dpack> [--check]
+
+# Build deterministic notebooks (real code + real outputs, no LLM) into skeleton/
+dlab skeleton <work-dir> [--dpack <dpack>]
+
+# Compose narrated notebooks from a finished run (skeleton + LLM curation)
+dlab notebooks <work-dir> --model <provider/model> [--dpack <dpack>] [--env-file <file>]
 
 # Interactive wizard to create a parallel agent config
 dlab create-parallel-agent [DPACK_DIR]
@@ -86,6 +99,9 @@ dlab timeline [work-dir]
 
 # Browser-based session viewer (DAG visualization)
 dlab view <work-dir> [--port PORT] [--no-open] [--export FILE]
+
+# Print (or write) a deterministic session digest
+dlab digest [work-dir] [--brief] [--write]
 ```
 
 ## Coding Style
@@ -144,10 +160,15 @@ dlab view <work-dir> [--port PORT] [--no-open] [--export FILE]
 - `model_fallback.py` - Model validation and provider fallback (`preflight_check` before session creation, `process_opencode_dir` during setup) so a single API key suffices
 - `figure_style.py` - decision-lab matplotlib house style (`figure_style_enabled`, `install_figure_style`, `figure_style_shell_exports`); vendored assets in `data/figure_style/` (matplotlibrc, dlab_plotstyle.py, SKILL.md)
 - `opencode_logparser.py` - Canonical OpenCode NDJSON log parser (`LogEvent`, `SessionNode`, `parse_log_file`, `build_session_graph`); single source of truth used by `timeline.py`, `tui/`, and `viewer/`; `diagnose_fatal_error` maps opencode's opaque failures to readable hints
+- `session_digest.py` - Deterministic session digest for the notebook composer (`build_digest`, `generate_digest`); builds `_digest/digest.md` + `_digest/index.json` on top of `opencode_logparser`. Surfaced by the `dlab digest` subcommand.
+- `js/digest-get.ts` - In-container retrieval tool (loaded as `DIGEST_GET_SOURCE`) that reads one indexed NDJSON line by ID and renders it decoded/sliced
 - `parallel_tool.py` - Loads parallel-agents.ts from `js/`
 - `js/parallel-agents.ts` - TypeScript source bundled as package data
 - `data/models.json` - Bundled models.dev model list (package data)
 - `timeline.py` - Timeline visualization (parsing delegated to `opencode_logparser.py`)
+- `dpack_codemap.py` - Decision-pack code map (`build_code_map`, `write_code_map`, `stale_sources`, `entry_params`, `extract_call_templates`); statically maps each custom tool to the real code it runs (the Python library behind `python -m LIB.MOD`, or the deployed function reached *through* a `modal.Function.from_name` dispatch). Compiled once per pack into `<dpack>/code_map.json` (with source-file sha256s for staleness). **Optional LLM pass** (`map-dpack --model`, opencode subprocess, once per pack): for CLI tools whose `main()` loads/transforms so there's no clean `fn(**inputs)` call, the model writes a parametrized `call_template` (load+call with `$input` placeholders) stored in the map; deterministic rebuilds preserve it. Consumed by the deterministic notebook builder. Exposed as `dlab map-dpack`.
+- `notebook_skeleton.py` - **Deterministic** notebook builder (`build_skeleton`, `write_skeletons`); no LLM. Pairs the real code that ran (scripts the agent wrote; the code map's resolved library code for custom tools) with the real output it produced (captured stdout + figures attributed by execution time-window), one coarse cell per execution, one notebook per agent, into `<work_dir>/skeleton/`. Collapses fix-arc re-runs to the final version, keeps parameter sweeps, splits adopted path from `attempts/`, and tags each cell with digest-aligned context hints. Correct by construction (no hallucinated code, no orphaned figures, no empty-output cells); a shippable artifact and the substrate for the LLM-narrated notebook. Exposed as `dlab skeleton`.
+- `notebooks.py` - The **notebook composer** step (`generate_notebooks`): digest → build the skeleton → seed `notebooks/` from it → launch the `notebooks` opencode agent (`dlab/agents/notebooks.md`) to **curate + narrate** that copy in place. The composer's frontmatter denies `nb-add-code-cell`/`nb-edit-cell`, so it structurally cannot write or alter code — it only inserts markdown (grounded via `digest-get` + the run's own report files), regroups, deduplicates noise, and authors `00_overview`; it never fabricates a number. Curated env + retry as before. Exposed as `dlab notebooks`.
 - `create_dpack.py` - Programmatic decision-pack generation (used by wizard and skills); model catalog (bundled models.json + TTL-cached background refresh, `refresh_model_cache_if_stale`), pins `opencode_version` at creation (`resolve_latest_opencode_version`)
 - `create_dpack_wizard.py` - TUI wizard for `create-dpack` command (8 screens, Textual-based)
 - `create_parallel_agent_wizard.py` - TUI wizard for `create-parallel-agent` command
@@ -185,9 +206,10 @@ default_model: anthropic/claude-sonnet-4-5    # orchestrator model
 models:
   forecaster: anthropic/claude-haiku-4-5      # parallel agent instances (optional)
   consolidator: anthropic/claude-sonnet-4-5   # consolidator (optional)
+  notebooks: anthropic/claude-sonnet-4-5      # notebook composer (optional)
 ```
 
-Omitted roles fall back to `default_model`. `resolve_model_roles()` in `config.py` resolves the roles; `apply_model_roles_to_opencode()` injects them as `default_model`/`summarizer_model` into each YAML under `parallel_agents/` during session setup.
+Omitted roles fall back to `default_model`. `resolve_model_roles()` in `config.py` resolves the roles; `apply_model_roles_to_opencode()` injects forecaster/consolidator into each YAML under `parallel_agents/` during session setup. The **composer** model (`dlab notebooks`) resolves via `_resolve_notebooks_model()` in `cli.py`: `--model` > the pack's explicit `models.notebooks` > the `DLAB_NOTEBOOKS_MODEL` env var (a user's global default) > `default_model`.
 
 ## Figure Style (config.yaml)
 

@@ -181,6 +181,11 @@ def load_dpack_config(config_dir: str) -> dict[str, Any]:
     # opt out with `use_dlab_plot_style: false`
     config["use_dlab_plot_style"] = bool(config.get("use_dlab_plot_style", True))
 
+    # Normalize generate_jupyter_notebooks_from_run: compose Jupyter notebooks
+    # automatically after a successful run. Off by default; opt in per pack.
+    config["generate_jupyter_notebooks_from_run"] = bool(
+        config.get("generate_jupyter_notebooks_from_run", False))
+
     # Normalize hooks: string -> list, missing -> empty list
     hooks: dict[str, Any] = config.get("hooks", {})
     if not isinstance(hooks, dict):
@@ -200,11 +205,12 @@ def load_dpack_config(config_dir: str) -> dict[str, Any]:
 
 def resolve_model_roles(config: dict[str, Any]) -> dict[str, str]:
     """
-    Resolve orchestrator, forecaster, and consolidator models from config.
+    Resolve the orchestrator, forecaster, consolidator, and notebook agent models.
 
-    ``default_model`` is the orchestrator model. Optional ``models.forecaster``
-    and ``models.consolidator`` override parallel agent instance and
-    consolidator models; each falls back to ``default_model`` when omitted.
+    ``default_model`` is the orchestrator model. Optional ``models.forecaster``,
+    ``models.consolidator`` and ``models.notebooks`` override parallel agent
+    instance, consolidator, and notebook models; each falls back to
+    ``default_model`` when omitted.
     """
     default: str = config["default_model"]
     models: Any = config.get("models", {})
@@ -214,6 +220,7 @@ def resolve_model_roles(config: dict[str, Any]) -> dict[str, str]:
         "orchestrator": default,
         "forecaster": models.get("forecaster", default),
         "consolidator": models.get("consolidator", default),
+        "notebooks": models.get("notebooks", default),
     }
 
 

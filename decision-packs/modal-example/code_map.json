@@ -1,0 +1,36 @@
+{
+  "dpack": "modal-example",
+  "shape": "modal-inline",
+  "tools": {
+    "run-on-modal": {
+      "kind": "remote-dispatch",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "string",
+          "optional": false
+        }
+      ],
+      "runs": "python -c <inline>",
+      "declared_outputs": [],
+      "dispatch": {
+        "via": "modal.from_name",
+        "app": "modal-example-compute",
+        "function": "run_compute",
+        "defined_in": "docker/modal_app/example.py",
+        "resolved": true
+      },
+      "inline_code": "import json, modal\nf = modal.Function.from_name(\"modal-example-compute\", \"run_compute\")\ndata = json.loads('${args.data.replace(/'/g, \"\\'\")}')\nresult = f.remote(data)\nprint(json.dumps(result))",
+      "entry": {
+        "function": "run_compute",
+        "defined_in": "docker/modal_app/example.py",
+        "reached_through": "dispatch"
+      },
+      "disclose": "executed remotely; inlined to run locally"
+    }
+  },
+  "sources": {
+    "docker/modal_app/example.py": "57a84f996b2c236ea6ee8c5a51c73d9d3a92127d1328171fb15f78ba05ccf5c3",
+    "opencode/tools/run-on-modal.ts": "ff5f8248f1f3ef76d884f28c590dff65658bf9e7b697fb2c4062e95fbd027e2d"
+  }
+}

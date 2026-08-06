@@ -1,0 +1,22 @@
+{
+  "dpack": "event-forecaster",
+  "shape": "tool-backed",
+  "tools": {
+    "inspect-data": {
+      "kind": "python-inline",
+      "inputs": [
+        {
+          "name": "path",
+          "type": "string",
+          "optional": false
+        }
+      ],
+      "runs": "python -c <inline>",
+      "declared_outputs": [],
+      "inline_code": "import sys, os\nimport pandas as pd\n\npath = \"${path}\"\nif not os.path.exists(path):\n    print(f\"ERROR: file not found: {path}\")\n    sys.exit(1)\n\next = os.path.splitext(path)[1].lower()\nif ext == \".parquet\":\n    df = pd.read_parquet(path)\nelif ext in (\".csv\", \".tsv\"):\n    sep = \"\\\\t\" if ext == \".tsv\" else \",\"\n    df = pd.read_csv(path, sep=sep)\nelse:\n    print(f\"ERROR: unsupported extension {ext} (expected .csv, .tsv, or .parquet)\")\n    sys.exit(1)\n\nprint(\"=\" * 70)\nprint(f\"FILE: {path}\")\nprint(\"=\" * 70)\nprint(f\"Shape: {df.shape[0]:,} rows x {df.shape[1]} cols\")\nprint(f\"Memory: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB\")\nprint()\n\nprint(\"COLUMNS (name | dtype | n_missing | n_unique | sample):\")\nfor col in df.columns:\n    s = df[col]\n    n_miss = int(s.isna().sum())\n    n_uniq = int(s.nunique(dropna=True))\n    sample = s.dropna().head(3).tolist()\n    sample_str = \", \".join(repr(x) for x in sample)\n    print(f\"  {col!r:30s} | {str(s.dtype):15s} | miss={n_miss:>6} | uniq={n_uniq:>6} | e.g. [{sample_str}]\")\nprint()\n\ndup_rows = int(df.duplicated().sum())\nprint(f\"Fully duplicated rows: {dup_rows}\")\n\ndatetime_cols = []\nfor col in df.columns:\n    if pd.api.types.is_datetime64_any_dtype(df[col]):\n        datetime_cols.append(col)\n        continue\n    if df[col].dtype == object:\n        try:\n            parsed = pd.to_datetime(df[col].dropna().head(50), errors=\"raise\")\n            if parsed.notna().all():\n                datetime_cols.append(col)\n        except (ValueError, TypeError):\n            pass\n\nif datetime_cols:\n    print()\n    print(\"DATETIME-LIKE COLUMNS:\")\n    for col in datetime_cols:\n        try:\n            parsed = pd.to_datetime(df[col], errors=\"coerce\")\n            mn, mx = parsed.min(), parsed.max()\n            n_unique_dates = parsed.nunique()\n            print(f\"  {col!r}: {mn} -> {mx}  ({n_unique_dates:,} unique values)\")\n        except Exception as e:\n            print(f\"  {col!r}: could not parse ({e})\")\n\nprint()\nprint(\"SAMPLE (first 5 rows):\")\nprint(df.head(5).to_string())"
+    }
+  },
+  "sources": {
+    "opencode/tools/inspect-data.ts": "e1aab4fba30056aad63a33cff9d408879caa54f6a5857ca225627197ef32dcac"
+  }
+}

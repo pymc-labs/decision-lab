@@ -78,8 +78,10 @@ hooks:
 | `cli_name` | No | same as `name` | Override command name for `dlab install` |
 | `opencode_version` | No | `latest` | opencode version to install. `dlab create-dpack` pins the release current at creation time (locked environments); `latest` drifts on every image rebuild |
 | `use_dlab_plot_style` | No | `true` | Enforce the decision-lab matplotlib house style |
+| `generate_jupyter_notebooks_from_run` | No | `false` | Compose notebooks automatically after a successful run |
 | `models.forecaster` | No | `default_model` | Model for parallel agent instances |
 | `models.consolidator` | No | `default_model` | Model for the consolidator agent |
+| `models.notebooks` | No | `default_model` | Model for the notebook composer |
 | `hooks.pre-run` | No | — | Scripts to run before opencode |
 | `hooks.post-run` | No | — | Scripts to run after opencode |
 
@@ -315,6 +317,40 @@ Or add to your `.env` file:
 ```bash
 DLAB_FIT_MODEL_LOCALLY=1
 ```
+
+## Notebook composition
+
+`dlab notebooks <work-dir>` turns a finished run into narrated Jupyter notebooks. It is **deterministic-first**: the host builds correct notebooks, and an LLM only curates and narrates them (it has no tool to write or edit a code cell, so the code is always exactly what ran).
+
+The pipeline:
+
+1. **Session digest** — an LLM-facing map of the run (see [`dlab digest`](cli-reference.md#digest)).
+2. **Code map** (`<pack>/code_map.json`) — the static wiring from each custom tool to the real library code it ran, so a tool call renders as that code rather than a `python -m …` invocation. Built once with [`dlab map-dpack`](cli-reference.md#map-dpack) and committed with the pack. It is auto-built on the fly if missing, but committing it — and running the one-time `--model` template pass so CLI tools render as clean `load+call` code — is recommended. `dlab notebooks` warns when a pack has tools with no template.
+3. **Skeleton** (`skeleton/`) — real code paired with the real output it produced, one notebook per agent, the adopted path split from `attempts/` (see [`dlab skeleton`](cli-reference.md#skeleton)). No LLM; correct by construction.
+4. **Composer** (`notebooks/`) — the LLM curates + narrates a copy of the skeleton: inserts markdown grounded in the run's own outputs and reports, deduplicates noise, keeps parameter sweeps, and authors `00_overview`. It never fabricates a number.
+
+### Config surface
+
+```yaml
+# config.yaml
+generate_jupyter_notebooks_from_run: true    # optional; compose after every run (default: false)
+models:
+  notebooks: anthropic/claude-sonnet-4-5     # optional; falls back to default_model
+```
+
+The composer model resolves in this order (highest wins): the `--notebooks-model` flag → this pack's explicit `models.notebooks` → the `DLAB_NOTEBOOKS_MODEL` environment variable (a user's personal global default) → the pack's `default_model`. So a pack can pin a composer model, and a user can set their own default across packs without editing configs. (`--notebooks-model` is distinct from `dlab run --model`, which sets the *orchestrator* model.)
+
+### Composing automatically after a run
+
+By default `dlab run` does not compose notebooks — you run `dlab notebooks <work-dir>` afterwards. To have a successful run compose them itself, opt in via any of (highest precedence first):
+
+1. **`dlab run --notebooks`** (per-run; `--no-notebooks` force-disables even when a pack or env opts in).
+2. **`DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER=1`** — a user's global "always compose" switch across all packs.
+3. **`generate_jupyter_notebooks_from_run: true`** in the pack's `config.yaml` — a pack that always wants notebooks.
+
+Composition only runs when the agent finished successfully (exit code 0); it is skipped for interrupted or failed runs, and a composition failure is surfaced as a warning without changing the run's exit code.
+
+For a pack whose custom tools shell out to a Python library, run `dlab map-dpack <pack> --model <model> --env-file <pack>/.env` once (and re-run it, or `--check`, when the tools or library change). Packs with no custom tools are `script-only` — nothing to map.
 
 ## Best Practices
 
