@@ -229,6 +229,18 @@ class TestTemplateExtractionHelpers:
         assert "budget_optimization" in prompt                     # the real work function
         assert "JSON" in prompt                                    # asks for JSON only
 
+    def test_template_prompt_steers_remote_dispatch_to_local(self) -> None:
+        # a Modal-offloaded (remote-dispatch) tool must be rendered as if run
+        # locally — the prompt tells the model to use the local compute path and
+        # never the Modal wrapper / `.remote(` dispatch.
+        from dlab.dpack_codemap import _template_prompt
+        m = build_code_map(DPACKS / "mmm")
+        prompt = _template_prompt(DPACKS / "mmm", m, ["fit-model-modal"])
+        assert m["tools"]["fit-model-modal"]["kind"] == "remote-dispatch"
+        assert "Modal" in prompt and "LOCAL" in prompt
+        assert ".remote(" in prompt                # the plumbing it must avoid
+        assert "fit_mmm" in prompt                 # the reached-through work function
+
     def test_extract_returns_empty_without_needing_tools(self) -> None:
         # a script-only pack needs no templates → no model call, empty result
         from dlab.dpack_codemap import extract_call_templates

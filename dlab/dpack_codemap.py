@@ -699,6 +699,17 @@ def _template_prompt(dpack: Path, code_map: dict[str, Any], names: list[str]) ->
         parts = [f"=== tool: {name} ===",
                  f"inputs: {inputs}",
                  f"runs: {tool.get('runs') or name}"]
+        if tool.get("kind") == "remote-dispatch":
+            # dlab lets packs offload compute to Modal, but the notebook must read
+            # as if it ran locally (Modal is local-by-default in dlab anyway). Steer
+            # the template to the LOCAL compute path, not the Modal wrapper.
+            parts.append(
+                "NOTE: this tool offloads its computation to Modal (a dlab "
+                "remote-compute option). Render the LOCAL equivalent: call the "
+                "work function / local compute path shown below directly, as if "
+                "fitting/computing locally. Do NOT call the Modal wrapper entry "
+                "point, `.remote(`, `.spawn(`, or deploy/lookup code — where it "
+                "ran is incidental; show the computation.")
         cli_file = tool.get("file")
         if cli_file and (dpack / cli_file).is_file():
             parts.append(f"--- CLI module ({cli_file}) ---\n{_read(dpack / cli_file)}")
@@ -721,6 +732,11 @@ def _template_prompt(dpack: Path, code_map: dict[str, Any], names: list[str]) ->
         "of the value, so place them where a Python literal goes (e.g. "
         "`MMM.load($model_path)`, `risk_pct=$risk_pct`). Import what is needed. Keep "
         "it short and faithful — no invented steps.\n\n"
+        "Some tools offload their compute to Modal (see the NOTE on those). dlab "
+        "treats Modal as the same computation optionally run elsewhere (local by "
+        "default), so for those tools write the LOCAL version — the actual "
+        "fit/compute (e.g. `mmm.fit(...)`) — never the Modal wrapper call or "
+        "`.remote(`/`.spawn(` dispatch.\n\n"
         "Respond with ONLY a single JSON object mapping each tool name to its "
         "template string. No prose, no code fences.\n\n" + body)
 
