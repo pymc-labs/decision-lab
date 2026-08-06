@@ -21,7 +21,7 @@ from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.text import Text
 
-from dlab.config import load_dpack_config
+from dlab.config import load_dpack_config, resolve_model_roles
 
 # Note: Console must be created per-call (not module-level) so pytest capsys
 # can capture output. Use _make_console() in command functions.
@@ -230,6 +230,14 @@ def _main(
         bool,
         typer.Option("--yes", hidden=True),
     ] = False,
+    notebooks: Annotated[
+        bool | None,
+        typer.Option("--notebooks/--no-notebooks", hidden=True),
+    ] = None,
+    notebooks_model: Annotated[
+        str | None,
+        typer.Option("--notebooks-model", metavar="MODEL", hidden=True),
+    ] = None,
 ) -> None:
     """Run opencode in automated mode, sandboxed with Docker.
 
@@ -256,6 +264,8 @@ def _main(
             env_file=env_file,
             no_sandboxing=no_sandboxing,
             yes=yes,
+            notebooks=notebooks,
+            notebooks_model=notebooks_model,
         )
         raise typer.Exit(code=exit_code)
 
@@ -336,6 +346,25 @@ def _cmd_run_command(
             help="Auto-confirm interactive prompts (e.g. --continue-dir without --work-dir)",
         ),
     ] = False,
+    notebooks: Annotated[
+        bool | None,
+        typer.Option(
+            "--notebooks/--no-notebooks",
+            help="Compose Jupyter notebooks from the run once it finishes "
+            "successfully. Overrides the pack's generate_jupyter_notebooks_from_run "
+            "and the DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER env var.",
+        ),
+    ] = None,
+    notebooks_model: Annotated[
+        str | None,
+        typer.Option(
+            "--notebooks-model",
+            metavar="MODEL",
+            help="Model for the notebook composer (else models.notebooks / "
+            "DLAB_NOTEBOOKS_MODEL / default_model). Distinct from --model, which "
+            "is the orchestrator.",
+        ),
+    ] = None,
 ) -> None:
     """Run opencode in automated mode, sandboxed with Docker (default command)."""
     exit_code = cmd_run(
@@ -350,6 +379,8 @@ def _cmd_run_command(
         env_file=env_file,
         no_sandboxing=no_sandboxing,
         yes=yes,
+        notebooks=notebooks,
+        notebooks_model=notebooks_model,
     )
     raise typer.Exit(code=exit_code)
 
@@ -366,6 +397,8 @@ def cmd_run(
     env_file: str | None = None,
     no_sandboxing: bool = False,
     yes: bool = False,
+    notebooks: bool | None = None,
+    notebooks_model: str | None = None,
 ) -> int:
     """
     Handle run mode - create session and start agent.
@@ -693,6 +726,8 @@ def cmd_run(
         else:
             console.print(f"{I}[bold red]Done (exit code {exit_code}).[/bold red]")
 
+        _maybe_compose_notebooks(exit_code, work_dir, dpack, env_file,
+                                 notebooks, notebooks_model, config, console, I)
         return exit_code
 
     # =====================================================================
@@ -928,6 +963,9 @@ def cmd_run(
         else:
             console.print(f"{I}[bold red]Done (exit code {exit_code}).[/bold red]")
 
+    if not interrupted:
+        _maybe_compose_notebooks(exit_code, work_dir, dpack, env_file,
+                                 notebooks, notebooks_model, config, console, I)
     return exit_code
 
 
@@ -1220,6 +1258,326 @@ def cmd_timeline(work_dir: str | None = None) -> int:
     return run_timeline(work_dir_path)
 
 
+@app.command("digest")
+def _cmd_digest(
+    work_dir: Annotated[
+        str | None,
+        typer.Argument(
+            metavar="WORK_DIR",
+            help="Path to session work directory "
+            "(default: cwd if it contains _opencode_logs)",
+        ),
+    ] = None,
+    brief: Annotated[
+        bool,
+        typer.Option(
+            "--brief",
+            help="Collapse per-agent tool tables to one-line counts",
+        ),
+    ] = False,
+    write: Annotated[
+        bool,
+        typer.Option(
+            "--write",
+            "-w",
+            help="Write _digest/digest.md and _digest/index.json into the "
+            "work dir instead of printing the digest to stdout",
+        ),
+    ] = False,
+) -> None:
+    """Build a deterministic session digest (the notebook agent's LLM-facing map)."""
+    exit_code = cmd_digest(work_dir=work_dir, brief=brief, write=write)
+    raise typer.Exit(code=exit_code)
+
+
+def cmd_digest(
+    work_dir: str | None = None, brief: bool = False, write: bool = False
+) -> int:
+    """
+    Handle digest mode - build a deterministic session digest from a work dir.
+
+    Prints the digest markdown to stdout by default; with ``write`` set,
+    materializes ``_digest/digest.md`` and ``_digest/index.json`` into the work
+    directory (the same pair the notebook step consumes).
+
+    Parameters
+    ----------
+    work_dir : str | None
+        Session work directory. If None, uses the current directory when it
+        contains an ``_opencode_logs`` folder.
+    brief : bool
+        Collapse the per-agent tool tables to one-line counts.
+    write : bool
+        Write the digest files into the work dir instead of printing.
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, non-zero for failure).
+    """
+    from dlab.session_digest import build_digest, generate_digest
+
+    if work_dir:
+        work_dir_path: Path = Path(work_dir).resolve()
+    else:
+        cwd: Path = Path.cwd()
+        if (cwd / "_opencode_logs").is_dir():
+            work_dir_path = cwd
+        else:
+            print(
+                "Error: No work directory specified and no _opencode_logs in "
+                "current directory",
+                file=sys.stderr,
+            )
+            return 1
+
+    if not (work_dir_path / "_opencode_logs").is_dir():
+        print(
+            f"Error: No _opencode_logs directory found in {work_dir_path}",
+            file=sys.stderr,
+        )
+        print("Make sure this is a valid dlab session directory.", file=sys.stderr)
+        return 1
+
+    if write:
+        out_dir: Path = generate_digest(work_dir_path, brief=brief)
+        print(f"Wrote {out_dir / 'digest.md'}")
+        print(f"Wrote {out_dir / 'index.json'}")
+    else:
+        markdown, _index = build_digest(work_dir_path, brief=brief)
+        sys.stdout.write(markdown)
+    return 0
+
+
+@app.command("notebooks")
+def _cmd_notebooks(
+    work_dir: Annotated[
+        str,
+        typer.Argument(metavar="WORK_DIR", help="Completed session work directory"),
+    ],
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="Notebook agent model (provider/model). "
+                     "Falls back to the dpack's models.notebooks / default_model."),
+    ] = None,
+    dpack: Annotated[
+        str | None,
+        typer.Option("--dpack", help="Decision-pack path — resolves the notebook agent "
+                     "model and signals its environment is available. A fidelity "
+                     "warning is emitted if omitted."),
+    ] = None,
+    env_file: Annotated[
+        str | None,
+        typer.Option("--env-file", help="File of KEY=VALUE provider keys for the "
+                     "notebook agent run (auto-detected from the dpack's .env)."),
+    ] = None,
+    timeout: Annotated[
+        int,
+        typer.Option("--timeout", help="Seconds before the notebook agent run is "
+                     "aborted (default 3600; raise for slower/thorough models)."),
+    ] = 3600,
+) -> None:
+    """Generate Jupyter notebooks from a finished run (the notebook agent)."""
+    raise typer.Exit(code=cmd_notebooks(
+        work_dir=work_dir, model=model, dpack=dpack, env_file=env_file,
+        timeout=timeout,
+    ))
+
+
+def _load_env_file(path: Path) -> dict[str, str]:
+    """Parse a KEY=VALUE env file into a dict (quotes stripped)."""
+    out: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        out[key.strip()] = val.strip().strip('"').strip("'")
+    return out
+
+
+# A sensible model to suggest per provider whose key is available, for the
+# map-dpack template pass. Any model of that provider works; these are examples.
+_MODEL_SUGGESTIONS: list[tuple[set[str], str]] = [
+    ({"ANTHROPIC_API_KEY"}, "anthropic/claude-sonnet-4-5"),
+    ({"OPENAI_API_KEY"}, "openai/gpt-5"),
+    ({"GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_API_KEY"},
+     "google/gemini-3-flash-preview"),
+    ({"opencode_zen"}, "opencode/deepseek-v4-pro"),
+]
+
+
+def _available_provider_keys(env_file: str | None, dpack_path: Path) -> set[str]:
+    """Provider key names that are set — in the host env or the effective env file
+    (``--env-file``, else the dpack's ``.env``) — so we can suggest models."""
+    from dlab.dpack_codemap import _LLM_PROVIDER_KEYS
+    candidates = (*_LLM_PROVIDER_KEYS, "opencode_zen")
+    present = {k for k in candidates if os.environ.get(k)}
+    cand = env_file or (str(dpack_path / ".env")
+                        if (dpack_path / ".env").is_file() else None)
+    if cand and Path(cand).is_file():
+        env = _load_env_file(Path(cand))
+        present |= {k for k in candidates if env.get(k)}
+    return present
+
+
+def _suggest_models(keys: set[str]) -> list[str]:
+    return [model for names, model in _MODEL_SUGGESTIONS if keys & names]
+
+
+def _env_truthy(val: str | None) -> bool:
+    """A DLAB_* env flag counts as on for 1/true/yes/on (case-insensitive)."""
+    return (val or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _should_compose_notebooks(cli_flag: bool | None, config: dict[str, Any]) -> bool:
+    """Decide whether to auto-compose notebooks after a run. Precedence: the
+    explicit ``--notebooks``/``--no-notebooks`` flag (tri-state) > the
+    ``DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER`` env (a user's global "always") > the
+    pack's ``generate_jupyter_notebooks_from_run`` config key > off."""
+    if cli_flag is not None:
+        return cli_flag
+    if _env_truthy(os.environ.get("DLAB_ALWAYS_RUN_NOTEBOOKS_COMPOSER")):
+        return True
+    return bool(config.get("generate_jupyter_notebooks_from_run", False))
+
+
+def _maybe_compose_notebooks(
+    exit_code: int, work_dir: str, dpack: str | None, env_file: str | None,
+    notebooks_flag: bool | None, notebooks_model: str | None,
+    config: dict[str, Any], console: Console, indent: str,
+) -> None:
+    """Compose notebooks after a successful run when the flag/env/config asks for
+    it. Never raises and never changes the run's exit code: only runs on success
+    (``exit_code == 0``), and a composition failure is surfaced as a warning."""
+    if exit_code != 0 or not _should_compose_notebooks(notebooks_flag, config):
+        return
+    model = _resolve_notebooks_model(notebooks_model, dpack)
+    if model is None:
+        console.print(f"{indent}[yellow]! Skipping notebooks: no composer model "
+                      "resolved (set --notebooks-model, models.notebooks, "
+                      "DLAB_NOTEBOOKS_MODEL, or default_model).[/yellow]")
+        return
+    console.print(f"\n{indent}[bold]Composing notebooks[/bold]")
+    try:
+        cmd_notebooks(work_dir, model=model, dpack=dpack, env_file=env_file)
+    except Exception as e:  # noqa: BLE001 — a compose failure must not fail the run
+        console.print(f"{indent}[yellow]! Notebook composition failed: {e} "
+                      "(the run itself succeeded).[/yellow]")
+
+
+def _resolve_notebooks_model(model: str | None, dpack: str | None) -> str | None:
+    """Resolve the composer model. Precedence: ``--model`` (explicit) > the dpack's
+    explicit ``models.notebooks`` > ``$DLAB_NOTEBOOKS_MODEL`` (a user's global
+    default) > the dpack's ``default_model``. ``None`` if none of these resolve."""
+    if model:
+        return model
+    config = load_dpack_config(dpack) if dpack is not None else None
+    explicit = (config.get("models") or {}).get("notebooks") if config else None
+    return (explicit
+            or os.environ.get("DLAB_NOTEBOOKS_MODEL")
+            or (resolve_model_roles(config)["notebooks"] if config else None))
+
+
+def cmd_notebooks(
+    work_dir: str,
+    model: str | None = None,
+    dpack: str | None = None,
+    env_file: str | None = None,
+    timeout: int = 3600,
+) -> int:
+    """
+    Handle notebooks mode — run the notebook agent over a finished work dir.
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, non-zero for failure).
+    """
+    from dlab.notebooks import generate_notebooks
+
+    console = _make_console()
+    work_dir_path: Path = Path(work_dir).resolve()
+    if not (work_dir_path / "_opencode_logs").is_dir():
+        print(f"Error: No _opencode_logs in {work_dir_path} — not a work directory.",
+              file=sys.stderr)
+        return 1
+
+    model = _resolve_notebooks_model(model, dpack)
+    if model is None:
+        print("Error: provide --model, --dpack (models.notebooks / default_model), "
+              "or set DLAB_NOTEBOOKS_MODEL.", file=sys.stderr)
+        return 1
+
+    # Provider keys for the opencode subprocess: --env-file, else the dpack .env.
+    if env_file is None and dpack is not None:
+        cand = Path(dpack) / ".env"
+        if cand.is_file():
+            env_file = str(cand)
+    env: dict[str, str] = _load_env_file(Path(env_file)) if env_file else {}
+
+    console.print(f"Composing notebooks for [bold]{work_dir_path.name}[/bold] "
+                  f"with [cyan]{model}[/cyan] …")
+    result = generate_notebooks(work_dir_path, model=model, dpack=dpack, env=env,
+                                timeout=timeout)
+
+    for w in result.warnings:
+        console.print(f"[yellow]![/yellow] {w}")
+    if result.notebooks:
+        console.print(f"[green]✓[/green] {len(result.notebooks)} notebook(s):")
+        for nb in result.notebooks:
+            console.print(f"    {nb}")
+    return result.returncode if result.returncode == 0 else (result.returncode or 1)
+
+
+@app.command("skeleton")
+def _cmd_skeleton(
+    work_dir: Annotated[
+        str,
+        typer.Argument(metavar="WORK_DIR", help="Completed session work directory"),
+    ],
+    dpack: Annotated[
+        str | None,
+        typer.Option("--dpack", help="Decision-pack path — lets custom-tool cells "
+                     "resolve to the real library code they ran (via its code map)."),
+    ] = None,
+) -> None:
+    """Build deterministic notebooks (real code + real outputs, no LLM)."""
+    raise typer.Exit(code=cmd_skeleton(work_dir=work_dir, dpack=dpack))
+
+
+def cmd_skeleton(work_dir: str, dpack: str | None = None) -> int:
+    """
+    Assemble deterministic skeleton notebooks from a finished run: the real code
+    that ran paired with the output it produced (captured stdout + figures), one
+    notebook per agent, written to ``<work_dir>/skeleton/``. No model call — the
+    result is correct by construction. Pass ``--dpack`` so custom-tool cells carry
+    the resolved library code instead of just the invocation.
+
+    Returns the process exit code.
+    """
+    from dlab.notebook_skeleton import write_skeletons
+
+    console = _make_console()
+    work_dir_path: Path = Path(work_dir).resolve()
+    if not (work_dir_path / "_opencode_logs").is_dir():
+        print(f"Error: No _opencode_logs in {work_dir_path} — not a work directory.",
+              file=sys.stderr)
+        return 1
+    if dpack is None:
+        console.print("[yellow]![/yellow] No --dpack: custom-tool cells show the "
+                      "invocation only (no resolved library code).")
+
+    paths = write_skeletons(work_dir_path, dpack=dpack)
+    if not paths:
+        console.print("[yellow]No code-running agents found — nothing to build.[/yellow]")
+        return 0
+    console.print(f"[green]✓[/green] {len(paths)} skeleton notebook(s):")
+    for p in paths:
+        console.print(f"    {p}")
+    return 0
+
+
 @app.command("create-dpack")
 def _cmd_create_dpack(
     output_dir: Annotated[
@@ -1242,6 +1600,138 @@ def cmd_create_dpack(output_dir: str = ".") -> int:
 
     app_wiz: CreateDpackApp = CreateDpackApp(output_dir)
     app_wiz.run()
+    return 0
+
+
+@app.command("map-dpack")
+def _cmd_map_dpack(
+    dpack: Annotated[
+        str,
+        typer.Argument(
+            metavar="DPACK",
+            help="Path to the decision-pack directory to map.",
+        ),
+    ],
+    check: Annotated[
+        bool,
+        typer.Option(
+            "--check",
+            help="Don't rebuild; report whether the committed code_map.json is "
+            "stale (exit 1 if it is).",
+        ),
+    ] = False,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="Run the LLM template pass (once per pack) "
+                     "with this model, so CLI tools that load/transform get a "
+                     "runnable call template. Deterministic-only if omitted."),
+    ] = None,
+    env_file: Annotated[
+        str | None,
+        typer.Option("--env-file", help="Provider keys for the --model pass "
+                     "(auto-detected from the dpack's .env)."),
+    ] = None,
+) -> None:
+    """Compile a decision-pack's code map (code_map.json)."""
+    exit_code = cmd_map_dpack(dpack=dpack, check=check, model=model, env_file=env_file)
+    raise typer.Exit(code=exit_code)
+
+
+def cmd_map_dpack(dpack: str, check: bool = False, model: str | None = None,
+                  env_file: str | None = None) -> int:
+    """
+    Build ``<dpack>/code_map.json`` — the static wiring from each custom tool to
+    the real code it runs (the Python library behind ``python -m LIB.MOD``, or the
+    deployed function behind a remote dispatch). Deterministic; no model call.
+
+    ``dlab notebooks`` joins a run's tool calls against this map to inline the
+    actual code into notebooks. Packs with no custom tools produce an empty,
+    ``script-only`` map (all code is already captured as ``write`` tool calls).
+
+    Parameters
+    ----------
+    dpack : str
+        Path to the decision-pack directory.
+
+    Returns
+    -------
+    int
+        Process exit code (0 on success, 1 on error).
+    """
+    from dlab.dpack_codemap import (
+        load_code_map, stale_sources, tools_needing_template, write_code_map,
+    )
+
+    console: Console = Console(highlight=False)
+    dpack_path: Path = Path(dpack)
+    if not dpack_path.is_dir():
+        console.print(f"[red]Not a directory:[/red] {dpack}")
+        return 1
+    if not (dpack_path / "opencode").is_dir():
+        console.print(
+            f"[red]{dpack} is not a decision-pack[/red] (no opencode/ directory)."
+        )
+        return 1
+
+    if check:
+        stale: list[str] = stale_sources(dpack_path)
+        if not stale:
+            console.print("[green]code_map.json is current.[/green]")
+            return 0
+        console.print("[yellow]code_map.json is stale — rebuild with "
+                      "`dlab map-dpack`:[/yellow]")
+        for s in stale:
+            console.print(f"  {s}")
+        return 1
+
+    env: dict[str, str] = {}
+    if model:
+        if env_file is None and (dpack_path / ".env").is_file():
+            env_file = str(dpack_path / ".env")
+        env = _load_env_file(Path(env_file)) if env_file else {}
+        console.print(f"Running the LLM template pass with [cyan]{model}[/cyan] …")
+
+    dest, templated = write_code_map(dpack_path, model=model, env=env or None)
+    code_map: dict[str, Any] = load_code_map(dpack_path)
+
+    tools: dict[str, Any] = code_map["tools"]
+    console.print(
+        f"[green]Mapped[/green] [bold]{code_map['dpack']}[/bold] "
+        f"([cyan]{code_map['shape']}[/cyan]) → {dest}"
+    )
+    if not tools:
+        console.print(
+            "  No custom tools — all code is agent-written scripts "
+            "(nothing to resolve)."
+        )
+    for name, entry in tools.items():
+        target = entry.get("entry") or entry.get("entry_candidates")
+        tag = " [green]+template[/green]" if entry.get("call_template") else ""
+        console.print(f"  [bold]{name}[/bold]  ({entry['kind']}){tag}"
+                      + (f" → {target}" if target else ""))
+        for note in entry.get("residue", []):
+            console.print(f"    [yellow]⚠ {note}[/yellow]")
+    if model and not templated:
+        console.print("  [yellow]LLM produced no templates "
+                      "(check the model / keys).[/yellow]")
+
+    # Nudge toward the LLM pass when it would actually help (tools that still lack
+    # a template — tools_needing_template already excludes ones that have one).
+    needing = tools_needing_template(dpack_path, code_map)
+    if not model and needing:
+        console.print(
+            f"\n[yellow]![/yellow] {len(needing)} tool(s) "
+            f"({', '.join(needing)}) can't render as runnable code without an LLM "
+            "pass — they fall back to import + invocation. Re-run with "
+            "[bold]--model[/bold] to generate call templates.")
+        suggestions = _suggest_models(_available_provider_keys(env_file, dpack_path))
+        if suggestions:
+            console.print("  Keys available — try: " + "  ".join(
+                f"[cyan]--model {m}[/cyan]" for m in suggestions))
+        else:
+            console.print("  No provider keys detected — set one (e.g. "
+                          "ANTHROPIC_API_KEY) or pass --env-file, then re-run "
+                          "with --model.")
     return 0
 
 

@@ -159,6 +159,14 @@ export default tool({
 - **Use `Bun.$\`...\`` for CLI commands** — tools run inside OpenCode's Bun runtime. Use `.nothrow()` to handle non-zero exit codes gracefully.
 - **Always check `result.exitCode`** — return errors as strings so the agent can diagnose issues.
 
+**After adding custom tools that shell out to a Python library, MAP the pack.** `dlab notebooks` reads `<pack>/code_map.json` to render each tool call as the real library code it ran. It's built on the fly if missing (deterministic), but for clean runnable `load+call` cells on CLI tools whose `main()` loads/transforms, run the one-time LLM template pass and **commit** the result:
+
+```bash
+dlab map-dpack <pack> --model anthropic/claude-sonnet-4-5 --env-file <pack>/.env
+```
+
+Re-run it (or `--check` for staleness) whenever the tools or the library change. `dlab notebooks` warns if a pack has tools with no template.
+
 ### Modal Integration
 
 When `modal_integration=True`, generates:
