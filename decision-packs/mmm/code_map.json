@@ -44,7 +44,8 @@
         "function": "analyze_mmm",
         "defined_in": "mmm_lib.analyze_model"
       },
-      "residue": []
+      "residue": [],
+      "call_template": "import pandas as pd\nfrom pymc_marketing.mmm.multidimensional import MMM\nfrom mmm_lib.analyze_model import analyze_mmm\n\nmmm = MMM.load($model_path)\ndf = mmm.idata.fit_data.to_dataframe().reset_index()\ndate_col = mmm.date_column\nif not pd.api.types.is_datetime64_any_dtype(df[date_col]):\n    df[date_col] = pd.to_datetime(df[date_col])\n\noriginal_scale_vars = [\n    \"channel_contribution\", \"control_contribution\",\n    \"intercept_contribution\", \"y\",\n]\nif mmm.yearly_seasonality:\n    original_scale_vars.append(\"yearly_seasonality_contribution\")\nregistered = set(mmm.model.named_vars_to_dims)\noriginal_scale_vars = [v for v in original_scale_vars if v in registered]\nmmm.add_original_scale_contribution_variable(var=original_scale_vars)\n\nanalyze_mmm(\n    mmm, df,\n    idata_path=$model_path,\n    output_dir=$output_dir,\n    skip_budget=$skip_budget,\n    roas_applicable=$roas_applicable,\n)"
     },
     "estimate-fit-time-modal": {
       "kind": "remote-dispatch",
@@ -78,7 +79,8 @@
         "resolved": true
       },
       "residue": [],
-      "disclose": "executed remotely; inlined to run locally"
+      "disclose": "executed remotely; inlined to run locally",
+      "call_template": "from mmm_lib.fit_model_modal import estimate_fit_time_modal\n\nresult = estimate_fit_time_modal(model_bundle_path=$model_bundle_path)"
     },
     "fit-model-modal": {
       "kind": "remote-dispatch",
@@ -117,7 +119,8 @@
         "resolved": true
       },
       "residue": [],
-      "disclose": "executed remotely; inlined to run locally"
+      "disclose": "executed remotely; inlined to run locally",
+      "call_template": "from mmm_lib.fit_model_modal import fit_mmm_modal\n\nresult = fit_mmm_modal(\n    model_bundle_path=$model_bundle_path,\n    output_path=$output_path,\n)"
     },
     "fit-model": {
       "kind": "python-module",
@@ -190,7 +193,8 @@
       ],
       "residue": [
         "2 first-party work-function candidates ['load_csv_or_parquet_from_file', 'prepare_mmm_data'] \u2014 likely runtime-selected by an arg; resolve at join time or with an LLM pass"
-      ]
+      ],
+      "call_template": "import cloudpickle\nfrom pymc_marketing.mmm.multidimensional import MMM\nfrom mmm_lib.data_preparation import load_csv_or_parquet_from_file\nfrom mmm_lib.model_fitting import prepare_mmm_data\n\nwith open($model_path, \"rb\") as f:\n    mmm = cloudpickle.load(f)\n\ndf = load_csv_or_parquet_from_file($data_path, verbose=False)\ntarget_column = mmm.output_var\ndate_column = mmm.date_column\n\nX, y = prepare_mmm_data(\n    df,\n    date_column=date_column,\n    y_column=target_column,\n)\n\nmmm.fit(\n    X=X,\n    y=y,\n    nuts_sampler=\"numpyro\",\n    draws=$draws,\n    tune=$tune,\n    chains=$chains,\n    target_accept=$target_accept,\n    random_seed=$seed,\n)\n\nmmm.save($output_path)"
     },
     "inspect-data": {
       "kind": "python-inline",
@@ -251,7 +255,8 @@
         "function": "budget_optimization",
         "defined_in": "mmm_lib.analyze_model"
       },
-      "residue": []
+      "residue": [],
+      "call_template": "import pandas as pd\nfrom pymc_marketing.mmm.multidimensional import MMM\nfrom mmm_lib.analyze_model import budget_optimization\n\nmmm = MMM.load($model_path)\ndf = mmm.idata.fit_data.to_dataframe().reset_index()\ndate_col = mmm.date_column\nif not pd.api.types.is_datetime64_any_dtype(df[date_col]):\n    df[date_col] = pd.to_datetime(df[date_col])\n\ntarget_col = mmm.target_column\nchannel_columns = list(mmm.channel_columns)\ndims = list(mmm.dims) if mmm.dims else []\n\noriginal_scale_vars = [\n    \"channel_contribution\", \"control_contribution\",\n    \"intercept_contribution\", \"y\",\n]\nif mmm.yearly_seasonality:\n    original_scale_vars.append(\"yearly_seasonality_contribution\")\nregistered = set(mmm.model.named_vars_to_dims)\noriginal_scale_vars = [v for v in original_scale_vars if v in registered]\nmmm.add_original_scale_contribution_variable(var=original_scale_vars)\n\nbudget_optimization(\n    mmm, df, $output_dir,\n    target_col=target_col,\n    date_col=date_col,\n    channel_columns=channel_columns,\n    dims=dims,\n    pct=$risk_pct,\n    roas_applicable=$roas_applicable,\n)"
     }
   },
   "sources": {

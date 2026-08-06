@@ -325,6 +325,34 @@ class TestCustomToolResolution:
         assert "from lib.core import work" in src
         assert "work('x.nc', out='out')" in src   # $a, $b → repr of the inputs
 
+    def test_template_drops_omitted_optional_placeholder_lines(self, tmp_path: Path) -> None:
+        # an optional input the call omitted has no value to substitute; its
+        # `kwarg=$name,` line must be dropped, not left as a bare `$name` (invalid
+        # Python). Lines carrying a present placeholder stay.
+        dpack = tmp_path / "pack"
+        (dpack / "opencode" / "tools").mkdir(parents=True)
+        (dpack / "opencode" / "tools" / "do-thing.ts").write_text("stub")
+        (dpack / "code_map.json").write_text(json.dumps({
+            "dpack": "pack", "shape": "tool-backed", "sources": {},
+            "tools": {"do-thing": {"kind": "python-module",
+                      "call_template": "from lib.core import fit\nfit(\n"
+                                       "    path=$path,\n    out=$out,\n)"}},
+        }))
+        wd = tmp_path / "w"
+        (wd / ".opencode" / "tools").mkdir(parents=True)
+        (wd / ".opencode" / "tools" / "do-thing.ts").write_text("stub")
+        logs = wd / "_opencode_logs"
+        logs.mkdir()
+        (logs / "main.log").write_text("\n".join([
+            _line("dlab_start", 500, part={"model": "m"}),
+            _tool("do-thing", 1000, inp={"path": "m.pkl"},   # `out` omitted
+                  start=1000, end=1100, output="ok\n"),
+        ]) + "\n")
+        src = build_skeleton(wd, dpack=dpack)[0].cells[0].source
+        assert "path='m.pkl'" in src        # provided input still substituted
+        assert "$out" not in src            # dangling placeholder line dropped
+        assert "out=" not in src
+
     def test_signature_mismatch_falls_back_to_invocation(self, tmp_path: Path) -> None:
         # a CLI whose main() loads/transforms: the work fn's params are NOT the
         # tool inputs, so we import it and document the invocation rather than

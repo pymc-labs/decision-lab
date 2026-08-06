@@ -43,6 +43,8 @@ _IMAGE_MIME = {
 }
 # A bash command that runs a python script: capture the script path.
 _PY_SCRIPT = re.compile(r"\bpython3?\s+(?:-\S+\s+)*([\w./-]+\.py)\b")
+# string.Template placeholders in an LLM-authored call template: $name / ${name}.
+_PLACEHOLDER = re.compile(r"\$\{?(\w+)\}?")
 # Filesystem/plumbing bash we don't surface as notebook cells.
 _SKIP_BASH = re.compile(
     r"^\s*(cd|ls|cp|mv|rm|mkdir|cat|echo|git|pwd|export|chmod|touch|find|grep|"
@@ -145,6 +147,21 @@ def _custom_tool_code(
     # so no direct fn(**inputs) call exists.
     template = tool.get("call_template")
     if template and inp:
+        # Optional inputs the call omitted have no value to substitute; by the
+        # template convention each placeholder sits on its own `kwarg=$name,`
+        # line, so drop those lines (rather than let safe_substitute emit a bare
+        # `$name`, which is invalid Python). Decide from the template text, before
+        # substitution, so a literal `$` inside a substituted value can't trigger
+        # a false drop. Keep any line that also carries a present placeholder.
+        missing = {ph for ph in _PLACEHOLDER.findall(template) if ph not in inp}
+        if missing:
+            kept = []
+            for line in template.splitlines():
+                phs = set(_PLACEHOLDER.findall(line))
+                if phs and phs <= missing:
+                    continue
+                kept.append(line)
+            template = "\n".join(kept)
         filled = Template(template).safe_substitute({k: repr(v) for k, v in inp.items()})
         return filled if filled.endswith("\n") else filled + "\n"
 
