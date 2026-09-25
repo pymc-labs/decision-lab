@@ -34,6 +34,7 @@ from dlab.docker import (
     start_container,
     stop_container,
 )
+from dlab import telemetry
 from dlab.create_dpack import refresh_model_cache_if_stale
 from dlab.figure_style import figure_style_enabled, figure_style_shell_exports
 from dlab.model_fallback import preflight_check
@@ -354,6 +355,73 @@ def _cmd_run_command(
     raise typer.Exit(code=exit_code)
 
 
+# ---------------------------------------------------------------------------
+# OTEL export of the session (opt-in: OTEL_EXPORTER_OTLP_ENDPOINT; see
+# dlab/telemetry.py). Nothing here imports OpenTelemetry unless it is set.
+# ---------------------------------------------------------------------------
+
+
+def _telemetry_begin(console: Console, work_dir: str, config: dict[str, Any], model: str) -> Any:
+    """Start follow-mode streaming if configured; return the handle or None."""
+    if not (telemetry.is_enabled() and telemetry.follow_enabled()):
+        return None
+    try:
+        t = telemetry.SessionTelemetry(
+            work_dir,
+            telemetry.otlp_endpoint(),
+            telemetry.service_name(),
+            {"dlab.dpack": str(config.get("name", "")), "dlab.model": model},
+        )
+        t.start()
+        console.print(
+            f"      [dim]OTEL: streaming to {telemetry.otlp_endpoint()} "
+            f"every {int(telemetry.follow_interval())}s[/dim]"
+        )
+        return t
+    except ImportError as e:
+        console.print(f"      [yellow]OTEL: endpoint set but exporter unavailable ({e}); pip install 'dlab-cli[otel]'[/yellow]")
+    except Exception as e:  # noqa: BLE001 - telemetry must never break a run
+        console.print(f"      [yellow]OTEL: could not start streaming: {e}[/yellow]")
+    return None
+
+
+def _telemetry_end(
+    console: Console,
+    handle: Any,
+    work_dir: str,
+    config: dict[str, Any],
+    model: str,
+    exit_code: int,
+    interrupted: bool,
+) -> None:
+    """Write the dlab_end sentinel, then export (or close the stream)."""
+    outcome = "interrupted" if interrupted else ("success" if exit_code == 0 else "error")
+    telemetry.write_end_sentinel(work_dir, outcome, exit_code, interrupted)
+    if not telemetry.is_enabled():
+        return
+    I = "      "
+    try:
+        if handle is not None:
+            handle.finish(outcome=outcome, exit_code=exit_code)
+            console.print(f"{I}[dim]OTEL: session closed ({outcome})[/dim]")
+        else:
+            totals = telemetry.export_session(
+                work_dir,
+                outcome=outcome,
+                exit_code=exit_code,
+                attributes={"dlab.dpack": str(config.get("name", "")), "dlab.model": model},
+            )
+            console.print(
+                f"{I}[dim]OTEL: session exported to {telemetry.otlp_endpoint()} "
+                f"({totals.get('dlab.agent.count', 0)} agents, "
+                f"${totals.get('gen_ai.usage.cost', 0):.4f})[/dim]"
+            )
+    except ImportError as e:
+        console.print(f"{I}[yellow]OTEL: endpoint set but exporter unavailable ({e}); pip install 'dlab-cli[otel]'[/yellow]")
+    except Exception as e:  # noqa: BLE001 - telemetry must never break a run
+        console.print(f"{I}[yellow]OTEL: export failed: {e}[/yellow]")
+
+
 def cmd_run(
     dpack: str | None = None,
     data: list[str] | None = None,
@@ -639,6 +707,14 @@ def cmd_run(
         console.print(f"{I}[dim]Copied docker/ to _docker/[/dim]")
 
         local_env: dict[str, str] = build_local_env(env_file=env_file)
+        if telemetry.is_enabled():
+            # Tag the orchestrator's opencode (native OTLP exporter) and, via
+            # the instance allowlist, every parallel instance with the session.
+            local_env = telemetry.resource_env(
+                local_env,
+                session_id=telemetry.session_id(work_dir),
+                dpack=str(config.get("name", "")),
+            )
         console.print(f"{I}[green]Ready[/green]")
 
         # Prepend system instructions to prompt
@@ -668,6 +744,7 @@ def cmd_run(
             else ""
         )
 
+        otel_local = _telemetry_begin(console, work_dir, config, model)
         try:
             logs_dir_local: Path = Path(work_dir) / "_opencode_logs"
             exit_code, stdout, stderr = _run_with_log_spinner(
@@ -688,6 +765,7 @@ def cmd_run(
             exit_code = 130
 
         console.print(next_step("Cleanup"))
+        _telemetry_end(console, otel_local, work_dir, config, model, exit_code, exit_code == 130)
         if exit_code == 0:
             console.print(f"{I}[bold green]Done.[/bold green]")
         else:
@@ -772,10 +850,20 @@ def cmd_run(
         )
         console.print(f"{I}[dim]Clean up with: docker image prune -f[/dim]")
 
-    # Forward all DLAB_* env vars from host to container
+    # Forward all DLAB_* env vars from host to container, plus the OTEL_*
+    # settings (opencode's native OTLP exporter reads them) tagged with the
+    # session when an endpoint is set.
     extra_env: dict[str, str] = {
-        key: value for key, value in os.environ.items() if key.startswith("DLAB_")
+        key: value
+        for key, value in os.environ.items()
+        if key.startswith(("DLAB_", "OTEL_"))
     }
+    if telemetry.is_enabled():
+        extra_env = telemetry.resource_env(
+            extra_env,
+            session_id=telemetry.session_id(work_dir),
+            dpack=str(config.get("name", "")),
+        )
     for key, value in extra_env.items():
         # Mask values that look like secrets (API keys, tokens, etc.)
         if any(
@@ -863,6 +951,7 @@ def cmd_run(
             else ""
         )
 
+        otel_docker = _telemetry_begin(console, work_dir, config, model)
         logs_dir_path: Path = Path(work_dir) / "_opencode_logs"
         exit_code, stdout, stderr = _run_with_log_spinner(
             console,
@@ -913,6 +1002,7 @@ def cmd_run(
 
         # --- Cleanup ---
         console.print(next_step("Cleanup"))
+        _telemetry_end(console, otel_docker, work_dir, config, model, exit_code, interrupted)
         # Fix file ownership before stopping (container runs as root)
         uid_gid: str = f"{os.getuid()}:{os.getgid()}"
         exec_command(
