@@ -1,5 +1,6 @@
 """Tests for dlab.model_fallback module."""
 
+import json
 import textwrap
 from pathlib import Path
 
@@ -171,7 +172,8 @@ class TestPreflightCheck:
         assert errors == []
 
     def test_unknown_model_is_error_with_suggestion(self, tmp_path: Path) -> None:
-        dpack: Path = self._make_dpack(tmp_path, 'model: "anthropic/claude-sonet-4"')
+        # Agent config lives in the frontmatter; the body is prose and is not scanned.
+        dpack: Path = self._make_dpack(tmp_path, '---\nmodel: "anthropic/claude-sonet-4"\n---\nprose\n')
         env_file: Path = tmp_path / ".env"
         env_file.write_text("ANTHROPIC_API_KEY=sk-123\n")
 
@@ -533,3 +535,57 @@ class TestProcessOpencodeDir:
         # ... but the .md body prose is left intact (issue #51).
         assert "google/gemini-2.5-pro" in md_content
         assert "anthropic/claude-opus-4-5" not in md_content
+
+
+class TestCustomProviderModels:
+    """Models declared by a custom opencode provider (a local server) are
+    accepted by preflight even though models.dev has never heard of them."""
+
+    def _pack(self, tmp_path: Path, opencode_json: str | None) -> Path:
+        pack = tmp_path / "pack"
+        (pack / "opencode").mkdir(parents=True)
+        (pack / "config.yaml").write_text("name: t\ndefault_model: omlx/qwen-local\n")
+        if opencode_json is not None:
+            (pack / "opencode" / "opencode.json").write_text(opencode_json)
+        return pack
+
+    def test_declared_in_pack_config(self, tmp_path: Path, monkeypatch) -> None:
+        from dlab.model_fallback import custom_provider_models, preflight_check
+        monkeypatch.delenv("OPENCODE_CONFIG_CONTENT", raising=False)
+        pack = self._pack(tmp_path, json.dumps({
+            "provider": {"omlx": {"npm": "@ai-sdk/openai-compatible",
+                                  "options": {"baseURL": "http://h:8091/v1"},
+                                  "models": {"qwen-local": {"name": "q"}}}}}))
+        assert custom_provider_models(str(pack)) == {"omlx/qwen-local"}
+        errors, _ = preflight_check("omlx/qwen-local", str(pack), None, no_sandboxing=False)
+        assert errors == []
+
+    def test_declared_in_env_content(self, tmp_path: Path, monkeypatch) -> None:
+        from dlab.model_fallback import custom_provider_models, preflight_check
+        pack = self._pack(tmp_path, json.dumps({"default_agent": "x"}))
+        monkeypatch.setenv("OPENCODE_CONFIG_CONTENT",
+                           json.dumps({"provider": {"omlx": {"models": {"qwen-local": {}}}}}))
+        assert custom_provider_models(str(pack)) == {"omlx/qwen-local"}
+        errors, _ = preflight_check("omlx/qwen-local", str(pack), None, no_sandboxing=True)
+        assert errors == []
+
+    def test_unknown_still_rejected(self, tmp_path: Path, monkeypatch) -> None:
+        from dlab.model_fallback import custom_provider_models, preflight_check
+        monkeypatch.setenv("OPENCODE_CONFIG_CONTENT", "{not json")
+        pack = self._pack(tmp_path, None)
+        assert custom_provider_models(str(pack)) == set()
+        errors, _ = preflight_check("omlx/qwen-local", str(pack), None, no_sandboxing=False)
+        assert errors and errors[0].startswith("Unknown model omlx/qwen-local")
+
+
+class TestModelScanIgnoresProse:
+    def test_skills_and_agent_bodies_are_not_scanned(self, tmp_path: Path) -> None:
+        from dlab.model_fallback import _collect_models_from_dir
+        oc = tmp_path / "opencode"
+        (oc / "agents").mkdir(parents=True); (oc / "skills" / "s").mkdir(parents=True)
+        (oc / "agents" / "a.md").write_text("---\nmodel: anthropic/claude-haiku-4-5\n---\nCopy `.opencode/skills` and read pandas/io docs\n")
+        (oc / "skills" / "s" / "SKILL.md").write_text("---\nname: s\n---\nnever edit `.opencode/skills`; try openai/gpt-4o\n")
+        (oc / "parallel_agents" ).mkdir(); (oc / "parallel_agents" / "p.yaml").write_text("default_model: google/gemini-2.5-flash\n")
+        found = _collect_models_from_dir(oc)
+        assert "anthropic/claude-haiku-4-5" in found and "google/gemini-2.5-flash" in found
+        assert not any(m in found for m in ("opencode/skills", "pandas/io", "openai/gpt-4o"))

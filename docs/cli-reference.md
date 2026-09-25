@@ -135,7 +135,13 @@ API key, exhausted credits) and prints a "Likely cause" hint.
 Model preflight validates against the bundled catalog merged with a
 user-level cache (`~/.cache/dlab/models.json`); when the cache is older than
 seven days, `dlab run` refreshes it from models.dev in the background — the
-refresh never blocks or fails a run.
+refresh never blocks or fails a run. Models declared by a custom opencode
+provider (a local server such as Ollama, oMLX or vLLM, in the pack's
+`opencode/opencode.json` or in `OPENCODE_CONFIG_CONTENT`) are accepted too;
+those providers have no key in the catalog, so none is demanded. Hosted free
+tiers still need their provider key present (opencode Zen needs
+`OPENCODE_API_KEY`). The preflight scan reads YAML files whole and agent
+Markdown files in their frontmatter only; the `skills/` tree is not scanned.
 
 ---
 
