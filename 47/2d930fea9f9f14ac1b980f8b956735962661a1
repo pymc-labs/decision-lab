@@ -1,0 +1,30 @@
+.claude/CLAUDE.md
+  s_c245ae1a0062ec::t_8cdf8f99140e4a 66
+dlab/cli.py
+  s_c245ae1a0062ec::t_8cdf8f99140e4a 42-49,721-725,877-881
+dlab/js/parallel-agents.ts
+  s_c245ae1a0062ec::t_bb3b747a0348cf 35,56,84-120,125,166,171-175,186,217,244-248,258-259,265-266,417-418,516-519
+dlab/session.py
+  s_c245ae1a0062ec::t_bb3b747a0348cf 6,13-14,173-374,471-476
+docs/decision-packs.md
+  s_c245ae1a0062ec::t_8cdf8f99140e4a 198-213
+tests/test_instance_env.py
+  s_c245ae1a0062ec::t_8cdf8f99140e4a 232-237
+  s_c245ae1a0062ec::t_bb3b747a0348cf 117-118,202-231,238-268
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "472d930fea9f9f14ac1b980f8b956735962661a1",
+  "prompts": {},
+  "sessions": {
+    "s_c245ae1a0062ec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d171d1e7-159c-49b6-9aa3-3764017ba6e3",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "PabloRoque <pablo.deroque@glovoapp.com>"
+    }
+  }
+}
