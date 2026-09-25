@@ -41,7 +41,9 @@ INSTANCE_ENV_PREFIXES: list[str] = [
 ]
 
 
-def write_instance_env_allowlist(opencode_dest: Path) -> None:
+def write_instance_env_allowlist(
+    opencode_dest: Path, extra_prefixes: list[str] | None = None
+) -> None:
     """
     Write the environment allowlist that parallel-agents.ts uses to filter
     the subagent environment (issue #56).
@@ -49,19 +51,29 @@ def write_instance_env_allowlist(opencode_dest: Path) -> None:
     The exact-name list is the union of operational variables and every LLM
     provider credential variable known to dlab (bundled from models.dev), so
     exotic providers keep working without hardcoding names in the TypeScript
-    tool. Prefix rules cover dlab/opencode config and cloud-provider families.
+    tool. Prefix rules cover dlab/opencode config and cloud-provider families,
+    plus whatever the decision-pack declares under ``instance_env_prefixes``
+    in ``config.yaml`` (a pack whose subagents drive a platform client, for
+    example ``METAFLOW_``/``MLFLOW_``, needs those variables there too).
 
     Parameters
     ----------
     opencode_dest : Path
         The work directory's ``.opencode`` directory.
+    extra_prefixes : list[str] | None
+        Additional prefixes from the decision-pack configuration. Entries
+        that are not non-empty strings, and duplicates, are dropped.
     """
     provider_vars: set[str] = {
         var for keys in KNOWN_PROVIDER_ENVS.values() for var in keys
     }
+    prefixes: list[str] = list(INSTANCE_ENV_PREFIXES)
+    for prefix in extra_prefixes or []:
+        if isinstance(prefix, str) and prefix and prefix not in prefixes:
+            prefixes.append(prefix)
     allowlist: dict[str, list[str]] = {
         "exact": sorted(set(INSTANCE_ENV_EXACT) | provider_vars),
-        "prefixes": INSTANCE_ENV_PREFIXES,
+        "prefixes": prefixes,
     }
     (opencode_dest / "instance-env-allowlist.json").write_text(
         json.dumps(allowlist, indent=2)
@@ -281,7 +293,10 @@ def setup_opencode_config(
         tools_dir: Path = opencode_dest / "tools"
         tools_dir.mkdir(exist_ok=True)
         (tools_dir / "parallel-agents.ts").write_text(PARALLEL_AGENTS_SOURCE)
-        write_instance_env_allowlist(opencode_dest)
+        write_instance_env_allowlist(
+            opencode_dest,
+            (dpack_config or {}).get("instance_env_prefixes"),
+        )
 
         # Ensure yaml dependency exists in package.json (needed by parallel-agents.ts)
         package_json_path: Path = opencode_dest / "package.json"

@@ -78,6 +78,7 @@ hooks:
 | `cli_name` | No | same as `name` | Override command name for `dlab install` |
 | `opencode_version` | No | `latest` | opencode version to install. `dlab create-dpack` pins the release current at creation time (locked environments); `latest` drifts on every image rebuild |
 | `use_dlab_plot_style` | No | `true` | Enforce the decision-lab matplotlib house style |
+| `instance_env_prefixes` | No | `[]` | Extra env var prefixes forwarded to parallel instances and the consolidator, on top of the built-in list (`DLAB_`, `OPENCODE_`, cloud-provider families, `GITHUB_`). A pack whose subagents drive a platform client declares its variables here, e.g. `[METAFLOW_, MLFLOW_]` |
 | `models.forecaster` | No | `default_model` | Model for parallel agent instances |
 | `models.consolidator` | No | `default_model` | Model for the consolidator agent |
 | `hooks.pre-run` | No | — | Scripts to run before opencode |
@@ -315,6 +316,20 @@ Or add to your `.env` file:
 ```bash
 DLAB_FIT_MODEL_LOCALLY=1
 ```
+
+Parallel instances and the consolidator do not get the whole environment:
+`parallel-agents` forwards an allowlist of exact names (operational variables
+and every LLM provider credential dlab knows) plus prefixes. A pack adds
+prefixes with `instance_env_prefixes` in `config.yaml`.
+
+### Preprovisioned environments
+
+Without Docker, dlab prepends a preamble that tells the agent to recreate the
+pack's environment from `_docker/`. When the host built that environment
+itself, for example a cluster pod built from the pack's Dockerfile, set
+`DLAB_PREPROVISIONED=1`: the preamble then tells the agent that everything is
+installed, not to create a virtualenv or install packages, and to start the
+task at once. It has no effect in Docker mode.
 
 ## Best Practices
 
