@@ -1,0 +1,21 @@
+dlab/telemetry.py
+  s_c245ae1a0062ec::t_0c7b5d981ec785 66,186
+tests/test_telemetry.py
+  s_c245ae1a0062ec::t_0c7b5d981ec785 334-337
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c1c3182ce2b51e7b2bbe77158f684b986ac53bd3",
+  "prompts": {},
+  "sessions": {
+    "s_c245ae1a0062ec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d171d1e7-159c-49b6-9aa3-3764017ba6e3",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "PabloRoque <pablo.deroque@glovoapp.com>"
+    }
+  }
+}
