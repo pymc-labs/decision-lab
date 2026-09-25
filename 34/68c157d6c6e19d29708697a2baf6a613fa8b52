@@ -1,0 +1,23 @@
+dlab/js/parallel-agents.ts
+  s_c245ae1a0062ec::t_11991989b5b426 17-26,32-35,52-55,367-369,467
+dlab/session.py
+  s_c245ae1a0062ec::t_11991989b5b426 36-42,45
+tests/test_instance_env.py
+  s_c245ae1a0062ec::t_11991989b5b426 90-99,117-122,170-201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3468c157d6c6e19d29708697a2baf6a613fa8b52",
+  "prompts": {},
+  "sessions": {
+    "s_c245ae1a0062ec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d171d1e7-159c-49b6-9aa3-3764017ba6e3",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "PabloRoque <pablo.deroque@glovoapp.com>"
+    }
+  }
+}
