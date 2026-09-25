@@ -1,0 +1,76 @@
+tests/test_model_fallback.py
+  s_c245ae1a0062ec::t_b53df7e4fe4b7f 175-176
+  s_c245ae1a0062ec::t_cb5dee4e5820a6 4,538-578
+  s_c245ae1a0062ec::t_cbe6700085b843 624-636
+  s_c245ae1a0062ec::t_ddc24bec085d91 579-623
+dlab/telemetry.py
+  s_c245ae1a0062ec::t_a202e3a9e50f64 1-56,58,60-61,63-69,94-138,219-276,281,286,297-329,334-346,348,357-359,363-382,385-476,478-644,647-653,655,658-802
+  s_c245ae1a0062ec::t_f1b5608c3f6d9a 59,62,86,139-218,277-280,282-285,287-296,347,349-356,360-362,477
+  s_c245ae1a0062ec::t_34bca2412da0e5 654,656-657
+  s_c245ae1a0062ec::t_bc7b4293a75f1d 57,70-85,87-93,330-333,383-384,645-646
+tests/test_instance_env.py
+  s_c245ae1a0062ec::t_58527c8f1ec282 203-228
+  s_c245ae1a0062ec::t_1612ad52a27bb9 229-252
+  s_c245ae1a0062ec::t_fd2060ccb215b6 253-273
+  s_c245ae1a0062ec::t_6559a14fbd0651 118-119
+  s_c245ae1a0062ec::t_8f13c172cf8679 90-99,120-123,171-202
+  s_c245ae1a0062ec::t_495954a67620e8 274-282
+  s_c245ae1a0062ec::t_df5938fd89ceed 100
+dlab/data/models.json
+  s_c245ae1a0062ec::t_ddc24bec085d91 3032-3281
+dlab/local.py
+  s_c245ae1a0062ec::t_fd2060ccb215b6 80-91,121-136
+  s_c245ae1a0062ec::t_5d16be913c523a 137
+dlab/cli.py
+  s_c245ae1a0062ec::t_1612ad52a27bb9 43,712-716
+  s_c245ae1a0062ec::t_f1b5608c3f6d9a 717-724,860-862,864-866,868-873
+  s_c245ae1a0062ec::t_b9d31b5faa3330 42,359-426,754,775,961,1012
+dlab/create_dpack.py
+  s_c245ae1a0062ec::t_ddc24bec085d91 62,82-87,89-93,109,221-236
+  s_c245ae1a0062ec::t_fc920715af82dc 100,102-108
+  s_c245ae1a0062ec::t_8ae6acd7db36b0 237-238
+tests/test_telemetry.py
+  s_c245ae1a0062ec::t_61b3b8f44ad7c4 1-15,20-183
+  s_c245ae1a0062ec::t_34bca2412da0e5 16-19
+  s_c245ae1a0062ec::t_8f13c172cf8679 184-221
+dlab/js/parallel-agents.ts
+  s_c245ae1a0062ec::t_df5938fd89ceed 17
+  s_c245ae1a0062ec::t_48704d11bb657f 18-26,32-34,52-54,415-416
+  s_c245ae1a0062ec::t_58527c8f1ec282 55,84-89,111-120,125,166,171-175,186,244-248,258-259
+  s_c245ae1a0062ec::t_1612ad52a27bb9 35,56,90-110,217,265,417-418,516-519
+  s_c245ae1a0062ec::t_919610e37024d6 266
+dlab/session.py
+  s_c245ae1a0062ec::t_cdaba8436fc1cd 6
+  s_c245ae1a0062ec::t_48704d11bb657f 39-45
+  s_c245ae1a0062ec::t_1612ad52a27bb9 7-8,202-292,324-332,487-489
+  s_c245ae1a0062ec::t_df5938fd89ceed 46-49,52
+  s_c245ae1a0062ec::t_fd2060ccb215b6 293-323,491
+  s_c245ae1a0062ec::t_58527c8f1ec282 188-201,333-389,486,490
+  s_c245ae1a0062ec::t_495954a67620e8 56-58,66-69,75-76,81-84,87,515-518
+dlab/model_fallback.py
+  s_c245ae1a0062ec::t_cbe6700085b843 148-150,152-161,169-175
+  s_c245ae1a0062ec::t_ddc24bec085d91 23-28,290-292,294-298,344,416-417,421-425,489-493
+  s_c245ae1a0062ec::t_cb5dee4e5820a6 16,188-234,273-274,276
+pyproject.toml
+  s_c245ae1a0062ec::t_e7b75c3f549adf 38-43
+deploy/k8s/Dockerfile
+  s_c245ae1a0062ec::t_cc86d3c1b87d33 15-16,43,48-52
+  s_c245ae1a0062ec::t_48704d11bb657f 1-14,17-34,38-42,44-47,53-57
+  s_c245ae1a0062ec::t_33159804d5f118 35-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0160bc73385a0847e493c8b5a21433ebb3841039",
+  "prompts": {},
+  "sessions": {
+    "s_c245ae1a0062ec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d171d1e7-159c-49b6-9aa3-3764017ba6e3",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "PabloRoque <pablo.deroque@glovoapp.com>"
+    }
+  }
+}
