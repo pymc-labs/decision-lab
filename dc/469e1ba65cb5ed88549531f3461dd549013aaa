@@ -1,0 +1,27 @@
+dlab/cli.py
+  s_c245ae1a0062ec::t_44546e3d8870a1 37
+  s_c245ae1a0062ec::t_11991989b5b426 358-424,710-717,747,768,853-855,857-859,861-866,954,1005
+pyproject.toml
+  s_c245ae1a0062ec::t_11991989b5b426 38-43
+tests/test_telemetry.py
+  s_c245ae1a0062ec::t_11991989b5b426 1-221
+dlab/telemetry.py
+  s_c245ae1a0062ec::t_a64e3c578183d6 57,66,87
+  s_c245ae1a0062ec::t_11991989b5b426 1-56,58-65,67-86,88-802
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "dc469e1ba65cb5ed88549531f3461dd549013aaa",
+  "prompts": {},
+  "sessions": {
+    "s_c245ae1a0062ec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d171d1e7-159c-49b6-9aa3-3764017ba6e3",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "PabloRoque <pablo.deroque@glovoapp.com>"
+    }
+  }
+}
