@@ -13,6 +13,7 @@ Two-phase design:
 """
 
 import difflib
+import json
 import os
 import re
 from pathlib import Path
@@ -139,8 +140,20 @@ def find_model_strings(text: str) -> list[str]:
     return models
 
 
+_FRONTMATTER: re.Pattern[str] = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
+
+
 def _collect_models_from_dir(directory: Path) -> list[str]:
-    """Scan all .yaml/.yml/.md files in a directory for model strings."""
+    """
+    Scan the configuration files in a directory for model strings.
+
+    YAML files are configuration and are scanned whole. Markdown agent files
+    are scanned in their frontmatter only: the body is a prompt, and prose
+    such as a path or a package name (``opencode/skills``, ``pandas/io``)
+    matches the ``provider/model`` pattern by accident (the same reason the
+    fallback rewrites only frontmatter, issue #51). Anything under a
+    ``skills`` directory is documentation and is skipped entirely.
+    """
     all_models: list[str] = []
     config_files: list[Path] = sorted(
         list(directory.rglob("*.yaml"))
@@ -148,7 +161,13 @@ def _collect_models_from_dir(directory: Path) -> list[str]:
         + list(directory.rglob("*.md"))
     )
     for f in config_files:
-        all_models.extend(find_model_strings(f.read_text()))
+        if "skills" in f.relative_to(directory).parts:
+            continue
+        text: str = f.read_text()
+        if f.suffix == ".md":
+            match = _FRONTMATTER.match(text)
+            text = match.group(1) if match else ""
+        all_models.extend(find_model_strings(text))
     return list(dict.fromkeys(all_models))  # deduplicate, preserve order
 
 
@@ -159,6 +178,53 @@ def _format_env_setup_hint(model: str) -> str:
         var_str: str = ", ".join(env_vars)
         return f"Set {var_str} in your .env file"
     return "Check provider documentation for required API key"
+
+
+def custom_provider_models(config_dir: str) -> set[str]:
+    """
+    Models declared by custom opencode providers, as ``provider/model`` ids.
+
+    opencode lets a config declare its own providers (a local server such
+    as Ollama, oMLX or vLLM through ``@ai-sdk/openai-compatible``), each
+    with a ``models`` map. Those ids are not in models.dev, so the catalog
+    check would reject them. Two sources are read: the pack's
+    ``opencode/opencode.json`` and the ``OPENCODE_CONFIG_CONTENT``
+    environment variable, which opencode merges last (a cluster pod sets
+    it without touching the pack). Malformed JSON is ignored: opencode
+    reports it itself when it starts.
+
+    Parameters
+    ----------
+    config_dir : str
+        Path to the decision-pack config directory.
+
+    Returns
+    -------
+    set[str]
+        ``provider/model`` ids declared by custom providers.
+    """
+    sources: list[str] = []
+    pack_config: Path = Path(config_dir) / "opencode" / "opencode.json"
+    if pack_config.exists():
+        sources.append(pack_config.read_text())
+    env_content: str = os.environ.get("OPENCODE_CONFIG_CONTENT", "").strip()
+    if env_content:
+        sources.append(env_content)
+
+    models: set[str] = set()
+    for source in sources:
+        try:
+            data: Any = json.loads(source)
+        except json.JSONDecodeError:
+            continue
+        providers: Any = data.get("provider") if isinstance(data, dict) else None
+        if not isinstance(providers, dict):
+            continue
+        for provider_id, provider in providers.items():
+            declared: Any = provider.get("models") if isinstance(provider, dict) else None
+            if isinstance(declared, dict):
+                models.update(f"{provider_id}/{model_id}" for model_id in declared)
+    return models
 
 
 def preflight_check(
@@ -199,9 +265,10 @@ def preflight_check(
     env_vars.update(parse_env_file(env_file))
     available: set[str] = get_available_providers(env_vars)
 
-    # Validate orchestrator model name
+    # Validate orchestrator model name: the models.dev catalog plus any
+    # models a custom opencode provider declares (local servers).
     all_known: list[str] = get_model_list()
-    known: set[str] = set(all_known)
+    known: set[str] = set(all_known) | custom_provider_models(config_dir)
     if orchestrator_model not in known:
         suggestions: list[str] = sorted(difflib.get_close_matches(
             orchestrator_model, all_known, n=3, cutoff=0.6,
