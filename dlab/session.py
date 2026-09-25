@@ -33,11 +33,16 @@ INSTANCE_ENV_EXACT: list[str] = [
     "SSL_CERT_FILE", "SSL_CERT_DIR", "CURL_CA_BUNDLE", "REQUESTS_CA_BUNDLE",
 ]
 # Prefixes whose variables are always forwarded: dlab config (dpacks rely on
-# DLAB_* forwarding), opencode's own config, and cloud-provider credential
-# families whose names do not end in _API_KEY (AWS/Azure/Vertex/etc.).
+# DLAB_* forwarding), opencode's own config, cloud-provider credential
+# families whose names do not end in _API_KEY (AWS/Azure/Vertex/etc.), and
+# OpenTelemetry settings: opencode's native OTLP exporter reads
+# OTEL_EXPORTER_OTLP_ENDPOINT / _HEADERS / OTEL_RESOURCE_ATTRIBUTES, and
+# without them the parallel instances export nothing. Note that
+# OTEL_EXPORTER_OTLP_HEADERS can carry a backend token the subagent could
+# read through bash; an in-cluster collector needs no headers.
 INSTANCE_ENV_PREFIXES: list[str] = [
     "DLAB_", "OPENCODE_", "AWS_", "AZURE_", "GOOGLE_", "VERTEX_",
-    "CLOUDFLARE_", "GITHUB_",
+    "CLOUDFLARE_", "GITHUB_", "OTEL_",
 ]
 
 

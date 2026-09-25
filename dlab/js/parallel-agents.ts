@@ -14,13 +14,25 @@ const FALLBACK_ENV_EXACT = new Set([
   "PYTHONPATH", "PYTHONUNBUFFERED", "NODE_PATH",
   "SSL_CERT_FILE", "SSL_CERT_DIR", "CURL_CA_BUNDLE", "REQUESTS_CA_BUNDLE",
 ])
-const FALLBACK_ENV_PREFIXES = ["DLAB_", "OPENCODE_", "AWS_", "AZURE_", "GOOGLE_", "VERTEX_", "CLOUDFLARE_", "GITHUB_"]
+const FALLBACK_ENV_PREFIXES = ["DLAB_", "OPENCODE_", "AWS_", "AZURE_", "GOOGLE_", "VERTEX_", "CLOUDFLARE_", "GITHUB_", "OTEL_"]
+
+// OTEL_RESOURCE_ATTRIBUTES entries for one spawned process. opencode parses
+// the variable as comma-separated key=value pairs, percent-decodes both sides,
+// and drops the WHOLE variable if a single entry is malformed, so values are
+// always percent-encoded here. A later entry overrides an earlier one with the
+// same key (Object.fromEntries), which is what lets the instance tag win.
+function encodeResourceAttributes(extra: Record<string, string>): string {
+  return Object.entries(extra).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join(",")
+}
 
 // Build a curated environment for a spawned instance/consolidator. Passing the
 // full parent environment leaks unrelated host state (shell history paths,
 // ambient secrets) into the subagent, readable via bash — a real leak in
 // --no-sandboxing local mode where the parent env is the user's shell (#56).
-function buildInstanceEnv(cwd: string): Record<string, string> {
+// `extra` are per-process OpenTelemetry resource attributes (dlab.role,
+// dlab.agent, dlab.instance), appended only when an OTLP endpoint is set so
+// each instance's spans are distinguishable while sharing dlab.session.id.
+function buildInstanceEnv(cwd: string, extra?: Record<string, string>): Record<string, string> {
   let exact = FALLBACK_ENV_EXACT
   let prefixes = FALLBACK_ENV_PREFIXES
   try {
@@ -36,6 +48,10 @@ function buildInstanceEnv(cwd: string): Record<string, string> {
     if (exact.has(k) || prefixes.some((p: string) => k.startsWith(p))) {
       out[k] = v
     }
+  }
+  if (extra && out.OTEL_EXPORTER_OTLP_ENDPOINT) {
+    const appended = encodeResourceAttributes(extra)
+    out.OTEL_RESOURCE_ATTRIBUTES = out.OTEL_RESOURCE_ATTRIBUTES ? `${out.OTEL_RESOURCE_ATTRIBUTES},${appended}` : appended
   }
   return out
 }
@@ -348,7 +364,9 @@ CRITICAL OUTPUT RULES:
         cwd: instanceDir,
         stdout: "pipe",
         stderr: "pipe",
-        env: buildInstanceEnv(cwd),  // Curated env (allowlist); never the full host env (#56)
+        // Curated env (allowlist); never the full host env (#56). The OTel
+        // tags match the log path: instance-N.log under the agent's run dir.
+        env: buildInstanceEnv(cwd, {"dlab.role": "instance", "dlab.agent": args.agent, "dlab.instance": String(i + 1)}),
       })
 
       // Stream to logs (async). These are fire-and-forget, so a rejected
@@ -446,7 +464,7 @@ RULES:
         cwd: runDir,
         stdout: "pipe",
         stderr: "pipe",
-        env: buildInstanceEnv(cwd),  // Curated env (allowlist); never the full host env (#56)
+        env: buildInstanceEnv(cwd, {"dlab.role": "consolidator", "dlab.agent": "consolidator"}),  // Curated env (allowlist); never the full host env (#56)
       })
 
       // Stream stdout to log file (don't use as summary - it's JSON logs).

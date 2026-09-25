@@ -87,7 +87,16 @@ class TestSourceUsesCuratedEnv:
         """Regression guard for #56: instances/consolidator must not be
         spawned with the full host environment."""
         assert "env: process.env" not in PARALLEL_AGENTS_SOURCE
-        assert PARALLEL_AGENTS_SOURCE.count("env: buildInstanceEnv(cwd)") == 2
+        assert PARALLEL_AGENTS_SOURCE.count("env: buildInstanceEnv(cwd, {") == 2
+
+    def test_otel_prefix_forwarded(self, tmp_path: Path) -> None:
+        """opencode's native OTLP exporter reads OTEL_*; instances must get it."""
+        opencode = tmp_path / ".opencode"
+        opencode.mkdir()
+        write_instance_env_allowlist(opencode)
+        allow = json.loads((opencode / "instance-env-allowlist.json").read_text())
+        assert "OTEL_" in allow["prefixes"]
+        assert '"OTEL_"' in PARALLEL_AGENTS_SOURCE  # fallback list too
 
     def test_builder_reads_the_allowlist(self) -> None:
         assert "function buildInstanceEnv" in PARALLEL_AGENTS_SOURCE
@@ -105,8 +114,12 @@ class TestBuildInstanceEnvRuntime:
         block = src[start:end]
         # Strip the few TS annotations present in this block.
         block = block.replace(
-            "function buildInstanceEnv(cwd: string): Record<string, string>",
-            "function buildInstanceEnv(cwd)",
+            "function buildInstanceEnv(cwd: string, extra?: Record<string, string>): Record<string, string>",
+            "function buildInstanceEnv(cwd, extra)",
+        )
+        block = block.replace(
+            "function encodeResourceAttributes(extra: Record<string, string>): string",
+            "function encodeResourceAttributes(extra)",
         )
         block = block.replace(
             "const out: Record<string, string> = {}", "const out = {}"
@@ -154,3 +167,35 @@ def _have_node() -> bool:
         return True
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
+
+
+    def test_appends_encoded_resource_attributes(self, tmp_path: Path) -> None:
+        """With an OTLP endpoint set, the instance tags are appended to
+        OTEL_RESOURCE_ATTRIBUTES percent-encoded, existing entries kept;
+        without an endpoint nothing is appended."""
+        if not _have_node():
+            pytest.skip("node not available")
+        opencode = tmp_path / ".opencode"
+        opencode.mkdir()
+        write_instance_env_allowlist(opencode)
+
+        driver = f"""
+const {{ readFileSync }} = require("fs");
+const {{ join }} = require("path");
+{self._extract_js()}
+const cwd = {json.dumps(str(tmp_path))};
+process.env.OTEL_RESOURCE_ATTRIBUTES = "pymc.workload=dlab,dlab.session.id=wf-1";
+let env = buildInstanceEnv(cwd, {{"dlab.role": "instance", "dlab.agent": "a,b=c", "dlab.instance": "2"}});
+const noEndpoint = env.OTEL_RESOURCE_ATTRIBUTES === "pymc.workload=dlab,dlab.session.id=wf-1";
+process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://c:4318";
+env = buildInstanceEnv(cwd, {{"dlab.role": "instance", "dlab.agent": "a,b=c", "dlab.instance": "2"}});
+const parts = env.OTEL_RESOURCE_ATTRIBUTES.split(",");
+const kv = Object.fromEntries(parts.map(p => {{ const i = p.indexOf("="); return [p.slice(0, i), decodeURIComponent(p.slice(i + 1))]; }}));
+const ok = noEndpoint && env.OTEL_EXPORTER_OTLP_ENDPOINT === "http://c:4318"
+  && kv["pymc.workload"] === "dlab" && kv["dlab.session.id"] === "wf-1"
+  && kv["dlab.role"] === "instance" && kv["dlab.agent"] === "a,b=c" && kv["dlab.instance"] === "2"
+  && parts.length === 5;
+process.exit(ok ? 0 : 1);
+"""
+        res = subprocess.run(["node", "-e", driver], capture_output=True, text=True)
+        assert res.returncode == 0, res.stderr
