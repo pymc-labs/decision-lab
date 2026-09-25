@@ -54,6 +54,7 @@ dlab solves the problem of running AI coding agents in a controlled, reproducibl
 - [Docker Integration](docker.md) - How Docker images are built and managed
 - [Sessions](sessions.md) - Session lifecycle and state management
 - [Parallel Agents](parallel-agents.md) - Running multiple agents in parallel
+- [Telemetry](telemetry.md) - Exporting sessions to OpenTelemetry (opt-in)
 - [Log Processing](log-processing.md) - Log format and TUI/timeline processing
 
 ## Quick Start

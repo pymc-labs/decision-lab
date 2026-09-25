@@ -144,6 +144,7 @@ dlab view <work-dir> [--port PORT] [--no-open] [--export FILE]
 - `model_fallback.py` - Model validation and provider fallback (`preflight_check` before session creation, `process_opencode_dir` during setup) so a single API key suffices
 - `figure_style.py` - decision-lab matplotlib house style (`figure_style_enabled`, `install_figure_style`, `figure_style_shell_exports`); vendored assets in `data/figure_style/` (matplotlibrc, dlab_plotstyle.py, SKILL.md)
 - `opencode_logparser.py` - Canonical OpenCode NDJSON log parser (`LogEvent`, `SessionNode`, `parse_log_file`, `build_session_graph`); single source of truth used by `timeline.py`, `tui/`, and `viewer/`; `diagnose_fatal_error` maps opencode's opaque failures to readable hints
+- `telemetry.py` - Opt-in OpenTelemetry export of a session (`OTEL_EXPORTER_OTLP_ENDPOINT`): one span tree per session from the NDJSON logs, token/cost counters, follow mode (`DLAB_OTEL_FOLLOW`); nothing is imported unless the endpoint is set, deps in the `otel` extra
 - `parallel_tool.py` - Loads parallel-agents.ts from `js/`
 - `js/parallel-agents.ts` - TypeScript source bundled as package data
 - `data/models.json` - Bundled models.dev model list (package data)
