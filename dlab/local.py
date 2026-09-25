@@ -77,6 +77,18 @@ def copy_docker_dir(config_dir: str, work_dir: str) -> None:
         shutil.copytree(str(docker_src), str(docker_dst))
 
 
+def preprovisioned() -> bool:
+    """
+    Whether the environment is already provisioned (``DLAB_PREPROVISIONED=1``).
+
+    Set by a host that built the environment from the pack's Dockerfile
+    itself (a cluster pod, for example). The no-sandboxing preamble that
+    asks the agent to recreate the environment from ``_docker/`` is wrong
+    there and costs the first steps of every session.
+    """
+    return os.environ.get("DLAB_PREPROVISIONED", "").strip().lower() in ("1", "true", "yes")
+
+
 def build_local_prompt(prompt: str, config: dict[str, Any], work_dir: str | None = None) -> str:
     """
     Prepend system instructions for unsandboxed local execution.
@@ -105,6 +117,22 @@ def build_local_prompt(prompt: str, config: dict[str, Any], work_dir: str | None
         work_dir_abs = str(Path(work_dir).resolve())
     else:
         work_dir_abs = str(Path(config["config_dir"]).resolve().parent)
+
+    if preprovisioned():
+        # The environment IS the pack's image: telling the agent to rebuild
+        # it from _docker/ only burns steps, so tell it the opposite.
+        return (
+            "IMPORTANT --- SYSTEM INSTRUCTIONS (PREPROVISIONED ENVIRONMENT):\n\n"
+            "You are running inside the decision-pack's own environment: every tool and "
+            "Python package the pack needs is already installed and on PATH. Do NOT "
+            "create a virtual environment, do NOT install, upgrade or verify packages, "
+            "and do NOT read `_docker/` to reproduce it. Assume the environment is "
+            f"correct and start the task now.\n\nYour working directory is `{work_dir_abs}`; "
+            "write all outputs there. When you spawn parallel-agents or task subagents, "
+            "tell them the same: the environment is ready, start the task.\n\n"
+            "--- USER TASK ---\n\n"
+            f"{prompt}"
+        )
 
     system_instructions: str = (
         "IMPORTANT --- SYSTEM INSTRUCTIONS (NO-SANDBOXING MODE):\n\n"

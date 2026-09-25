@@ -154,3 +154,31 @@ def _have_node() -> bool:
         return True
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
+
+
+class TestPackDeclaredPrefixes:
+    def test_extra_prefixes_are_merged(self, tmp_path: Path) -> None:
+        opencode = tmp_path / ".opencode"
+        opencode.mkdir()
+        write_instance_env_allowlist(opencode, ["METAFLOW_", "MLFLOW_", "DLAB_", 7, "", "MLFLOW_"])
+        allow = json.loads((opencode / "instance-env-allowlist.json").read_text())
+        assert "METAFLOW_" in allow["prefixes"] and allow["prefixes"].count("MLFLOW_") == 1
+        assert allow["prefixes"].count("DLAB_") == 1  # a built-in is not duplicated
+        assert 7 not in allow["prefixes"] and "" not in allow["prefixes"]
+        assert allow["prefixes"][: len(allow["prefixes"]) - 2] != []  # built-ins kept first
+
+    def test_pack_config_reaches_the_allowlist(self, tmp_path: Path) -> None:
+        poem = REPO / "decision-packs" / "poem"
+        if not poem.exists():
+            pytest.skip("poem decision-pack not present")
+        work = tmp_path / "work"
+        work.mkdir()
+        setup_opencode_config(
+            config_dir=str(poem),
+            work_dir=str(work),
+            orchestrator_model="google/gemini-2.5-flash",
+            dpack_config={"name": "poem", "default_model": "google/gemini-2.5-flash",
+                          "instance_env_prefixes": ["METAFLOW_"]},
+        )
+        allow = json.loads((work / ".opencode" / "instance-env-allowlist.json").read_text())
+        assert "METAFLOW_" in allow["prefixes"] and "DLAB_" in allow["prefixes"]

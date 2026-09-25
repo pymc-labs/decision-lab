@@ -27,6 +27,23 @@ class TestBuildLocalPrompt:
         # Prompt should still use the generic placeholder (agents resolve it)
         assert "/absolute/path/to/workdir" in result
 
+    def test_preprovisioned_flag_replaces_the_setup_preamble(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        config_dir: Path = tmp_path / "dpack"
+        config_dir.mkdir()
+        config: dict[str, Any] = {"config_dir": str(config_dir), "package_manager": "pip"}
+        monkeypatch.delenv("DLAB_PREPROVISIONED", raising=False)
+        default: str = build_local_prompt("do it", config, str(tmp_path))
+        assert "NO-SANDBOXING" in default and "_docker/Dockerfile" in default
+
+        monkeypatch.setenv("DLAB_PREPROVISIONED", "1")
+        out: str = build_local_prompt("do it", config, str(tmp_path))
+        assert "PREPROVISIONED" in out and "do NOT install" in out
+        assert "NO-SANDBOXING" not in out and "_docker/Dockerfile" not in out
+        assert str(tmp_path.resolve()) in out
+        assert out.endswith("do it")  # the user task is last and untouched
+
     def test_falls_back_to_config_parent_when_no_work_dir(
         self, tmp_path: Path,
     ) -> None:
