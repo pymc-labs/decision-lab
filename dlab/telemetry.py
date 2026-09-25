@@ -63,6 +63,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
 import time
 import uuid
@@ -182,7 +183,7 @@ def new_session_id(work_dir: str | Path) -> str:
     fresh = uuid.uuid4().hex
     forced = os.environ.get("DLAB_SESSION_ID", "").strip()
     if forced:
-        base = forced.split("-c", 1)[0] if "-c" in forced else forced
+        base = re.sub(r"-c[0-9a-f]{8}$", "", forced)  # only a suffix this function added
         fresh = f"{base}-c{fresh[:8]}"
         os.environ["DLAB_SESSION_ID"] = fresh
     path = Path(work_dir) / SESSION_ID_FILE

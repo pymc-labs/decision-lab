@@ -331,3 +331,7 @@ def test_new_session_id_suffixes_a_forced_id(tmp_path, monkeypatch):
     assert telemetry.session_id(tmp_path) == first  # the env now carries it to the agents
     second = telemetry.new_session_id(tmp_path)
     assert second.startswith("wf-argo-c") and second != first  # no suffix pile-up
+    monkeypatch.setenv("DLAB_SESSION_ID", "mmm-customer-run7")  # "-c" inside the name survives
+    third = telemetry.new_session_id(tmp_path)
+    assert third.startswith("mmm-customer-run7-c") and len(third) == len("mmm-customer-run7-c") + 8
+    assert telemetry.new_session_id(tmp_path).startswith("mmm-customer-run7-c")
