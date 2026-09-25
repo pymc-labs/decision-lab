@@ -195,6 +195,22 @@ The `tools:` section overrides `opencode.json` permissions per-agent:
 | Subagents only | `read: true`, `edit: true`, `bash: true`, `task: true` |
 | Neither | `read: true` (placeholder) |
 
+#### Full toolset mode
+
+Some hosted free tiers (opencode Zen, for one) refuse a request whose tool
+definitions differ from opencode's defaults, and a denied permission removes
+the tool definition from the request. With `DLAB_FULL_TOOLSET=1` dlab keeps
+every agent on opencode's complete toolset and grants every permission, and
+enforces the pack's `tools:` policy at execution time instead: at session
+setup it records each agent's policy in `.opencode/dlab-tool-policy.json`,
+installs the `dlab-tool-guard.ts` plugin, then strips the `tools:` blocks.
+A call to a denied tool is aborted before it runs and the model sees the
+error. Parallel instances get their agent's deny list plus `task` and
+`parallel-agents`; the consolidator gets `bash`, `task`, `parallel-agents`
+and `todowrite`. The model still sees the tool definitions, so the restraint
+is weaker than a missing tool: use it for tests and free tiers, not for
+client packs.
+
 ## Package Managers
 
 The create-dpack wizard supports four package managers:

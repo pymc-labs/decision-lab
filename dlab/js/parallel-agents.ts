@@ -32,7 +32,7 @@ function encodeResourceAttributes(extra: Record<string, string>): string {
 // `extra` are per-process OpenTelemetry resource attributes (dlab.role,
 // dlab.agent, dlab.instance), appended only when an OTLP endpoint is set so
 // each instance's spans are distinguishable while sharing dlab.session.id.
-function buildInstanceEnv(cwd: string, extra?: Record<string, string>): Record<string, string> {
+function buildInstanceEnv(cwd: string, extra?: Record<string, string>, envOverrides?: Record<string, string>): Record<string, string> {
   let exact = FALLBACK_ENV_EXACT
   let prefixes = FALLBACK_ENV_PREFIXES
   try {
@@ -53,6 +53,7 @@ function buildInstanceEnv(cwd: string, extra?: Record<string, string>): Record<s
     const appended = encodeResourceAttributes(extra)
     out.OTEL_RESOURCE_ATTRIBUTES = out.OTEL_RESOURCE_ATTRIBUTES ? `${out.OTEL_RESOURCE_ATTRIBUTES},${appended}` : appended
   }
+  if (envOverrides) Object.assign(out, envOverrides)
   return out
 }
 
@@ -80,10 +81,48 @@ function parseAgentFrontmatter(agentPath: string): Record<string, any> {
   return yaml.parse(match[1])
 }
 
+// DLAB_FULL_TOOLSET=1: agents keep opencode's complete default toolset and
+// every permission is allowed (see dlab/session.py full_toolset_enabled).
+// Some hosted free tiers refuse requests whose tool definitions differ from
+// opencode's defaults, and a denied permission removes the tool definition.
+const FULL_TOOLSET = ["1", "true", "yes"].includes((process.env.DLAB_FULL_TOOLSET || "").trim().toLowerCase())
+
+// Deny list for a spawned process under the full toolset: the pack policy
+// recorded by dlab (.opencode/dlab-tool-policy.json) plus what instances may
+// never do (spawn again). Enforced by plugins/dlab-tool-guard.ts.
+function toolDenyFor(cwd: string, agent: string, extraDeny: string[]): string {
+  let deny: string[] = []
+  try {
+    const policy = JSON.parse(readFileSync(join(cwd, ".opencode", "dlab-tool-policy.json"), "utf-8"))
+    deny = policy?.[agent]?.deny ?? []
+  } catch {
+    // No policy file: only the structural denials apply.
+  }
+  return Array.from(new Set([...deny, ...extraDeny])).join(",")
+}
+
+function copyGuardPlugin(srcOpencode: string, destOpencode: string) {
+  const src = join(srcOpencode, "plugins", "dlab-tool-guard.ts")
+  if (!existsSync(src)) return
+  mkdirSync(join(destOpencode, "plugins"), { recursive: true })
+  copyFileSync(src, join(destOpencode, "plugins", "dlab-tool-guard.ts"))
+}
+
+function allowAllPermissions(): Record<string, any> {
+  return {
+    "read": { "*": "allow" }, "glob": { "*": "allow" }, "grep": { "*": "allow" },
+    "list": { "*": "allow" }, "lsp": { "*": "allow" }, "external_directory": { "*": "allow" },
+    "edit": { "*": "allow" }, "bash": { "*": "allow" }, "task": { "*": "allow" },
+    "todoread": "allow", "todowrite": "allow", "question": "allow",
+    "webfetch": "allow", "websearch": "allow", "codesearch": "allow", "doom_loop": "allow",
+  }
+}
+
 // Helper: Build permission config from agent frontmatter tools
 // Some permissions support nested objects (read, edit, glob, grep, list, bash, task, external_directory, lsp)
 // Others only accept simple strings (todoread, todowrite, question, webfetch, websearch, codesearch, doom_loop)
 function buildPermissionsFromFrontmatter(agentPath: string): Record<string, any> {
+  if (FULL_TOOLSET) return allowAllPermissions()
   const frontmatter = parseAgentFrontmatter(agentPath)
   const tools = frontmatter.tools || {}
 
@@ -124,15 +163,16 @@ function setupConsolidator(runDir: string, srcOpencode: string, summarizerPrompt
   // Create minimal consolidator agent from summarizer_prompt.
   // The consolidator MUST be able to write consolidated_summary.md — its
   // output is read from that file, stdout is discarded.
-  const consolidatorAgent = `---
-description: Consolidator agent for comparing parallel agent results
-mode: primary
-tools:
+  const consolidatorTools = FULL_TOOLSET ? "" : `tools:
   read: true
   write: true
   bash: false
   parallel-agents: false
----
+`
+  const consolidatorAgent = `---
+description: Consolidator agent for comparing parallel agent results
+mode: primary
+${consolidatorTools}---
 
 ${summarizerPrompt}
 `
@@ -143,7 +183,7 @@ ${summarizerPrompt}
   opconfig.default_agent = "consolidator"
 
   // Hardcoded permissions for consolidator
-  opconfig.permission = {
+  opconfig.permission = FULL_TOOLSET ? allowAllPermissions() : {
     // Read/discovery tools - always allowed
     "read": { "*": "allow" },
     "glob": { "*": "allow" },
@@ -174,6 +214,7 @@ ${summarizerPrompt}
   }
 
   writeFileSync(join(destOpencode, "opencode.json"), JSON.stringify(opconfig, null, 2))
+  if (FULL_TOOLSET) copyGuardPlugin(srcOpencode, destOpencode)
 
   // NOTE: Do NOT copy tools/ directory - consolidator has no custom tools
 }
@@ -200,6 +241,11 @@ function copyAllowedTools(srcOpencode: string, destOpencode: string, agentName: 
   // (OpenCode doesn't allow subagents to be the default_agent)
   let agentContent = readFileSync(agentPath, "utf-8")
   agentContent = agentContent.replace(/^(---.*)mode:\s*subagent(.*---)$/ms, "$1mode: primary$2")
+  if (FULL_TOOLSET) {
+    // Drop the tools: block from the frontmatter (session setup already did
+    // so for the orchestrator's copy; instances are copied from the source).
+    agentContent = agentContent.replace(/^(---\n[\s\S]*?)^tools:\n(?:[ \t]+.*\n)*/m, "$1")
+  }
   writeFileSync(join(destOpencode, "agents", `${agentName}.md`), agentContent)
 
   // Copy only tools that are explicitly allowed (true in frontmatter)
@@ -209,12 +255,14 @@ function copyAllowedTools(srcOpencode: string, destOpencode: string, agentName: 
       const toolName = file.replace(/\.(ts|js)$/, "")
       // NEVER copy parallel-agents to subagents
       if (toolName === "parallel-agents") continue
-      // Only copy if explicitly allowed
-      if (tools[toolName] === true) {
+      // Only copy if explicitly allowed (or everything, with the full toolset)
+      if (FULL_TOOLSET || tools[toolName] === true) {
         copyFileSync(join(srcTools, file), join(destOpencode, "tools", file))
       }
     }
   }
+
+  if (FULL_TOOLSET) copyGuardPlugin(srcOpencode, destOpencode)
 
   // Copy skills declared in frontmatter, plus the dlab figure-style skill
   // (injected at session setup, not frontmatter-declared) so instances that
@@ -366,7 +414,8 @@ CRITICAL OUTPUT RULES:
         stderr: "pipe",
         // Curated env (allowlist); never the full host env (#56). The OTel
         // tags match the log path: instance-N.log under the agent's run dir.
-        env: buildInstanceEnv(cwd, {"dlab.role": "instance", "dlab.agent": args.agent, "dlab.instance": String(i + 1)}),
+        env: buildInstanceEnv(cwd, {"dlab.role": "instance", "dlab.agent": args.agent, "dlab.instance": String(i + 1)},
+          FULL_TOOLSET ? { DLAB_TOOL_DENY: toolDenyFor(cwd, args.agent, ["task", "parallel-agents"]) } : undefined),
       })
 
       // Stream to logs (async). These are fire-and-forget, so a rejected
@@ -464,7 +513,10 @@ RULES:
         cwd: runDir,
         stdout: "pipe",
         stderr: "pipe",
-        env: buildInstanceEnv(cwd, {"dlab.role": "consolidator", "dlab.agent": "consolidator"}),  // Curated env (allowlist); never the full host env (#56)
+        // Curated env (allowlist); never the full host env (#56). The consolidator
+        // reads and writes its summary and nothing else.
+        env: buildInstanceEnv(cwd, {"dlab.role": "consolidator", "dlab.agent": "consolidator"},
+          FULL_TOOLSET ? { DLAB_TOOL_DENY: "bash,task,parallel-agents,todowrite" } : undefined),
       })
 
       // Stream stdout to log file (don't use as summary - it's JSON logs).

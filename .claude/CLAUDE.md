@@ -63,7 +63,7 @@ Optional flags:
 - `--rebuild` - Force rebuild Docker image
 - `--no-sandboxing` - Run opencode locally without Docker (via `local.py`); copies `docker/` into the work dir as `_docker/` and instructs the agent to provision its own environment
 
-Environment variables starting with `DLAB_` are automatically forwarded from the host to the Docker container. decision-packs can use these for configuration (e.g., `DLAB_FIT_MODEL_LOCALLY=1` in the MMM decision-pack).
+Environment variables starting with `DLAB_` are automatically forwarded from the host to the Docker container. decision-packs can use these for configuration (e.g., `DLAB_FIT_MODEL_LOCALLY=1` in the MMM decision-pack). `DLAB_FULL_TOOLSET=1` keeps opencode's complete toolset and enforces the pack's `tools:` policy through the guard plugin instead (`session.py`; needed by free tiers such as opencode Zen).
 
 ### Subcommands
 

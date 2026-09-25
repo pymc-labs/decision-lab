@@ -3,11 +3,14 @@ Session management for dlab work directories.
 """
 
 import json
+import os
 import re
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from dlab.config import apply_model_roles_to_opencode, resolve_model_roles
 from dlab.create_dpack import KNOWN_PROVIDER_ENVS
@@ -167,6 +170,208 @@ def copy_data_paths_to_workdir(paths: list[str], work_dir: str) -> None:
             shutil.copy2(src, dest_path / src.name)
 
 
+def full_toolset_enabled() -> bool:
+    """
+    Whether agents run with opencode's complete default toolset.
+
+    ``DLAB_FULL_TOOLSET=1`` disables per-agent tool restriction: every
+    ``tools:`` block is dropped from the agent frontmatter copies in the
+    work dir, and the parallel-agents tool grants every permission. Some
+    hosted free tiers (opencode Zen, verified 2026-09-25) refuse requests
+    whose tool definitions differ from opencode's defaults; with this flag
+    a decision-pack runs there unchanged. The cost is real: an agent the
+    pack meant to keep away from bash can now call it, so the restraint is
+    the prompt's alone. Use it for tests, not for client packs.
+    """
+    return os.environ.get("DLAB_FULL_TOOLSET", "").strip().lower() in ("1", "true", "yes")
+
+
+TOOL_POLICY_FILE: str = "dlab-tool-policy.json"
+TOOL_GUARD_PLUGIN: str = """// Written by dlab at session setup (DLAB_FULL_TOOLSET=1). Every agent runs
+// with opencode's complete toolset so the request looks like any opencode
+// request, and the decision-pack's per-agent tool policy is enforced HERE,
+// at execution time: a call to a denied tool is aborted before it runs and
+// the model sees the error. The deny list arrives per process in
+// DLAB_TOOL_DENY (comma-separated), set by dlab for the orchestrator and by
+// the parallel-agents tool for each instance and the consolidator.
+export const DlabToolGuard = async () => {
+  const deny = new Set(
+    (process.env.DLAB_TOOL_DENY || "").split(",").map((s) => s.trim()).filter(Boolean),
+  )
+  return {
+    "tool.execute.before": async (input: { tool: string }) => {
+      if (deny.has(input.tool)) {
+        throw new Error(
+          `dlab: the tool '${input.tool}' is not permitted for this agent by the decision-pack policy; use another approach`,
+        )
+      }
+    },
+  }
+}
+"""
+
+# opencode gates these tools behind the "edit" permission; deny them together.
+_EDIT_TOOLS: tuple[str, ...] = ("edit", "write", "todowrite")
+
+
+def capture_tool_policy(opencode_dest: Path) -> dict[str, dict[str, list[str]]]:
+    """
+    Record each agent's ``tools:`` policy before the blocks are stripped.
+
+    For every agent the policy holds ``allow`` (tools set to ``true``) and
+    ``deny`` (tools set to ``false``, plus the edit family when ``edit`` is
+    not ``true`` and ``bash`` when it is not ``true``, mirroring what the
+    restricted setup enforced). Written to ``.opencode/dlab-tool-policy.json``
+    for the guard plugin's callers.
+
+    Parameters
+    ----------
+    opencode_dest : Path
+        The work directory's ``.opencode`` directory.
+
+    Returns
+    -------
+    dict[str, dict[str, list[str]]]
+        ``{agent: {"allow": [...], "deny": [...]}}``.
+    """
+    policy: dict[str, dict[str, list[str]]] = {}
+    agents_dir: Path = opencode_dest / "agents"
+    for agent_file in sorted(agents_dir.glob("*.md")) if agents_dir.exists() else []:
+        text: str = agent_file.read_text()
+        match = re.match(r"^---\n(.*?)\n---", text, re.DOTALL)
+        if not match:
+            continue
+        try:
+            front: Any = yaml.safe_load(match.group(1)) or {}
+        except yaml.YAMLError:
+            continue
+        tools: Any = front.get("tools") if isinstance(front, dict) else None
+        if not isinstance(tools, dict):
+            continue
+        allow: list[str] = sorted(k for k, v in tools.items() if v is True)
+        deny: set[str] = {k for k, v in tools.items() if v is False}
+        if tools.get("edit") is not True:
+            deny.update(_EDIT_TOOLS)
+        if tools.get("bash") is not True:
+            deny.add("bash")
+        policy[agent_file.stem] = {"allow": allow, "deny": sorted(deny)}
+    (opencode_dest / TOOL_POLICY_FILE).write_text(json.dumps(policy, indent=2))
+    return policy
+
+
+def tool_deny_for(opencode_dest: Path, agent: str) -> str:
+    """Comma-separated deny list for ``agent`` from the recorded policy, or empty."""
+    path: Path = opencode_dest / TOOL_POLICY_FILE
+    if not path.exists():
+        return ""
+    policy: dict[str, Any] = json.loads(path.read_text())
+    return ",".join(policy.get(agent, {}).get("deny", []))
+
+
+def install_tool_guard(opencode_dest: Path) -> None:
+    """Write the guard plugin into ``.opencode/plugins`` so opencode auto-loads it."""
+    plugins_dir: Path = opencode_dest / "plugins"
+    plugins_dir.mkdir(exist_ok=True)
+    (plugins_dir / "dlab-tool-guard.ts").write_text(TOOL_GUARD_PLUGIN)
+
+
+ALLOW_ALL_PERMISSIONS: dict[str, Any] = {
+    "read": {"*": "allow"}, "glob": {"*": "allow"}, "grep": {"*": "allow"},
+    "list": {"*": "allow"}, "lsp": {"*": "allow"}, "external_directory": {"*": "allow"},
+    "edit": {"*": "allow"}, "bash": {"*": "allow"}, "task": {"*": "allow"},
+    "todoread": "allow", "todowrite": "allow", "question": "allow",
+    "webfetch": "allow", "websearch": "allow", "codesearch": "allow", "doom_loop": "allow",
+}
+
+
+def allow_all_permissions(opencode_dest: Path) -> None:
+    """
+    Grant every permission in the work dir's ``opencode.json``.
+
+    Under the full toolset the pack's policy is enforced by the guard plugin,
+    not by opencode permissions, and a headless ``opencode run`` auto-rejects
+    any permission it would otherwise ask for (reading outside the work dir,
+    for one), which ends the session. Keys the pack set itself are kept.
+    """
+    cfg: Path = opencode_dest / "opencode.json"
+    data: dict[str, Any] = {}
+    if cfg.exists():
+        try:
+            data = json.loads(cfg.read_text())
+        except json.JSONDecodeError:
+            data = {}
+    merged: dict[str, Any] = dict(ALLOW_ALL_PERMISSIONS)
+    merged.update(data.get("permission") or {})
+    data["permission"] = merged
+    cfg.write_text(json.dumps(data, indent=2))
+
+
+def default_agent_name(opencode_dest: Path) -> str:
+    """The pack's ``default_agent`` from ``.opencode/opencode.json``, or empty."""
+    cfg: Path = opencode_dest / "opencode.json"
+    if not cfg.exists():
+        return ""
+    try:
+        return str(json.loads(cfg.read_text()).get("default_agent", "") or "")
+    except json.JSONDecodeError:
+        return ""
+
+
+def strip_tool_restrictions(opencode_dest: Path) -> list[str]:
+    """
+    Remove the ``tools:`` block from every agent's frontmatter in a work dir.
+
+    Only the frontmatter (between the first two ``---`` lines) is touched;
+    the ``tools:`` key and its indented children go, everything else stays
+    byte for byte. Custom tools under ``.opencode/tools`` stay available:
+    opencode loads them for every agent unless a ``tools:`` block excludes
+    them, which is exactly what this removes.
+
+    Parameters
+    ----------
+    opencode_dest : Path
+        The work directory's ``.opencode`` directory.
+
+    Returns
+    -------
+    list[str]
+        Names of the agents whose frontmatter changed.
+    """
+    changed: list[str] = []
+    agents_dir: Path = opencode_dest / "agents"
+    if not agents_dir.exists():
+        return changed
+    for agent_file in sorted(agents_dir.glob("*.md")):
+        lines: list[str] = agent_file.read_text().splitlines(keepends=True)
+        if not lines or lines[0].strip() != "---":
+            continue
+        out: list[str] = [lines[0]]
+        in_tools: bool = False
+        closed: bool = False
+        removed: bool = False
+        for line in lines[1:]:
+            if not closed and line.strip() == "---":
+                closed = True
+                in_tools = False
+                out.append(line)
+                continue
+            if closed:
+                out.append(line)
+                continue
+            if line.startswith("tools:"):
+                in_tools = True
+                removed = True
+                continue
+            if in_tools and (line.startswith((" ", "\t")) or not line.strip()):
+                continue
+            in_tools = False
+            out.append(line)
+        if removed:
+            agent_file.write_text("".join(out))
+            changed.append(agent_file.stem)
+    return changed
+
+
 def copy_opencode_config(config_dir: str, work_dir: str) -> None:
     """
     Copy opencode configuration from decision-pack to work directory.
@@ -263,6 +468,12 @@ def setup_opencode_config(
     copy_opencode_config(config_dir, work_dir)
 
     opencode_dest: Path = Path(work_dir) / ".opencode"
+    if full_toolset_enabled():
+        # Policy first (it reads the tools: blocks), then the guard, then strip.
+        capture_tool_policy(opencode_dest)
+        install_tool_guard(opencode_dest)
+        strip_tool_restrictions(opencode_dest)
+        allow_all_permissions(opencode_dest)
     if dpack_config is not None:
         apply_model_roles_to_opencode(
             str(opencode_dest), resolve_model_roles(dpack_config),

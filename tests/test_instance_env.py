@@ -114,8 +114,8 @@ class TestBuildInstanceEnvRuntime:
         block = src[start:end]
         # Strip the few TS annotations present in this block.
         block = block.replace(
-            "function buildInstanceEnv(cwd: string, extra?: Record<string, string>): Record<string, string>",
-            "function buildInstanceEnv(cwd, extra)",
+            "function buildInstanceEnv(cwd: string, extra?: Record<string, string>, envOverrides?: Record<string, string>): Record<string, string>",
+            "function buildInstanceEnv(cwd, extra, envOverrides)",
         )
         block = block.replace(
             "function encodeResourceAttributes(extra: Record<string, string>): string",
@@ -199,3 +199,70 @@ process.exit(ok ? 0 : 1);
 """
         res = subprocess.run(["node", "-e", driver], capture_output=True, text=True)
         assert res.returncode == 0, res.stderr
+
+
+class TestFullToolset:
+    """DLAB_FULL_TOOLSET=1: no per-agent tool restriction anywhere."""
+
+    def test_strip_tool_restrictions(self, tmp_path: Path) -> None:
+        from dlab.session import strip_tool_restrictions
+        agents = tmp_path / "agents"; agents.mkdir()
+        (agents / "a.md").write_text(
+            "---\ndescription: x\nmode: primary\ntools:\n  read: true\n  bash: false\n\npermission:\n  bash: deny\n---\n\nBody tools:\n  keep: me\n"
+        )
+        (agents / "b.md").write_text("---\ndescription: y\nmode: subagent\n---\nno tools block\n")
+        assert strip_tool_restrictions(tmp_path) == ["a"]
+        a = (agents / "a.md").read_text()
+        assert "tools:\n  read" not in a and "permission:\n  bash: deny" in a and "Body tools:\n  keep: me" in a
+        assert a.startswith("---\ndescription: x\nmode: primary\npermission:")
+        assert (agents / "b.md").read_text().endswith("no tools block\n")
+
+    def test_flag_parsing(self, monkeypatch) -> None:
+        from dlab.session import full_toolset_enabled
+        monkeypatch.delenv("DLAB_FULL_TOOLSET", raising=False); assert not full_toolset_enabled()
+        monkeypatch.setenv("DLAB_FULL_TOOLSET", "1"); assert full_toolset_enabled()
+
+    def test_ts_honours_the_flag(self) -> None:
+        assert "DLAB_FULL_TOOLSET" in PARALLEL_AGENTS_SOURCE
+        assert PARALLEL_AGENTS_SOURCE.count("FULL_TOOLSET") >= 5  # permissions, consolidator x2, agent copy, tool copy
+
+
+class TestToolGuardPolicy:
+    def test_capture_policy_and_deny_list(self, tmp_path: Path) -> None:
+        from dlab.session import (
+            capture_tool_policy,
+            default_agent_name,
+            install_tool_guard,
+            tool_deny_for,
+        )
+        oc = tmp_path / ".opencode"; (oc / "agents").mkdir(parents=True)
+        (oc / "opencode.json").write_text(json.dumps({"default_agent": "lit"}))
+        (oc / "agents" / "lit.md").write_text("---\ndescription: o\nmode: primary\ntools:\n  read: true\n  edit: true\n  bash: false\n  parallel-agents: true\n---\nbody\n")
+        (oc / "agents" / "poet.md").write_text("---\ndescription: p\nmode: subagent\ntools:\n  read: true\n  edit: true\n  bash: false\n  parallel-agents: false\n---\nbody\n")
+        (oc / "agents" / "plain.md").write_text("---\ndescription: n\nmode: subagent\n---\nbody\n")
+        policy = capture_tool_policy(oc)
+        assert policy["lit"] == {"allow": ["edit", "parallel-agents", "read"], "deny": ["bash"]}
+        assert policy["poet"]["deny"] == ["bash", "parallel-agents"]
+        assert "plain" not in policy
+        assert default_agent_name(oc) == "lit"
+        assert tool_deny_for(oc, "lit") == "bash" and tool_deny_for(oc, "missing") == ""
+        install_tool_guard(oc)
+        src = (oc / "plugins" / "dlab-tool-guard.ts").read_text()
+        assert "tool.execute.before" in src and "DLAB_TOOL_DENY" in src
+
+    def test_ts_wires_the_guard(self) -> None:
+        assert "toolDenyFor(cwd, args.agent" in PARALLEL_AGENTS_SOURCE
+        assert 'DLAB_TOOL_DENY: "bash,task,parallel-agents,todowrite"' in PARALLEL_AGENTS_SOURCE
+        assert PARALLEL_AGENTS_SOURCE.count("copyGuardPlugin(srcOpencode, destOpencode)") == 2
+
+
+class TestAllowAllPermissions:
+    def test_allow_all_permissions_keeps_pack_keys(self, tmp_path: Path) -> None:
+        from dlab.session import allow_all_permissions
+        oc = tmp_path / ".opencode"; oc.mkdir()
+        (oc / "opencode.json").write_text(json.dumps({"default_agent": "x", "permission": {"question": "deny"}}))
+        allow_all_permissions(oc)
+        d = json.loads((oc / "opencode.json").read_text())
+        assert d["default_agent"] == "x" and d["permission"]["external_directory"] == {"*": "allow"}
+        assert d["permission"]["question"] == "deny"  # the pack's own key wins
+

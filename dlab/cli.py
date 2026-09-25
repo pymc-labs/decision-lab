@@ -39,7 +39,14 @@ from dlab.create_dpack import refresh_model_cache_if_stale
 from dlab.figure_style import figure_style_enabled, figure_style_shell_exports
 from dlab.model_fallback import preflight_check
 from dlab.opencode_logparser import diagnose_fatal_error
-from dlab.session import copy_hook_scripts, create_session, setup_opencode_config
+from dlab.session import (
+    copy_hook_scripts,
+    create_session,
+    default_agent_name,
+    full_toolset_enabled,
+    setup_opencode_config,
+    tool_deny_for,
+)
 from dlab.timeline import run_timeline
 
 app = typer.Typer(
@@ -711,6 +718,11 @@ def cmd_run(
         console.print(f"{I}[dim]Copied docker/ to _docker/[/dim]")
 
         local_env: dict[str, str] = build_local_env(env_file=env_file)
+        if full_toolset_enabled():
+            # Full toolset on the wire, the pack's policy enforced by the guard
+            # plugin: hand the orchestrator its own deny list.
+            _oc = Path(work_dir) / ".opencode"
+            local_env["DLAB_TOOL_DENY"] = tool_deny_for(_oc, default_agent_name(_oc))
         if telemetry.is_enabled():
             # Tag the orchestrator's opencode (native OTLP exporter) and, via
             # the instance allowlist, every parallel instance with the session.
@@ -862,6 +874,11 @@ def cmd_run(
         for key, value in os.environ.items()
         if key.startswith(("DLAB_", "OTEL_"))
     }
+    if full_toolset_enabled():
+        # Full toolset on the wire, the pack's policy enforced by the guard
+        # plugin: hand the orchestrator its own deny list.
+        _oc = Path(work_dir) / ".opencode"
+        extra_env["DLAB_TOOL_DENY"] = tool_deny_for(_oc, default_agent_name(_oc))
     if telemetry.is_enabled():
         extra_env = telemetry.resource_env(
             extra_env,
