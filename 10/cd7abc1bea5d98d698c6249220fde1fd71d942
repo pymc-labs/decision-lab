@@ -1,0 +1,23 @@
+docs/telemetry.md
+  s_c245ae1a0062ec::t_91c4b9bc5f9654 1-62
+docs/index.md
+  s_c245ae1a0062ec::t_91c4b9bc5f9654 57
+.claude/CLAUDE.md
+  s_c245ae1a0062ec::t_91c4b9bc5f9654 147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "10cd7abc1bea5d98d698c6249220fde1fd71d942",
+  "prompts": {},
+  "sessions": {
+    "s_c245ae1a0062ec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d171d1e7-159c-49b6-9aa3-3764017ba6e3",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "PabloRoque <pablo.deroque@glovoapp.com>"
+    }
+  }
+}
