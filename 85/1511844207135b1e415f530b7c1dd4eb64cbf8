@@ -1,0 +1,30 @@
+dlab/cli.py
+  s_c245ae1a0062ec::t_5005202f95e3ae 587-589
+docs/telemetry.md
+  s_c245ae1a0062ec::t_5005202f95e3ae 24-26,37-41
+  s_c245ae1a0062ec::t_709f8f0f0c2e27 30,50,53-54,65-68
+dlab/telemetry.py
+  s_c245ae1a0062ec::t_709f8f0f0c2e27 55-57
+  s_c245ae1a0062ec::t_577cd212835c81 31-33,68,80
+  s_c245ae1a0062ec::t_8582563ffa5c8a 14-18,23-24,53,146-148,153-177,179-186,250-252,272,282,286-288,292-293,295-296,298,422-425,427-430,437,465,486,513-545,554-555,571-578,653,655,826-829
+  s_c245ae1a0062ec::t_8007c753fc1fd9 830-831
+tests/test_telemetry.py
+  s_c245ae1a0062ec::t_024db6a9eea86d 124
+  s_c245ae1a0062ec::t_a94bed00284440 186,188-196,198-275
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "851511844207135b1e415f530b7c1dd4eb64cbf8",
+  "prompts": {},
+  "sessions": {
+    "s_c245ae1a0062ec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d171d1e7-159c-49b6-9aa3-3764017ba6e3",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "PabloRoque <pablo.deroque@glovoapp.com>"
+    }
+  }
+}
