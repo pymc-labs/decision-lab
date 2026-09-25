@@ -12,7 +12,7 @@ dlab tees into ``_opencode_logs/`` (one file per agent process, bracketed by
 dlab's own ``dlab_start`` and ``dlab_end`` records). This module turns that
 stream into spans, log records and metrics and pushes them over OTLP/HTTP.
 It never instruments the agent process itself. Recent opencode releases
-(1.18 and later; the mmm pack still pins 1.2.10, which predates it) export
+(1.17 and later; the mmm pack still pins 1.2.10, which predates it) export
 their own traces over OTLP when the same ``OTEL_*`` variables reach them;
 those traces stay separate and join this one on ``dlab.session.id``. The log
 stream carries everything the spans here need either way.
@@ -175,8 +175,16 @@ def new_session_id(work_dir: str | Path) -> str:
 
     Called when a session is continued (``--continue-dir``): the continued
     run is a new session with its own trace, not more spans on the old one.
+    With ``DLAB_SESSION_ID`` set the variable would still win, so it is
+    re-pointed at ``<id>-c<8 hex>`` in this process's environment, which the
+    agent processes inherit.
     """
     fresh = uuid.uuid4().hex
+    forced = os.environ.get("DLAB_SESSION_ID", "").strip()
+    if forced:
+        base = forced.split("-c", 1)[0] if "-c" in forced else forced
+        fresh = f"{base}-c{fresh[:8]}"
+        os.environ["DLAB_SESSION_ID"] = fresh
     path = Path(work_dir) / SESSION_ID_FILE
     try:
         if path.parent.is_dir():
@@ -366,6 +374,7 @@ class SessionTelemetry:
         service: str = "dlab",
         attributes: dict[str, str] | None = None,
         *,
+        run_started_ms: int | None = None,
         span_exporter: Any = None,
         log_exporter: Any = None,
         metric_reader: Any = None,
@@ -378,6 +387,10 @@ class SessionTelemetry:
         self.work_dir = Path(work_dir)
         self.logs_dir = self.work_dir / "_opencode_logs"
         self._include_bodies = include_prompts()
+        # When the CLI passes the moment it started this run, logs older than
+        # that are never read, even before the agent rewrote main.log (Docker
+        # startup can outlast the first follow-mode poll).
+        self._run_started_ms = run_started_ms
 
         if endpoint is not None:
             span_exporter = OTLPSpanExporter(endpoint=f"{endpoint}/v1/traces")
@@ -520,13 +533,17 @@ class SessionTelemetry:
         """
         if not self.logs_dir.exists():
             return []
-        start_ms = self._run_start_ms()
+        start_ms = self._run_started_ms or self._run_start_ms()
         paths = []
         for path in sorted(self.logs_dir.rglob("*.log")):
             if start_ms and path.parent != self.logs_dir:
                 run_ms = _parallel_run_ms(path.parent.name)
                 if run_ms is not None and run_ms < start_ms:
                     continue
+            elif self._run_started_ms and path.parent == self.logs_dir:
+                first = _first_event_ms(path)
+                if first is not None and first < self._run_started_ms:
+                    continue  # the previous run's log, not rewritten yet
             paths.append(path)
         return paths
 
@@ -548,7 +565,10 @@ class SessionTelemetry:
     def _ensure_session_span(self) -> None:
         if self._session_span is not None:
             return
-        start_ns = self._first_ts_ns() or time.time_ns()
+        if self._run_started_ms:
+            start_ns = self._run_started_ms * _NS_PER_MS
+        else:
+            start_ns = self._first_ts_ns() or time.time_ns()
         self._session_span = self._tracer.start_span(
             "session",
             context=otel_context.Context(),  # a root: never the host process's span
@@ -821,6 +841,17 @@ class SessionTelemetry:
 
 def _ts_ns(event: LogEvent) -> int | None:
     return event.timestamp * _NS_PER_MS if event.timestamp else None
+
+
+def _first_event_ms(path: Path) -> int | None:
+    """Timestamp of the first event in a log file, if any."""
+    try:
+        with open(path, "rb") as f:
+            first = f.readline().decode("utf-8", errors="replace")
+    except OSError:
+        return None
+    ev = parse_line(first)
+    return int(ev.timestamp) if ev is not None and ev.timestamp else None
 
 
 def _parallel_run_ms(dir_name: str) -> int | None:

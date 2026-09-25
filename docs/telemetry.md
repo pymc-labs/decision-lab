@@ -22,7 +22,7 @@ Two things, from two sources, joined by one id:
    `dlab.role` (`orchestrator`, `instance`, `consolidator`), `dlab.agent`,
    `dlab.instance`. Each opencode process emits its own traces; opencode does
    not join a parent trace, so the join key is the session id. This needs
-   opencode 1.18 or later; a pack that pins an older version (the `mmm` pack
+   opencode 1.17 or later; a pack that pins an older version (the `mmm` pack
    pins 1.2.10) still gets the dlab session tree, just not opencode's own spans.
 2. **The dlab session tree** (`dlab/telemetry.py`), derived from the NDJSON
    logs the session already writes: `session` → `agent:<name>` → `step` →
@@ -64,5 +64,6 @@ that needs no headers.
   endpoint must then be reachable from inside the container.
 - Prompt content and agent text are not in any span; with
   `DLAB_OTEL_PROMPTS=1` they go into log records only.
-- A continued session (`--continue-dir`) is a new session with a new id;
-  instance logs left by earlier runs of that work dir are not exported again.
+- A continued session (`--continue-dir`) is a new session with a new id
+  (with `DLAB_SESSION_ID` set, that id plus a `-c<hex>` suffix); instance
+  logs left by earlier runs of that work dir are not exported again.

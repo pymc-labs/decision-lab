@@ -371,6 +371,7 @@ def _telemetry_begin(console: Console, work_dir: str, config: dict[str, Any], mo
             telemetry.otlp_endpoint(),
             telemetry.service_name(),
             {"dlab.dpack": str(config.get("name", "")), "dlab.model": model},
+            run_started_ms=int(_time.time() * 1000),
         )
         t.start()
         console.print(

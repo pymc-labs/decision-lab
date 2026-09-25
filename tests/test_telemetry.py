@@ -58,11 +58,11 @@ def _write_session(work_dir: Path, *, with_end: bool = True, parallel: bool = Tr
         (run / "instance-1.log").write_text("\n".join(inst) + "\n")
 
 
-def _make(work_dir: Path):
+def _make(work_dir: Path, **kw):
     spans, logs, metrics = InMemorySpanExporter(), InMemoryLogExporter(), InMemoryMetricReader()
     t = telemetry.SessionTelemetry(
         work_dir, None, "dlab-test", {"dlab.dpack": "poem"},
-        span_exporter=spans, log_exporter=logs, metric_reader=metrics,
+        span_exporter=spans, log_exporter=logs, metric_reader=metrics, **kw,
     )
     return t, spans, logs, metrics
 
@@ -218,8 +218,7 @@ def test_continued_session_skips_earlier_parallel_runs(tmp_path, monkeypatch):
     t, spans, _, _ = _make(tmp_path)
     t.poll(); t.finish()
     finished = {s.name: s for s in spans.get_finished_spans()}
-    assert set(finished) == {"session", "agent:main", "agent:modeler/instance-1", "step"} or \
-        sorted(s.name for s in spans.get_finished_spans()).count("step") == 2
+    assert [s.name for s in spans.get_finished_spans()].count("step") == 2  # one per run, none from run-1000
     files = {s.attributes.get("dlab.log_file") for s in spans.get_finished_spans() if s.name.startswith("agent:")}
     assert files == {"main.log", "modeler-parallel-run-5005/instance-1.log"}  # run-1000 skipped
     assert finished["session"].attributes["gen_ai.usage.cost"] == pytest.approx(0.5)  # not 0.5 + 0.75 + 0.1
@@ -304,3 +303,31 @@ def test_trace_id_is_stable_for_a_session(tmp_path, monkeypatch):
         # Every span of the session shares the trace id.
         assert {s.context.trace_id for s in spans.get_finished_spans()} == {session.context.trace_id}
     assert ids[0] == ids[1] == (telemetry.session_trace_ids("wf-stable"))
+
+
+def test_follow_mode_ignores_the_previous_runs_main_log_until_rewritten(tmp_path, monkeypatch):
+    monkeypatch.setenv("DLAB_SESSION_ID", "wf-slow-start")
+    _write_session(tmp_path, parallel=True)  # the previous run, everything at ts ~1000
+    t, spans, _, _ = _make(tmp_path, run_started_ms=9000)
+    assert t.poll() == 0  # nothing of this run exists yet: old main.log and instances skipped
+    main = tmp_path / "_opencode_logs" / "main.log"
+    main.write_text(  # the container came up and rewrote main.log
+        json.dumps({"type": "dlab_start", "timestamp": 9500, "model": "m", "agent": "main"}) + "\n"
+        + _ev("step_start", 9510, messageID="z1") + "\n"
+        + _ev("step_finish", 9520, messageID="z1", reason="stop", tokens={"input": 1, "output": 1}, cost=0.4) + "\n"
+    )
+    assert t.poll() == 3
+    t.finish()
+    session = next(s for s in spans.get_finished_spans() if s.name == "session")
+    assert session.start_time == 9000 * 1_000_000  # the CLI's clock, not the old log
+    assert session.attributes["gen_ai.usage.cost"] == pytest.approx(0.4)
+    assert {s.name for s in spans.get_finished_spans()} == {"session", "agent:main", "step"}
+
+
+def test_new_session_id_suffixes_a_forced_id(tmp_path, monkeypatch):
+    monkeypatch.setenv("DLAB_SESSION_ID", "wf-argo")
+    first = telemetry.new_session_id(tmp_path)
+    assert first.startswith("wf-argo-c") and len(first) == len("wf-argo-c") + 8
+    assert telemetry.session_id(tmp_path) == first  # the env now carries it to the agents
+    second = telemetry.new_session_id(tmp_path)
+    assert second.startswith("wf-argo-c") and second != first  # no suffix pile-up
