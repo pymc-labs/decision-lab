@@ -584,6 +584,9 @@ def cmd_run(
                     print("Aborted.")
                     return 0
 
+        # A continued run is a new session: its own trace, not more spans on the old one.
+        telemetry.new_session_id(work_dir)
+
         # Overwrite .opencode with latest from decision-pack (agent prompts may have changed)
         opencode_dir = Path(work_dir) / ".opencode"
         if opencode_dir.exists():

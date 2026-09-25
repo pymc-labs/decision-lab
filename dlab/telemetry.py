@@ -11,21 +11,26 @@ The source of truth is what opencode already writes: the NDJSON event stream
 dlab tees into ``_opencode_logs/`` (one file per agent process, bracketed by
 dlab's own ``dlab_start`` and ``dlab_end`` records). This module turns that
 stream into spans, log records and metrics and pushes them over OTLP/HTTP.
-It never instruments the agent process itself; opencode has no native OTLP
-export, and the log stream carries everything the traces need.
+It never instruments the agent process itself. Recent opencode releases
+(1.18 and later; the mmm pack still pins 1.2.10, which predates it) export
+their own traces over OTLP when the same ``OTEL_*`` variables reach them;
+those traces stay separate and join this one on ``dlab.session.id``. The log
+stream carries everything the spans here need either way.
 
 Span tree
 ---------
     session                    one per dlab run; ends with the outcome
-    └── agent:<name>           one per log file (main, instance-N, consolidator)
+    └── agent:<name>           one per log file (main, modeler/instance-N,
+                               modeler/run2/instance-N, consolidator)
         └── step               one per LLM turn (step_start .. step_finish),
             └── tool:<name>    carrying tokens and cost
                                one per tool call (tool_use), under its step
 
 Spans carry the OpenTelemetry GenAI attributes (``gen_ai.*``) so any backend
 that knows them, OpenLIT, Cloud Trace, Grafana, renders model, agent, tool,
-tokens and cost without custom configuration. Every text, reasoning, error
-and tool event is also emitted as an OTLP log record, and tokens and cost
+tokens and cost without custom configuration. Error and stderr events are
+also emitted as OTLP log records (prompt, agent text, reasoning and tool
+output too when ``DLAB_OTEL_PROMPTS=1``), and tokens and cost
 feed two counters, so a "cost so far" panel works from metrics while spans
 are still open.
 
@@ -45,11 +50,11 @@ OTEL_EXPORTER_OTLP_ENDPOINT   OTLP/HTTP base URL (e.g. http://localhost:4318).
 OTEL_SERVICE_NAME             service.name (default "dlab").
 DLAB_OTEL_FOLLOW              "1"/"true" = stream during the run.
 DLAB_OTEL_INTERVAL            seconds between polls in follow mode (default 15).
-DLAB_OTEL_PROMPTS             "1" = include prompt text and tool output in
+DLAB_OTEL_PROMPTS             "1" = include prompt, agent text and tool output in
                               log records (off by default: they may hold data).
-TRACEPARENT                   W3C parent context; when set, the session span
-                              nests under whatever launched dlab (a Metaflow
-                              step, for example).
+TRACEPARENT                   W3C context of whatever launched dlab (a
+                              Metaflow step, for example); recorded as a span
+                              link on the session root, which stays a root.
 """
 
 from __future__ import annotations
@@ -60,6 +65,7 @@ import logging
 import os
 import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -71,6 +77,7 @@ from dlab.opencode_logparser import LogEvent, is_log_complete, parse_line
 # the top keeps the repo's import rule; the guard keeps `dlab run` working
 # without them, and SessionTelemetry raises a clear ImportError when used.
 try:
+    from opentelemetry import context as otel_context
     from opentelemetry import metrics as otel_metrics
     from opentelemetry import trace as otel_trace
     from opentelemetry._logs import LogRecord, SeverityNumber
@@ -136,14 +143,47 @@ def service_name() -> str:
     return os.environ.get("OTEL_SERVICE_NAME", "dlab")
 
 
+SESSION_ID_FILE = ".dlab_session_id"
+
+
 def session_id(work_dir: str | Path) -> str:
     """The id every span of this session carries as ``dlab.session.id``.
 
     ``DLAB_SESSION_ID`` when set (an Argo workflow sets it to the workflow
-    name), otherwise the work-dir name: laptop and cluster runs take the
-    same path, and a re-export of the same work dir lands in the same trace.
+    name), otherwise a random id minted once per work dir and kept in
+    ``.dlab_session_id`` there, so a re-export of the same work dir lands in
+    the same trace. The work-dir NAME is not used: dlab numbers work dirs
+    ``dlab-<pack>-workdir-001`` and up, so everyone's first run of a pack
+    would share one trace on a shared collector. When the work dir does not
+    exist yet the id is random and not persisted.
     """
-    return os.environ.get("DLAB_SESSION_ID", "").strip() or Path(work_dir).name
+    forced = os.environ.get("DLAB_SESSION_ID", "").strip()
+    if forced:
+        return forced
+    path = Path(work_dir) / SESSION_ID_FILE
+    try:
+        existing = path.read_text(encoding="utf-8").strip()
+        if existing:
+            return existing
+    except OSError:
+        pass
+    return new_session_id(work_dir)
+
+
+def new_session_id(work_dir: str | Path) -> str:
+    """Mint a fresh session id for ``work_dir`` and persist it when possible.
+
+    Called when a session is continued (``--continue-dir``): the continued
+    run is a new session with its own trace, not more spans on the old one.
+    """
+    fresh = uuid.uuid4().hex
+    path = Path(work_dir) / SESSION_ID_FILE
+    try:
+        if path.parent.is_dir():
+            path.write_text(fresh + "\n", encoding="utf-8")
+    except OSError:
+        logger.debug("could not persist session id", exc_info=True)
+    return fresh
 
 
 def parse_resource_attributes(value: str) -> dict[str, str]:
@@ -207,8 +247,9 @@ def session_trace_ids(session_id: str) -> tuple[int, int]:
     The first 16 bytes of ``sha256(session_id)`` are the trace id and the
     next 8 the root span id, so follow-mode spans, the final root span and a
     later re-export of the same work dir all land in ONE trace without any
-    state passed around. opencode's own traces stay separate (it ignores
-    TRACEPARENT) and join on ``dlab.session.id``.
+    state passed around. That holds with ``TRACEPARENT`` set too: the parent
+    becomes a span link, never the trace id. opencode's own traces stay
+    separate (it ignores TRACEPARENT) and join on ``dlab.session.id``.
     """
     digest = hashlib.sha256(session_id.encode("utf-8")).digest()
     trace_id = int.from_bytes(digest[:16], "big") or 1
@@ -228,7 +269,7 @@ class _FileCursor:
     path: Path
     position: int = 0
     inode: int = 0
-    pending: str = ""  # a partial trailing line, kept until its newline arrives
+    pending: bytes = b""  # a partial trailing line, kept until its newline arrives
 
     def read_new_lines(self) -> list[str]:
         try:
@@ -238,21 +279,23 @@ class _FileCursor:
         if st.st_ino != self.inode or st.st_size < self.position:
             # Replaced (temp + rename) or truncated: start over.
             self.position = 0
-            self.pending = ""
+            self.pending = b""
             self.inode = st.st_ino
         if st.st_size == self.position:
             return []
-        with open(self.path, "r", encoding="utf-8", errors="replace") as f:
+        # Bytes, decoded per complete line: a multibyte character split by
+        # the poll boundary would be mangled by text-mode reads.
+        with open(self.path, "rb") as f:
             f.seek(self.position)
             chunk = f.read()
             self.position = f.tell()
-        text = self.pending + chunk
-        lines = text.split("\n")
+        data = self.pending + chunk
+        lines = data.split(b"\n")
         # Without a trailing newline the last element is an incomplete line.
-        self.pending = lines.pop() if not text.endswith("\n") else ""
-        if text.endswith("\n"):
+        self.pending = lines.pop() if not data.endswith(b"\n") else b""
+        if data.endswith(b"\n"):
             lines.pop()  # the empty string after the final newline
-        return lines
+        return [line.decode("utf-8", errors="replace") for line in lines]
 
 
 # ---------------------------------------------------------------------------
@@ -376,15 +419,22 @@ class SessionTelemetry:
             "dlab.cost.usd", unit="USD", description="LLM cost accumulated by dlab sessions"
         )
 
-        # Parent context from TRACEPARENT (W3C), so a launcher's trace continues here.
+        # TRACEPARENT (W3C) from a launcher becomes a LINK on the session span,
+        # not its parent: a parent would replace the deterministic trace id,
+        # and a re-export without the variable would then land elsewhere.
+        self._parent_links: list[Any] = []
         carrier = {k.lower(): v for k, v in os.environ.items() if k.lower() in ("traceparent", "tracestate")}
-        self._parent_ctx = TraceContextTextMapPropagator().extract(carrier) if carrier else None
+        if carrier:
+            parent = otel_trace.get_current_span(TraceContextTextMapPropagator().extract(carrier))
+            if parent.get_span_context().is_valid:
+                self._parent_links.append(otel_trace.Link(parent.get_span_context()))
 
         self._trace = otel_trace
         self._metrics = otel_metrics
         self._session_span: Any = None
         self._agents: dict[Path, _AgentState] = {}
         self._cursors: dict[Path, _FileCursor] = {}
+        self._parallel_runs: dict[str, list[str]] = {}  # agent -> run timestamps seen, in order
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -412,7 +462,7 @@ class SessionTelemetry:
         with self._lock:
             self._ensure_session_span()
             n = 0
-            for path in sorted(self.logs_dir.rglob("*.log")) if self.logs_dir.exists() else []:
+            for path in self._log_paths():
                 cursor = self._cursors.setdefault(path, _FileCursor(path))
                 for line in cursor.read_new_lines():
                     event = parse_line(line)
@@ -433,7 +483,7 @@ class SessionTelemetry:
         with self._lock:
             self._ensure_session_span()
             # Whatever arrived after the last poll.
-            for path in sorted(self.logs_dir.rglob("*.log")) if self.logs_dir.exists() else []:
+            for path in self._log_paths():
                 cursor = self._cursors.setdefault(path, _FileCursor(path))
                 for line in cursor.read_new_lines():
                     event = parse_line(line)
@@ -460,6 +510,39 @@ class SessionTelemetry:
         self._logger_provider.shutdown()
         self._meter_provider.shutdown()
 
+    def _log_paths(self) -> list[Path]:
+        """Every log file of THIS run, sorted.
+
+        A continued work dir (``--continue-dir``) keeps the parallel-run
+        folders of earlier runs while ``main.log`` starts over, so instance
+        logs that predate this run's ``dlab_start`` are skipped: re-reading
+        them would duplicate their spans and count their cost again.
+        """
+        if not self.logs_dir.exists():
+            return []
+        start_ms = self._run_start_ms()
+        paths = []
+        for path in sorted(self.logs_dir.rglob("*.log")):
+            if start_ms and path.parent != self.logs_dir:
+                run_ms = _parallel_run_ms(path.parent.name)
+                if run_ms is not None and run_ms < start_ms:
+                    continue
+            paths.append(path)
+        return paths
+
+    def _run_start_ms(self) -> int | None:
+        """Timestamp of this run's ``dlab_start`` in main.log, if there is one."""
+        main = self.logs_dir / "main.log"
+        try:
+            with open(main, "rb") as f:
+                first = f.readline().decode("utf-8", errors="replace")
+        except OSError:
+            return None
+        ev = parse_line(first)
+        if ev is not None and ev.event_type == "dlab_start" and ev.timestamp:
+            return int(ev.timestamp)
+        return None
+
     # -- span construction ---------------------------------------------------
 
     def _ensure_session_span(self) -> None:
@@ -468,7 +551,8 @@ class SessionTelemetry:
         start_ns = self._first_ts_ns() or time.time_ns()
         self._session_span = self._tracer.start_span(
             "session",
-            context=self._parent_ctx,
+            context=otel_context.Context(),  # a root: never the host process's span
+            links=self._parent_links,
             start_time=start_ns,
             attributes={
                 "gen_ai.system": GEN_AI_SYSTEM,
@@ -484,9 +568,14 @@ class SessionTelemetry:
             return state
         name = path.stem
         if path.parent != self.logs_dir:
-            # instance-1 under modeler-parallel-run-<ts>/ -> "modeler/instance-1"
-            run = path.parent.name.split("-parallel-run-")[0]
-            name = f"{run}/{path.stem}"
+            # instance-1 under modeler-parallel-run-<ts>/ -> "modeler/instance-1";
+            # a second parallel run of the same agent -> "modeler/run2/instance-1".
+            agent, _, stamp = path.parent.name.partition("-parallel-run-")
+            runs = self._parallel_runs.setdefault(agent, [])
+            if stamp not in runs:
+                runs.append(stamp)
+            ordinal = runs.index(stamp) + 1
+            name = f"{agent}/{path.stem}" if ordinal == 1 else f"{agent}/run{ordinal}/{path.stem}"
         start_ns = _ts_ns(event) or time.time_ns()
         ctx = self._trace.set_span_in_context(self._session_span)
         span = self._tracer.start_span(
@@ -561,8 +650,9 @@ class SessionTelemetry:
             self._ingest_tool(state, event, ts)
 
         elif kind == "text":
+            # Agent output is where a client's numbers end up: same switch as prompts.
             body = event.part.get("text") or ""
-            if body:
+            if body and self._include_bodies:
                 self._log(state, event, "text", body, "INFO")
 
         elif kind == "reasoning":
@@ -731,6 +821,12 @@ class SessionTelemetry:
 
 def _ts_ns(event: LogEvent) -> int | None:
     return event.timestamp * _NS_PER_MS if event.timestamp else None
+
+
+def _parallel_run_ms(dir_name: str) -> int | None:
+    """The ``Date.now()`` suffix of a ``<agent>-parallel-run-<ms>`` folder."""
+    _, sep, stamp = dir_name.partition("-parallel-run-")
+    return int(stamp) if sep and stamp.isdigit() else None
 
 
 def _usage_attributes(event: LogEvent) -> dict[str, Any]:
