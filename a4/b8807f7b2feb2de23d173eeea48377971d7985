@@ -1,0 +1,24 @@
+dlab/model_fallback.py
+  s_c245ae1a0062ec::t_6b64a1ea060b28 16,144-145,147-156,164-170,183-229,268-269,271
+  s_c245ae1a0062ec::t_ee373ba93a59c4 143
+tests/test_model_fallback.py
+  s_c245ae1a0062ec::t_6b64a1ea060b28 3,175-176,538-591
+docs/cli-reference.md
+  s_c245ae1a0062ec::t_38616ffc4c7866 138-144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a4b8807f7b2feb2de23d173eeea48377971d7985",
+  "prompts": {},
+  "sessions": {
+    "s_c245ae1a0062ec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d171d1e7-159c-49b6-9aa3-3764017ba6e3",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "PabloRoque <pablo.deroque@glovoapp.com>"
+    }
+  }
+}
