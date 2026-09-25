@@ -1,0 +1,30 @@
+dlab/session.py
+  s_c245ae1a0062ec::t_e65461e7a39bb2 44-46,54-57,63-65,70-73,76,296-299
+docs/decision-packs.md
+  s_c245ae1a0062ec::t_e65461e7a39bb2 81,320-332
+  s_c245ae1a0062ec::t_8be76fc965a950 333
+tests/test_local.py
+  s_c245ae1a0062ec::t_4286c71960c2b7 30-46
+dlab/local.py
+  s_c245ae1a0062ec::t_e65461e7a39bb2 80-91,121-135
+  s_c245ae1a0062ec::t_211f686bebea60 136
+tests/test_instance_env.py
+  s_c245ae1a0062ec::t_8b4a054e5dbd16 171-173,177-181,184
+  s_c245ae1a0062ec::t_4286c71960c2b7 157-170,174-176,182-183
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d8bab9f9108ed2ee4fc91b85c74891cdc1f8c069",
+  "prompts": {},
+  "sessions": {
+    "s_c245ae1a0062ec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d171d1e7-159c-49b6-9aa3-3764017ba6e3",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "PabloRoque <pablo.deroque@glovoapp.com>"
+    }
+  }
+}
